@@ -63,21 +63,27 @@ pub struct EnvelopeContext {
 /// Seals `plaintext` to `recipient_public_key`, so only whoever holds the
 /// matching secret can recover it.
 ///
+/// A public key is a fixed-width array, so there is no length left to get
+/// wrong. What remains is the one check that matters: a low-order key would
+/// agree a shared secret of all zeros with anybody, so sealing to one is
+/// refused rather than producing an envelope the whole world can open.
+///
 /// # Errors
 ///
-/// Returns [`SealError`] when the recipient's public key has the wrong
-/// length.
+/// Returns [`SealError::NonContributoryPublicKey`] for such a key.
 ///
 /// # Panics
 ///
-/// Never in practice: `ChaCha20Poly1305` only refuses to seal a plaintext
-/// longer than roughly 256 GiB, far past anything a key envelope carries.
+/// Only if a caller seals something absurd, which the envelope limit prevents.
 pub fn seal(
-    recipient_public_key: &[u8],
+    recipient_public_key: &[u8; ENCRYPTION_KEY_BYTES],
     context: &EnvelopeContext,
     plaintext: &[u8],
 ) -> Result<SealedEnvelope, SealError> {
-    let recipient = parse_public_key(recipient_public_key)?;
+    if !is_contributory_x25519_public_key(recipient_public_key) {
+        return Err(SealError::NonContributoryPublicKey);
+    }
+    let recipient = PublicKey::from(*recipient_public_key);
     let ephemeral_secret = EphemeralSecret::random();
     let ephemeral_public_key = PublicKey::from(&ephemeral_secret);
     let shared = ephemeral_secret.diffie_hellman(&recipient);
@@ -144,19 +150,6 @@ pub fn open(
             },
         )
         .map_err(|_| SealError::Rejected)
-}
-
-fn parse_public_key(bytes: &[u8]) -> Result<PublicKey, SealError> {
-    let fixed: [u8; ENCRYPTION_KEY_BYTES] =
-        bytes
-            .try_into()
-            .map_err(|_| SealError::InvalidPublicKeyLength {
-                actual: bytes.len(),
-            })?;
-    if !is_contributory_x25519_public_key(&fixed) {
-        return Err(SealError::NonContributoryPublicKey);
-    }
-    Ok(PublicKey::from(fixed))
 }
 
 /// Whether an X25519 public key can contribute a secret to a key exchange.
@@ -278,14 +271,6 @@ mod tests {
         assert_eq!(
             open(&secret.to_bytes(), &context, &envelope),
             Err(SealError::Rejected)
-        );
-    }
-
-    #[test]
-    fn rejects_a_malformed_recipient_public_key() {
-        assert_eq!(
-            seal(&[0; 10], &context(), b"plaintext"),
-            Err(SealError::InvalidPublicKeyLength { actual: 10 })
         );
     }
 

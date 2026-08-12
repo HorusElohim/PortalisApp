@@ -100,7 +100,7 @@ async fn only_an_authorized_user_discovers_the_latest_encrypted_snapshot() {
         &context,
         b"share secret",
     )
-    .expect("sealed for the member device");
+    .expect("seals");
     owner
         .put_key_envelope(
             &SHARE,

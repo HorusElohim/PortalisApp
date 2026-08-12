@@ -52,6 +52,6 @@ pub use reconnect::{ReconnectPolicy, ReconnectPolicyError};
 pub use signer::DeviceSigner;
 pub use transport::{NexusClient, TransportError, authority_of};
 pub use verify::{
-    Accepted, ChainError, ChainState, ChainStore, ChainStoreError, MemoryChainStore,
+    Accepted, ChainError, ChainState, ChainStore, ChainStoreError, Continuity, MemoryChainStore,
     verify as verify_revision,
 };

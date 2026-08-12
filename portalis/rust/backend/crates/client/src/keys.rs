@@ -670,6 +670,32 @@ mod tests {
         );
     }
 
+    /// A device log carries whatever encryption key was enrolled, and nothing
+    /// stops a hostile or broken enrolment putting a low-order one there. It
+    /// would agree a shared secret of zeros with anybody, so sealing to it is
+    /// refused rather than producing an envelope the world can open.
+    #[test]
+    fn a_device_enrolled_with_a_low_order_key_cannot_be_sealed_to() {
+        let laptop = Device::new(1);
+        let mut entries = vec![root_entry(&laptop)];
+        let mut enrol = entry(
+            &laptop,
+            2,
+            entries[0].hash(),
+            Action::Enrol,
+            &Device::new(2),
+            &laptop,
+        );
+        enrol.subject_encryption_key = [0; ENCRYPTION_KEY_BYTES];
+        enrol.signature = laptop.signing.sign(&enrol.signing_payload()).to_bytes();
+        entries.push(enrol);
+
+        assert!(matches!(
+            seal_content_key(&generate_content_key(), COLLECTION, &[recipient(&entries)]),
+            Err(KeyError::Seal(_))
+        ));
+    }
+
     #[test]
     fn every_generated_key_is_a_different_key() {
         let first = generate_content_key();

@@ -887,6 +887,21 @@ mod tests {
         );
     }
 
+    /// A shorter log never reaches the checkpoint, so a different root gets
+    /// through the fork check and is caught by name instead.
+    #[test]
+    fn a_shorter_log_belonging_to_someone_else_is_refused_by_its_root() {
+        let (root, second, stranger) = (key(ROOT_SEED), key(SECOND_SEED), key(STRANGER_SEED));
+        let (_, entries) = three_devices();
+        let held = DeviceLog::replay(&entries).expect("three devices");
+        let _ = (root, second);
+
+        assert_eq!(
+            held.adopt(&[root_entry(&stranger)]),
+            Err(DeviceLogError::WrongRoot { sequence: 1 })
+        );
+    }
+
     #[test]
     fn a_log_that_disagrees_about_history_is_a_fork_not_an_update() {
         let (root, entries) = three_devices();

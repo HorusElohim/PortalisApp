@@ -17,7 +17,9 @@
 //! Run with `cargo run -p portalis-nexus-demo --bin 03-revisions`.
 
 use ed25519_dalek::{Signer, SigningKey};
-use portalis_nexus_client::{ChainError, ChainStore, MemoryChainStore, verify_revision};
+use portalis_nexus_client::{
+    ChainError, ChainStore, Continuity, MemoryChainStore, verify_revision,
+};
 use portalis_nexus_protocol::{
     Action, DEVICE_KEY_BYTES, DeviceLog, ENCRYPTION_KEY_BYTES, LogEntry, Member, NO_PREVIOUS_ENTRY,
     NO_PREVIOUS_REVISION, Revision, RevisionHash, SHARE_ID_BYTES, SIGNATURE_BYTES,
@@ -43,9 +45,16 @@ async fn main() {
     let third = revision(&phone, 3, second.hash(), [0x44; 32], &[2]);
 
     for candidate in [&first, &second, &third] {
-        let accepted = verify_revision(candidate, &log, &store, Some(candidate.manifest_hash), &[])
-            .await
-            .expect("a revision from the owner's own device");
+        let accepted = verify_revision(
+            candidate,
+            &log,
+            &store,
+            Some(candidate.manifest_hash),
+            &[],
+            Continuity::Strict,
+        )
+        .await
+        .expect("a revision from the owner's own device");
         println!(
             "  revision {} · {} member(s) · {}",
             accepted.state.number,
@@ -61,7 +70,7 @@ async fn main() {
     // Nothing forged. The owner signed this, and it is simply old.
     refused(
         "the second revision, served again after the third",
-        verify_revision(&second, &log, &store, None, &[]).await,
+        verify_revision(&second, &log, &store, None, &[], Continuity::Strict).await,
         "the member removed in revision 3 would silently regain access",
     );
     println!("  Detectable only against the held state. The revision itself is");
@@ -72,7 +81,7 @@ async fn main() {
     assert!(rival.verify(), "the fork verifies on its own");
     println!("  A second revision 3, genuinely signed, naming the same parent.");
     println!("  It verifies on its own — both branches do.");
-    match verify_revision(&rival, &log, &store, None, &[]).await {
+    match verify_revision(&rival, &log, &store, None, &[], Continuity::Strict).await {
         Err(ChainError::Fork {
             number,
             kept,
@@ -124,7 +133,7 @@ async fn other_refusals(
     forged.signature = impostor.sign(&forged.signing_payload()).to_bytes();
     refused(
         "a revision signed by someone other than its author",
-        verify_revision(&forged, log, store, None, &[]).await,
+        verify_revision(&forged, log, store, None, &[], Continuity::Strict).await,
         "anyone could publish into anyone's collection",
     );
 
@@ -133,7 +142,7 @@ async fn other_refusals(
     let outsider = sign(outsider, &impostor);
     refused(
         "a revision from a device the owner never enrolled",
-        verify_revision(&outsider, log, store, None, &[]).await,
+        verify_revision(&outsider, log, store, None, &[], Continuity::Strict).await,
         "the service could publish on the owner's behalf",
     );
 
@@ -141,28 +150,44 @@ async fn other_refusals(
     let by_revoked = revision(phone, 4, parent, [0x55; 32], &[2]);
     refused(
         "a revision from a device revoked after it was enrolled",
-        verify_revision(&by_revoked, &revoked_log, store, None, &[]).await,
+        verify_revision(
+            &by_revoked,
+            &revoked_log,
+            store,
+            None,
+            &[],
+            Continuity::Strict,
+        )
+        .await,
         "a stolen device would keep publishing after being removed",
     );
 
     let skipped = revision(laptop, 6, parent, [0x55; 32], &[2]);
     refused(
         "a revision that skips a number",
-        verify_revision(&skipped, log, store, None, &[]).await,
+        verify_revision(&skipped, log, store, None, &[], Continuity::Strict).await,
         "a reader would never learn what happened in between",
     );
 
     let relinked = revision(laptop, 4, [7; 32], [0x55; 32], &[2]);
     refused(
         "a revision naming a parent that is not the one held",
-        verify_revision(&relinked, log, store, None, &[]).await,
+        verify_revision(&relinked, log, store, None, &[], Continuity::Strict).await,
         "history could be rewritten without redoing everything after it",
     );
 
     let honest = revision(laptop, 4, parent, [0x55; 32], &[2]);
     refused(
         "a revision whose manifest is not the one fetched",
-        verify_revision(&honest, log, store, Some([0xaa; 32]), &[]).await,
+        verify_revision(
+            &honest,
+            log,
+            store,
+            Some([0xaa; 32]),
+            &[],
+            Continuity::Strict,
+        )
+        .await,
         "the signed list and the delivered list could differ",
     );
 
@@ -175,6 +200,7 @@ async fn other_refusals(
         store,
         Some(honest.manifest_hash),
         &[([2; DEVICE_KEY_BYTES], [0xff; 32])],
+        Continuity::Strict,
     )
     .await
     .expect("a valid revision");

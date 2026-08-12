@@ -135,6 +135,27 @@ pub enum ChainError {
     Store(#[from] ChainStoreError),
 }
 
+/// Whether this reader is following a chain or joining one.
+///
+/// A reader that has never seen a collection is in one of two situations, and
+/// no amount of checking the revision can tell them apart. Either it is
+/// following from the start, in which case anything but revision 1 means it
+/// was handed a chain from the middle and cannot know what it missed; or it is
+/// *joining* — accepting an invitation to a collection that has existed for a
+/// while — in which case the current revision is exactly what it should get.
+///
+/// So the caller says which, because it is a trust decision and hiding it
+/// inside a default would make joining silently accept a rollback.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Continuity {
+    /// Follow the chain: the first revision seen must be revision 1, and each
+    /// one after it must follow the last.
+    Strict,
+    /// Take this revision as the baseline. Only for accepting an invitation,
+    /// and only once — every revision after it is checked strictly.
+    Join,
+}
+
 /// A revision that verified, and what the caller should do about it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Accepted {
@@ -169,6 +190,7 @@ pub async fn verify<S: ChainStore>(
     store: &S,
     manifest_hash: Option<ManifestHash>,
     member_logs: &[([u8; DEVICE_KEY_BYTES], portalis_nexus_protocol::LogHash)],
+    continuity: Continuity,
 ) -> Result<Accepted, ChainError> {
     revision.validate()?;
 
@@ -205,7 +227,7 @@ pub async fn verify<S: ChainStore>(
     }
 
     let held = store.highest(revision.collection_id).await?;
-    position(revision, held.as_ref())?;
+    position(revision, held.as_ref(), continuity)?;
 
     if let Some(expected) = manifest_hash
         && expected != revision.manifest_hash
@@ -232,17 +254,22 @@ pub async fn verify<S: ChainStore>(
 ///
 /// Split out because it is the part with no cryptography in it: given what is
 /// held, a number and a previous hash either follow or they do not.
-fn position(revision: &Revision, held: Option<&ChainState>) -> Result<(), ChainError> {
+fn position(
+    revision: &Revision,
+    held: Option<&ChainState>,
+    continuity: Continuity,
+) -> Result<(), ChainError> {
     let Some(held) = held else {
-        // Nothing held: only a genuine beginning is acceptable, or a reader
-        // could be handed a chain from the middle and never know what it
-        // missed.
-        return if revision.number == 1 {
-            Ok(())
-        } else {
-            Err(ChainError::NotTheFirst {
+        // Nothing held. Following means only a genuine beginning will do, or
+        // a reader could be handed a chain from the middle and never know
+        // what it missed. Joining means this revision is the baseline, which
+        // is what accepting an invitation to an existing collection is.
+        return match continuity {
+            Continuity::Join => Ok(()),
+            Continuity::Strict if revision.number == 1 => Ok(()),
+            Continuity::Strict => Err(ChainError::NotTheFirst {
                 number: revision.number,
-            })
+            }),
         };
     };
 
@@ -464,7 +491,15 @@ mod tests {
         log: &DeviceLog,
         store: &MemoryChainStore,
     ) -> Result<Accepted, ChainError> {
-        verify(revision, log, store, Some(MANIFEST), &[]).await
+        verify(
+            revision,
+            log,
+            store,
+            Some(MANIFEST),
+            &[],
+            Continuity::Strict,
+        )
+        .await
     }
 
     #[tokio::test]
@@ -667,7 +702,7 @@ mod tests {
         assert!(rival.verify(), "the fork is valid on its own");
 
         assert_eq!(
-            verify(&rival, &log, &store, None, &[]).await,
+            verify(&rival, &log, &store, None, &[], Continuity::Strict).await,
             Err(ChainError::Fork {
                 number: 1,
                 kept: kept.hash(),
@@ -721,6 +756,48 @@ mod tests {
         );
     }
 
+    /// Joining is how a person accepts an invitation to a collection that has
+    /// existed for months. Requiring revision 1 would mean replaying its whole
+    /// history to read one photograph.
+    #[tokio::test]
+    async fn joining_takes_the_current_revision_as_a_baseline() {
+        let (owner, second) = (key(OWNER_SEED), key(SECOND_SEED));
+        let (log, _) = owner_log(&owner, &second);
+        let store = MemoryChainStore::default();
+        let midway = revision(&owner, 7, [7; REVISION_HASH_BYTES]);
+
+        assert_eq!(
+            verify(&midway, &log, &store, None, &[], Continuity::Strict).await,
+            Err(ChainError::NotTheFirst { number: 7 }),
+            "following a chain from the middle hides what was missed"
+        );
+
+        let accepted = verify(&midway, &log, &store, None, &[], Continuity::Join)
+            .await
+            .expect("joining accepts the current revision");
+        assert_eq!(accepted.state.number, 7);
+
+        // And only once: everything after the baseline is checked strictly.
+        let skipped = revision(&owner, 9, midway.hash());
+        assert_eq!(
+            verify(&skipped, &log, &store, None, &[], Continuity::Join).await,
+            Err(ChainError::SequenceGap {
+                expected: 8,
+                actual: 9
+            }),
+            "joining does not switch the chain off"
+        );
+        let older = revision(&owner, 6, [7; REVISION_HASH_BYTES]);
+        assert_eq!(
+            verify(&older, &log, &store, None, &[], Continuity::Join).await,
+            Err(ChainError::Rollback {
+                held: 7,
+                offered: 6
+            }),
+            "and a rollback is still a rollback"
+        );
+    }
+
     #[tokio::test]
     async fn a_revision_naming_another_manifest_is_refused() {
         let (owner, second) = (key(OWNER_SEED), key(SECOND_SEED));
@@ -729,12 +806,24 @@ mod tests {
         let first = revision(&owner, 1, NO_PREVIOUS_REVISION);
 
         assert_eq!(
-            verify(&first, &log, &store, Some([0x99; 32]), &[]).await,
+            verify(
+                &first,
+                &log,
+                &store,
+                Some([0x99; 32]),
+                &[],
+                Continuity::Strict
+            )
+            .await,
             Err(ChainError::ManifestMismatch { number: 1 })
         );
 
         // Not yet fetched is not a mismatch; the check is then the caller's.
-        assert!(verify(&first, &log, &store, None, &[]).await.is_ok());
+        assert!(
+            verify(&first, &log, &store, None, &[], Continuity::Strict)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
@@ -773,6 +862,7 @@ mod tests {
                 ([3; DEVICE_KEY_BYTES], [0x81; 32]),
                 ([9; DEVICE_KEY_BYTES], moved),
             ],
+            Continuity::Strict,
         )
         .await
         .expect("a valid revision");
@@ -791,13 +881,29 @@ mod tests {
         let first = revision(&owner, 1, NO_PREVIOUS_REVISION);
 
         assert_eq!(
-            verify(&first, &log, &Broken { fail_read: true }, None, &[]).await,
+            verify(
+                &first,
+                &log,
+                &Broken { fail_read: true },
+                None,
+                &[],
+                Continuity::Strict
+            )
+            .await,
             Err(ChainError::Store(ChainStoreError::new("the disk is gone")))
         );
         // A write that fails after verification is still not an accepted
         // revision: recording it is what makes the next one checkable.
         assert_eq!(
-            verify(&first, &log, &Broken::default(), None, &[]).await,
+            verify(
+                &first,
+                &log,
+                &Broken::default(),
+                None,
+                &[],
+                Continuity::Strict
+            )
+            .await,
             Err(ChainError::Store(ChainStoreError::new("the disk is full")))
         );
     }

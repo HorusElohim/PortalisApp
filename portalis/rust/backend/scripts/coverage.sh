@@ -44,14 +44,20 @@ set -euo pipefail
 # it — so the gate below fails on an uncovered line rather than on a
 # percentage that disagrees with itself.
 # The application package's legacy modules are outside the gate, and the
-# regex says which by shape rather than by list: every legacy module is a flat
-# file directly in `src/` or under `src/domain/`, while everything written for
+# regex says which mostly by shape: every legacy module is a flat file
+# directly in `src/` or under `src/domain/`, while everything written for
 # v3 is a directory — `src/core/`, `src/store/`, `src/projection/`. So new work
 # is gated from its first line, and the exclusion shrinks on its own as
 # PLAN.md's steps 6 to 12 delete the files it names. It is not a judgement
 # that those files deserve less; they are being replaced, and holding a
 # doomed module to 100% buys nothing.
-ignore='apps/server/src/(main|socket)\.rs|apps/server/src/mongo/mod\.rs|crates/client/src/transport/.*\.rs|crates/client/tests/.*\.rs|demo/src/.*\.rs|demo-m6/src/.*\.rs|backend/src/[^/]*\.rs|backend/src/domain/.*\.rs|portalis\.protocol\.v1\.rs'
+#
+# `collections/legacy.rs` is the one exception to the shape rule, and it is
+# named for it. Step 7 needed the `collections/` directory, which collided
+# with the old `collections.rs`, so the Flutter-facing commands moved inside
+# and kept working. Step 9 replaces the bridge and deletes the file, and this
+# line goes with it.
+ignore='apps/server/src/(main|socket)\.rs|apps/server/src/mongo/mod\.rs|crates/client/src/transport/.*\.rs|crates/client/tests/.*\.rs|demo/src/.*\.rs|demo-m6/src/.*\.rs|backend/src/[^/]*\.rs|backend/src/domain/.*\.rs|backend/src/collections/legacy\.rs|portalis\.protocol\.v1\.rs'
 lcov="$(mktemp -t nexus-coverage)"
 trap 'rm -f "$lcov"' EXIT
 
