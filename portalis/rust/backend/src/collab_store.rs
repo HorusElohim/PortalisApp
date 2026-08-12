@@ -1,4 +1,4 @@
-//! Local persistence for collab collections (`collections.json`) —
+//! Local persistence for collab collections —
 //! deliberately its own top-level module, *not* listed in
 //! `flutter_rust_bridge`'s `--rust-input` (see `tool/frb_build.sh`), for
 //! the same reason `domain` isn't listed there either: FRB's codegen
@@ -28,6 +28,8 @@ use crate::domain::collection::{Collection, CollectionId};
 use crate::domain::identity::DeviceId;
 use crate::domain::invite::InviteSecret;
 use crate::domain::manifest::{InfoHash, Manifest, ManifestEntry};
+use redb::ReadableTable as _;
+
 use crate::log::clog;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -55,11 +57,6 @@ struct PersistedCollection {
     invite_secret_hex: String,
     collaborators: Vec<PersistedCollaborator>,
     manifest: Vec<PersistedManifestEntry>,
-}
-
-#[derive(Serialize, Deserialize, Default)]
-struct PersistedStore {
-    collections: Vec<PersistedCollection>,
 }
 
 pub(crate) fn entry_to_persisted(e: &ManifestEntry) -> PersistedManifestEntry {
@@ -126,8 +123,19 @@ pub(crate) fn collaborator_from_persisted(
     ))
 }
 
-fn vault() -> crate::vault::Vault {
-    crate::vault::Vault::named("collections.json")
+/// Where these rows live until step 7 replaces the whole module.
+///
+/// Declared here rather than in `store::schema` on purpose: this is a legacy
+/// shape, and putting it beside §13's tables would suggest it belongs there.
+/// It is one row per collection, so a write touches one collection rather
+/// than rewriting every one of them.
+const LEGACY_COLLECTIONS: redb::TableDefinition<&[u8], &[u8]> =
+    redb::TableDefinition::new("legacy_collections");
+
+fn store() -> anyhow::Result<crate::store::Store> {
+    Ok(crate::store::Store::open(
+        crate::paths::state_dir().join("portalis.redb"),
+    )?)
 }
 
 fn to_persisted(collection: &Collection) -> PersistedCollection {
@@ -170,30 +178,69 @@ fn from_persisted(persisted: &PersistedCollection) -> anyhow::Result<Collection>
 }
 
 fn load() -> anyhow::Result<Vec<Collection>> {
-    let persisted: PersistedStore = vault().read()?.unwrap_or_default();
-    let collections: Vec<Collection> = persisted
-        .collections
-        .iter()
-        .map(from_persisted)
-        .collect::<anyhow::Result<_>>()?;
+    let store = store()?;
+    let database = store.database();
+    let read = database.begin_read()?;
+    let Ok(table) = read.open_table(LEGACY_COLLECTIONS) else {
+        return Ok(Vec::new());
+    };
+
+    let mut collections = Vec::new();
+    for row in table.iter()? {
+        let (_, value) = row?;
+        let persisted: PersistedCollection = serde_json::from_slice(value.value())?;
+        collections.push(from_persisted(&persisted)?);
+    }
     clog!("collab_store", "load: {} collection(s)", collections.len());
     Ok(collections)
 }
 
-/// Persists the store **atomically**: serialise to a sibling temp file, then
-/// rename it over the real one.
+/// Persists every collection as its own row, in one transaction.
 ///
-/// A plain `fs::write` opens with `O_TRUNC`, so the existing file is destroyed
-/// the instant the write begins and any later failure — a full disk, a crash,
-/// a force-quit — leaves nothing behind. That is not hypothetical: this
-/// project's own dev machine filled its disk mid-session and the store was
-/// found empty afterwards. `rename` within the same directory is atomic, so a
-/// reader sees either the complete old file or the complete new one, and a
-/// failed write leaves the original untouched.
+/// This used to be a whole-file JSON rewrite: serialise all collections to a
+/// temp file, rename it over the real one. The rename made a *torn* file
+/// impossible, but the file was still the unit of failure — one collection
+/// changing rewrote all of them, and a write that failed for want of disk
+/// space could still leave nothing behind. That is not hypothetical; this
+/// project's own machine filled its disk mid-session and the store was found
+/// empty afterwards.
+///
+/// A transaction commits or it does not, and a row is one collection. The
+/// rewrite-everything behaviour remains only because this adapter still hands
+/// out the whole `Vec` — step 7 replaces that with per-collection operations
+/// and this module goes with it.
 fn save(collections: &[Collection]) -> anyhow::Result<()> {
-    vault().write(&PersistedStore {
-        collections: collections.iter().map(to_persisted).collect(),
-    })
+    let store = store()?;
+    let database = store.database();
+    let write = database.begin_write()?;
+    {
+        let mut table = write.open_table(LEGACY_COLLECTIONS)?;
+        let keep: Vec<Vec<u8>> = collections
+            .iter()
+            .map(|collection| collection.id.to_string().into_bytes())
+            .collect();
+
+        // A collection removed from the vector is removed from the store, or
+        // deleting one would leave its row behind to reappear on restart.
+        let stale: Vec<Vec<u8>> = table
+            .iter()?
+            .filter_map(|row| row.ok().map(|(key, _)| key.value().to_vec()))
+            .filter(|key| !keep.contains(key))
+            .collect();
+        for key in stale {
+            table.remove(key.as_slice())?;
+        }
+
+        for collection in collections {
+            let persisted = to_persisted(collection);
+            table.insert(
+                collection.id.to_string().as_bytes(),
+                serde_json::to_vec(&persisted)?.as_slice(),
+            )?;
+        }
+    }
+    write.commit()?;
+    Ok(())
 }
 
 /// The one shared in-memory copy of every collab collection, lazily loaded
@@ -402,7 +449,8 @@ mod tests {
         let temp = crate::paths::redirect_to_temp();
         forget_cache_for_test();
         let identity = DeviceIdentity::generate();
-        let path = temp.path("collections.json");
+        let json = temp.path("collections.json");
+        let path = temp.path("portalis.redb");
 
         // A read of an empty store must not create the file. `read_store`
         // exists precisely because every access used to write one.
@@ -411,7 +459,7 @@ mod tests {
             Ok(())
         })
         .unwrap();
-        assert!(!path.exists(), "reading must never write");
+        assert!(!json.exists(), "the JSON file is not written at all now");
 
         with_store(|collections| {
             collections.push(seeded(&identity, "Iceland"));
@@ -443,11 +491,15 @@ mod tests {
         })
         .unwrap();
 
-        // And the file is only ever replaced whole: a truncating write would
-        // have left this empty at some point, which is how a full disk
-        // destroyed the real store once.
-        assert!(!path.with_extension("json.tmp").exists());
-        assert!(serde_json::from_slice::<PersistedStore>(&std::fs::read(&path).unwrap()).is_ok());
+        // The JSON file is gone: these rows live in the transactional store
+        // now, one per collection, so a failed write cannot leave the whole
+        // set empty the way a full disk once did.
+        assert!(!json.exists(), "no collections.json is written any more");
+        assert!(path.exists(), "the transactional store holds it instead");
+        let store = store().unwrap();
+        let read = store.database().begin_read().unwrap();
+        let table = read.open_table(LEGACY_COLLECTIONS).unwrap();
+        assert_eq!(table.iter().unwrap().count(), 1);
     }
 
     /// A collection with one signed entry and this device as its collaborator.

@@ -33,6 +33,7 @@ iroh = { version = "0.92.0", default-features = false }
 sha2 = "0.11.0"
 axum = { version = "0.8.9", features = ["http1", "json", "tokio", "ws"] }
 prost = "0.14.4"
+redb = "2.6"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 thiserror = "2.0.20"
@@ -89,6 +90,13 @@ async-trait = "0.1"
 # behind the native backend boundary; the Flutter bridge will expose only
 # domain operations once the app integration is ready.
 portalis-nexus-client.workspace = true
+portalis-nexus-protocol.workspace = true
+
+# The local store (SPEC 13): one transactional file in the platform data
+# directory. Pure Rust, so it cross-compiles to iOS and Android without a C
+# toolchain to fight — which is what rules out the obvious alternative.
+redb.workspace = true
+thiserror.workspace = true
 
 # Domain layer: device identity (signing) and content-addressing (rendezvous
 # keys, manifest entry ids). Pure Rust, no OS-specific bits — safe on every
