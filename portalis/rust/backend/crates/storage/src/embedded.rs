@@ -118,8 +118,9 @@ impl Embedded {
     ///
     /// # Errors
     ///
-    /// Returns [`StorageError::Conflict`] when the handle is already claimed
-    /// or the device is already enrolled.
+    /// Returns [`StorageError::HandleTaken`] or [`StorageError::DeviceExists`],
+    /// which are different answers: one retries with another discriminator,
+    /// the other does not retry at all.
     pub fn insert_registration(
         &self,
         user: &UserRecord,
@@ -129,12 +130,12 @@ impl Embedded {
             let handle = handle_key(&user.normalized_username, &user.discriminator);
             let mut handles = write.open_table(HANDLES)?;
             if handles.get(handle.as_str())?.is_some() {
-                return Err(StorageError::Conflict);
+                return Err(StorageError::HandleTaken);
             }
 
             let mut devices = write.open_table(DEVICES)?;
             if devices.get(device.device_id.as_slice())?.is_some() {
-                return Err(StorageError::Conflict);
+                return Err(StorageError::DeviceExists);
             }
 
             handles.insert(handle.as_str(), user.user_id.as_slice())?;
@@ -179,7 +180,7 @@ impl Embedded {
         self.transact(|write| {
             let mut devices = write.open_table(DEVICES)?;
             if devices.get(device.device_id.as_slice())?.is_some() {
-                return Err(StorageError::Conflict);
+                return Err(StorageError::DeviceExists);
             }
             devices.insert(device.device_id.as_slice(), encode(device)?.as_str())?;
             write
@@ -337,6 +338,37 @@ impl Embedded {
         Ok(members)
     }
 
+    /// Every collection a user may read, including ones they own.
+    ///
+    /// Membership is keyed collection-first, so answering this walks the whole
+    /// table. That is the right trade for a store of this size: the alternative
+    /// is a second index to keep in step with the first, and an index that
+    /// disagrees with its table is worse than a scan.
+    ///
+    /// # Errors
+    /// Returns [`StorageError`] when the read fails or a row is malformed.
+    pub fn shares_readable_by(&self, user: UserId) -> Result<Vec<ShareRecord>, StorageError> {
+        let read = self.begin_read()?;
+        let membership = read.open_table(MEMBERSHIP)?;
+        let shares = read.open_table(SHARES)?;
+
+        let mut readable = Vec::new();
+        for row in membership.iter()? {
+            let (key, _) = row?;
+            let key = key.value();
+            let Some((collection, member)) = key.split_at_checked(key.len() - user.len()) else {
+                return Err(StorageError::Malformed);
+            };
+            if member != user {
+                continue;
+            }
+            if let Some(stored) = shares.get(collection)? {
+                readable.push(decode(stored.value())?);
+            }
+        }
+        Ok(readable)
+    }
+
     // ----- the two operations the rest is built from ----------------------
 
     /// Runs `work` in one transaction, committing only if it succeeds.
@@ -396,6 +428,8 @@ impl From<StorageError> for RepositoryError {
     fn from(error: StorageError) -> Self {
         match error {
             StorageError::Conflict => Self::VersionConflict,
+            StorageError::HandleTaken => Self::HandleTaken,
+            StorageError::DeviceExists => Self::DeviceExists,
             // A full mailbox is not a race, so it is not something to retry.
             error @ StorageError::MailboxFull { .. } => Self::Unavailable(error.to_string()),
             StorageError::Malformed => Self::Unavailable("a stored row is malformed".to_owned()),
@@ -548,7 +582,7 @@ mod tests {
         // leaves nothing behind.
         assert!(matches!(
             store.insert_registration(&user(GRACE, "Ada", "7Q2XZ"), &device(2, GRACE)),
-            Err(StorageError::Conflict)
+            Err(StorageError::HandleTaken)
         ));
         assert_eq!(store.find_user(GRACE).expect("reads"), None);
         assert_eq!(
@@ -568,11 +602,11 @@ mod tests {
 
         assert!(matches!(
             store.insert_registration(&user(GRACE, "Grace", "4KQ2P"), &device(1, GRACE)),
-            Err(StorageError::Conflict)
+            Err(StorageError::DeviceExists)
         ));
         assert!(matches!(
             store.enrol_device(&device(1, ADA)),
-            Err(StorageError::Conflict)
+            Err(StorageError::DeviceExists)
         ));
     }
 

@@ -13,6 +13,7 @@
 //!
 //! - [`embedded`]: one file, no server, no replica set.
 //! - [`directory`]: device logs, stored and served.
+//! - [`repositories`]: the engine wearing the service's own vocabulary.
 //! - [`service`]: answering a peer that happens to be a service.
 //! - [`mailbox`]: what a device missed while it was asleep.
 //!
@@ -23,6 +24,7 @@
 pub mod directory;
 pub mod embedded;
 pub mod mailbox;
+mod repositories;
 pub mod service;
 
 use thiserror::Error;
@@ -36,6 +38,14 @@ pub enum StorageError {
     /// The write lost a compare-and-set, or would have overwritten history.
     #[error("that write conflicted with another")]
     Conflict,
+    /// The handle is already claimed. Distinct from a conflict because the
+    /// caller's answer differs: this one retries with another discriminator.
+    #[error("that handle is already claimed")]
+    HandleTaken,
+    /// The device is already enrolled, possibly to somebody else. Nothing to
+    /// retry — a device key is enrolled once.
+    #[error("that device is already enrolled")]
+    DeviceExists,
     /// A device's mailbox is full. Distinct from a conflict because the
     /// answer is different: a conflict means read again and retry, and this
     /// means the recipient has not collected anything for a long time.

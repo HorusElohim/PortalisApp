@@ -317,7 +317,10 @@ impl IdentityRepository for InMemoryIdentities {
     ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
         let outage = self.outage();
         if let Some(device) = self.lock().devices.get_mut(&device_id) {
-            device.revoked_at_unix_ns = Some(at_unix_ns);
+            // Revoking twice says the same thing, and the first time is when
+            // authority actually ended — the same rule the device log applies,
+            // and the conformance suite is what noticed these disagreed.
+            device.revoked_at_unix_ns.get_or_insert(at_unix_ns);
         }
         async move { outage.map_or(Ok(()), Err) }
     }
