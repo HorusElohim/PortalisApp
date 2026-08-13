@@ -9,6 +9,9 @@ pub mod v1 {
     include!(concat!(env!("OUT_DIR"), "/portalis.protocol.v1.rs"));
 }
 
+/// The application protocol negotiated by Nexus connections over QUIC.
+pub const NEXUS_ALPN: &[u8] = b"portalis/nexus/1";
+
 pub mod format;
 
 mod frame;

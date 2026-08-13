@@ -23,6 +23,7 @@ fn either_engine_can_be_the_one_configured() {
         server_authority: "nexus.example:443".to_owned(),
         mongodb_uri: Some("mongodb://nexus.example/".to_owned()),
         data_dir: None,
+        node_secret: None,
         database: "nexus".to_owned(),
     };
     let embedded = ServerConfig {

@@ -6,6 +6,12 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- The Nexus service now has a stable authenticated QUIC identity. Embedded
+  deployments generate and retain a private node secret beside their data;
+  container and MongoDB deployments provide the same 32-byte secret through
+  `PORTALIS_NEXUS_NODE_SECRET`. The derived public node ID is logged for
+  clients to authenticate when they connect over QUIC.
+
 - Added the first unified Nexus connection primitive. A `NexusEndpoint`
   reuses the app's existing Ed25519 device secret, returns raw authenticated
   QUIC connections and streams to its caller, and reports whether a peer path
@@ -104,6 +110,10 @@
 ### Changed
 
 <!-- Behaviour and UX changes go here before the next release. -->
+
+- Nexus command connections now run over authenticated QUIC streams. The
+  service accepts connections concurrently and drains those streams gracefully
+  on shutdown; its ALPN identifier is owned by the shared protocol crate.
 
 - Unified the native backend and Nexus into one Cargo workspace rooted at
   `portalis/rust/backend`. The Flutter library is now the Nexus application

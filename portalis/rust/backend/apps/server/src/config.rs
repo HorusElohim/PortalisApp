@@ -54,6 +54,12 @@ pub struct ServerConfig {
     pub mongodb_uri: Option<String>,
     /// Where the embedded engine keeps its files.
     pub data_dir: Option<std::path::PathBuf>,
+    /// The hexadecimal 32-byte Iroh private key supplied by an operator.
+    ///
+    /// When omitted, embedded deployments generate and keep the same secret
+    /// beside their data. MongoDB deployments must supply this value because
+    /// their storage is not a suitable private-key location.
+    pub node_secret: Option<String>,
     pub database: String,
 }
 
@@ -72,6 +78,7 @@ impl ServerConfig {
             server_authority: listen_addr.to_string(),
             mongodb_uri: None,
             data_dir: None,
+            node_secret: None,
             database: DEFAULT_DATABASE.to_owned(),
         })
     }
@@ -96,6 +103,7 @@ impl ServerConfig {
                 .unwrap_or(defaults.server_authority),
             mongodb_uri: lookup("PORTALIS_NEXUS_MONGODB_URI"),
             data_dir: lookup("PORTALIS_NEXUS_DATA_DIR").map(std::path::PathBuf::from),
+            node_secret: lookup("PORTALIS_NEXUS_NODE_SECRET"),
             database: lookup("PORTALIS_NEXUS_DATABASE")
                 .unwrap_or_else(|| DEFAULT_DATABASE.to_owned()),
             listen_addr: defaults.listen_addr,
@@ -156,6 +164,7 @@ mod tests {
         let config = ServerConfig::from_listen_value(None).expect("valid default address");
 
         assert_eq!(config.mongodb_uri, None);
+        assert_eq!(config.node_secret, None);
         assert_eq!(config.database, DEFAULT_DATABASE);
         assert_eq!(config.storage(), Err(MissingStorage));
         assert!(
@@ -173,6 +182,7 @@ mod tests {
         assert_eq!(config.listen_addr.to_string(), DEFAULT_LISTEN_ADDR);
         assert_eq!(config.server_authority, DEFAULT_LISTEN_ADDR);
         assert_eq!(config.mongodb_uri, None);
+        assert_eq!(config.node_secret, None);
         assert_eq!(config.database, DEFAULT_DATABASE);
         assert_eq!(config.storage(), Err(MissingStorage));
         assert!(
@@ -189,6 +199,10 @@ mod tests {
             ("PORTALIS_NEXUS_LISTEN_ADDR", "0.0.0.0:9000"),
             ("PORTALIS_NEXUS_SERVER_AUTHORITY", "nexus.example"),
             ("PORTALIS_NEXUS_MONGODB_URI", "mongodb://example/"),
+            (
+                "PORTALIS_NEXUS_NODE_SECRET",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ),
             ("PORTALIS_NEXUS_DATABASE", "custom_db"),
         ];
         let config = ServerConfig::from_lookup(|name| {
@@ -201,6 +215,10 @@ mod tests {
         assert_eq!(config.listen_addr.to_string(), "0.0.0.0:9000");
         assert_eq!(config.server_authority, "nexus.example");
         assert_eq!(config.mongodb_uri.as_deref(), Some("mongodb://example/"));
+        assert_eq!(
+            config.node_secret.as_deref(),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
         assert_eq!(config.database, "custom_db");
         assert_eq!(
             config.storage(),

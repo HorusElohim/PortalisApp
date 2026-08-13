@@ -8,12 +8,10 @@ use iroh::{
     Endpoint, NodeAddr, NodeId, RelayMode, SecretKey, Watcher as _,
     endpoint::{BindError, ConnectError, Connection, ConnectionType, Incoming},
 };
+pub use portalis_nexus_protocol::NEXUS_ALPN;
 
 type EndpointAddr = NodeAddr;
 type EndpointId = NodeId;
-
-/// The first Nexus application protocol carried by QUIC.
-pub const NEXUS_ALPN: &[u8] = b"portalis/nexus/1";
 
 /// The path Iroh currently has available to a remote device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

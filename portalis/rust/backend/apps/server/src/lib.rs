@@ -26,6 +26,7 @@ mod handlers;
 mod health;
 mod identity;
 mod messages;
+mod node;
 pub mod quic;
 mod session;
 mod shutdown;
@@ -48,6 +49,7 @@ pub use messages::{
     SocketReply, authenticated_reply, binary_frame, hello_envelope, hello_payload, presence_event,
     protocol_error, reply_to, reply_with, response_for, server_hello,
 };
+pub use node::{NodeSecretError, load_node_secret};
 pub use portalis_nexus_storage::mongo::MongoStore;
 pub use session::Session;
 pub use shutdown::{GRACEFUL_DRAIN_TIMEOUT, Shutdown};
