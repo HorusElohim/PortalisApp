@@ -21,7 +21,7 @@
 
 use std::collections::HashSet;
 
-use portalis_nexus_protocol::{DEVICE_KEY_BYTES, MAX_FRAME_BYTES};
+use portalis_nexus_protocol::{DEVICE_ID_BYTES, DEVICE_KEY_BYTES, MAX_FRAME_BYTES};
 use thiserror::Error;
 
 use crate::endpoint::{ConnectionPath, NEXUS_ALPN, NexusEndpoint};
@@ -71,6 +71,9 @@ pub struct KnownPeers {
     verified: HashSet<[u8; DEVICE_KEY_BYTES]>,
     /// Contacts we know of, whose fingerprint has not been compared.
     unverified: HashSet<[u8; DEVICE_KEY_BYTES]>,
+    /// Whether an unlisted key is a stranger to refuse or simply somebody we
+    /// have no opinion about.
+    open: bool,
 }
 
 impl KnownPeers {
@@ -87,6 +90,18 @@ impl KnownPeers {
         self
     }
 
+    /// Accepts any authenticated peer, as [`PeerTrust::Unverified`].
+    ///
+    /// What a service is. A post office talks to anybody: it authenticates the
+    /// key on the other end and has no opinion about whose it is, because what
+    /// a caller may *do* is decided by the request rather than by being known.
+    /// A device does not do this — for a person, an unlisted key is a stranger.
+    #[must_use]
+    pub fn to_anybody(mut self) -> Self {
+        self.open = true;
+        self
+    }
+
     /// A contact we know of but have not compared fingerprints with.
     #[must_use]
     pub fn unverified(mut self, key: [u8; DEVICE_KEY_BYTES]) -> Self {
@@ -99,7 +114,7 @@ impl KnownPeers {
     fn trust(&self, key: &[u8; DEVICE_KEY_BYTES]) -> PeerTrust {
         if self.verified.contains(key) {
             PeerTrust::Known
-        } else if self.unverified.contains(key) {
+        } else if self.open || self.unverified.contains(key) {
             PeerTrust::Unverified
         } else {
             PeerTrust::Unknown
@@ -136,47 +151,85 @@ impl SessionError {
     }
 }
 
-/// What one peer asks another for.
+/// What one party asks another for.
 ///
-/// Deliberately tiny. A session moves objects that verify on their own terms,
-/// so there is nothing here that needs negotiating, and every request a peer
-/// can express is one this device would happily answer for anybody it talks
-/// to at all.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// One vocabulary for peers and for the service, deliberately. A service is a
+/// peer that also stores: it answers the same requests, and a client that
+/// fetches a device log does not care whether the bytes came from the person
+/// who signed it or from something holding a copy. That is only safe because
+/// an object is valid on its own terms (§9) — if where it came from mattered,
+/// this enum would have to be two.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Request {
     /// The current publication of a collection, whatever revision that is.
     Publication { collection_id: [u8; 16] },
+    /// Everything waiting for this device. Answered only by a service.
+    Collect,
+    /// Leave something for a device that is not reachable.
+    Deliver {
+        device: [u8; DEVICE_ID_BYTES],
+        body: Vec<u8>,
+    },
+    /// Somebody's device log, so it can be verified against what is held.
+    DeviceLog { root_key: [u8; DEVICE_KEY_BYTES] },
 }
 
 impl Request {
     const PUBLICATION: u8 = 1;
+    const COLLECT: u8 = 2;
+    const DELIVER: u8 = 3;
+    const DEVICE_LOG: u8 = 4;
 
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
         match self {
             Self::Publication { collection_id } => {
-                let mut bytes = Vec::with_capacity(17);
                 bytes.push(Self::PUBLICATION);
                 bytes.extend_from_slice(collection_id);
-                bytes
+            }
+            Self::Collect => bytes.push(Self::COLLECT),
+            Self::Deliver { device, body } => {
+                bytes.push(Self::DELIVER);
+                bytes.extend_from_slice(device);
+                bytes.extend_from_slice(body);
+            }
+            Self::DeviceLog { root_key } => {
+                bytes.push(Self::DEVICE_LOG);
+                bytes.extend_from_slice(root_key);
             }
         }
+        bytes
     }
 
     /// # Errors
     ///
     /// Returns [`SessionError::Unintelligible`] for anything this device does
-    /// not recognise, including a future request kind.
+    /// not recognise, including a request kind from a newer version.
     pub fn decode(bytes: &[u8]) -> Result<Self, SessionError> {
-        match bytes.split_first() {
-            Some((&Self::PUBLICATION, rest)) if rest.len() == 16 => {
-                let mut collection_id = [0_u8; 16];
-                collection_id.copy_from_slice(rest);
-                Ok(Self::Publication { collection_id })
+        let (&kind, rest) = bytes.split_first().ok_or(SessionError::Unintelligible)?;
+        match (kind, rest.len()) {
+            (Self::PUBLICATION, 16) => Ok(Self::Publication {
+                collection_id: fixed(rest)?,
+            }),
+            (Self::COLLECT, 0) => Ok(Self::Collect),
+            (Self::DELIVER, length) if length > DEVICE_ID_BYTES => {
+                let (device, body) = rest.split_at(DEVICE_ID_BYTES);
+                Ok(Self::Deliver {
+                    device: fixed(device)?,
+                    body: body.to_vec(),
+                })
             }
+            (Self::DEVICE_LOG, DEVICE_KEY_BYTES) => Ok(Self::DeviceLog {
+                root_key: fixed(rest)?,
+            }),
             _ => Err(SessionError::Unintelligible),
         }
     }
+}
+
+fn fixed<const N: usize>(bytes: &[u8]) -> Result<[u8; N], SessionError> {
+    <[u8; N]>::try_from(bytes).map_err(|_| SessionError::Unintelligible)
 }
 
 /// One connection to one peer.
@@ -364,28 +417,81 @@ mod tests {
     const STRANGER: [u8; DEVICE_KEY_BYTES] = [9; DEVICE_KEY_BYTES];
 
     #[test]
-    fn a_request_round_trips_and_anything_else_is_refused() {
-        let request = Request::Publication {
-            collection_id: [7; 16],
-        };
+    fn every_request_round_trips_and_anything_else_is_refused() {
+        let requests = [
+            Request::Publication {
+                collection_id: [7; 16],
+            },
+            Request::Collect,
+            Request::Deliver {
+                device: [8; DEVICE_ID_BYTES],
+                body: b"a publication".to_vec(),
+            },
+            Request::DeviceLog {
+                root_key: [9; DEVICE_KEY_BYTES],
+            },
+        ];
 
-        let encoded = request.encode();
-        assert_eq!(Request::decode(&encoded).expect("decodes"), request);
+        for request in &requests {
+            let encoded = request.encode();
+            assert_eq!(&Request::decode(&encoded).expect("decodes"), request);
 
-        // A kind from a future version, a truncated one, and nothing at all.
-        for refused in [vec![9, 0], encoded[..8].to_vec(), Vec::new()] {
+            // A fixed-width request refuses a byte more or a byte less.
+            // `Deliver` is exempt from both: its body is the part that varies,
+            // so a longer or shorter one is simply a different valid request.
+            if !matches!(request, Request::Deliver { .. }) {
+                let mut padded = encoded.clone();
+                padded.push(0);
+                assert!(
+                    matches!(Request::decode(&padded), Err(SessionError::Unintelligible)),
+                    "{request:?} accepted a trailing byte"
+                );
+                assert!(
+                    matches!(
+                        Request::decode(&encoded[..encoded.len() - 1]),
+                        Err(SessionError::Unintelligible)
+                    ),
+                    "{request:?} accepted a truncation"
+                );
+            }
+        }
+
+        // A kind from a future version, and nothing at all.
+        for refused in [vec![9_u8, 0], Vec::new()] {
             assert!(matches!(
                 Request::decode(&refused),
                 Err(SessionError::Unintelligible)
             ));
         }
-        // Right kind, wrong length.
-        let mut padded = encoded;
-        padded.push(0);
+        // A delivery with an address and no body is not a delivery.
         assert!(matches!(
-            Request::decode(&padded),
+            Request::decode(
+                &Request::Deliver {
+                    device: [8; DEVICE_ID_BYTES],
+                    body: Vec::new(),
+                }
+                .encode()
+            ),
             Err(SessionError::Unintelligible)
         ));
+    }
+
+    /// A service authenticates a key and has no opinion about whose it is.
+    #[test]
+    fn a_service_talks_to_anybody_without_pretending_to_know_them() {
+        let open = KnownPeers::new().to_anybody().verified(ADA);
+
+        assert_eq!(open.trust(&STRANGER), PeerTrust::Unverified);
+        assert_eq!(
+            open.trust(&ADA),
+            PeerTrust::Known,
+            "and still knows the ones it knows"
+        );
+        assert_eq!(
+            KnownPeers::new().trust(&STRANGER),
+            PeerTrust::Unknown,
+            "a device, by contrast, refuses"
+        );
     }
 
     #[test]

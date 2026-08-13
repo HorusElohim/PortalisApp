@@ -7,6 +7,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+portalis-nexus-client.workspace = true
 portalis-nexus-server-core.workspace = true
 redb.workspace = true
 serde = { workspace = true, features = ["derive"] }

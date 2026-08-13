@@ -99,6 +99,7 @@ impl Embedded {
             write.open_table(SHARES)?;
             write.open_table(SNAPSHOTS)?;
             write.open_table(MEMBERSHIP)?;
+            write.open_table(crate::directory::DEVICE_LOGS)?;
             write.open_table(crate::mailbox::MAILBOX)?;
             write.open_table(crate::mailbox::MAILBOX_NEXT)?;
             Ok(())

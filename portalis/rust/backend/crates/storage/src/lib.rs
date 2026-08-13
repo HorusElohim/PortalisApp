@@ -12,14 +12,18 @@
 //! difference between engines is operational rather than semantic.
 //!
 //! - [`embedded`]: one file, no server, no replica set.
+//! - [`directory`]: device logs, stored and served.
+//! - [`service`]: answering a peer that happens to be a service.
 //! - [`mailbox`]: what a device missed while it was asleep.
 //!
 //! The `MongoDB` engine currently lives in `apps/server` and moves here as the
 //! service is rewritten; both then answer to the same conformance suite, which
 //! is the only way "either engine" means anything.
 
+pub mod directory;
 pub mod embedded;
 pub mod mailbox;
+pub mod service;
 
 use thiserror::Error;
 
@@ -27,7 +31,7 @@ use thiserror::Error;
 ///
 /// Deliberately narrow: a service that leaks its engine's error taxonomy
 /// upward makes callers that only work with one engine.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum StorageError {
     /// The write lost a compare-and-set, or would have overwritten history.
     #[error("that write conflicted with another")]

@@ -4161,6 +4161,7 @@ dependencies = [
 name = "portalis-nexus-storage"
 version = "0.1.0"
 dependencies = [
+ "portalis-nexus-client",
  "portalis-nexus-server-core",
  "redb",
  "serde",
