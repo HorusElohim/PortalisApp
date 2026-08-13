@@ -7,18 +7,31 @@ use tokio::time::timeout;
 
 mod common;
 
-use common::{PATIENCE, endpoint, event_router, reserve_address, serve, start_server};
+use common::{PATIENCE, endpoint, reserve_address, start_server, unsolicited_ping};
 
 #[tokio::test]
 async fn delivers_unsolicited_envelopes_to_the_event_stream() {
     let address = reserve_address().await;
-    let server = serve(address, event_router()).await;
+    let (state, server) = start_server(address).await;
     let client = NexusClient::connect(&endpoint(address))
         .await
         .expect("connect to the event server");
     let mut events = client.events().expect("the event stream is available");
+    let connection_id: [u8; 16] = client
+        .hello()
+        .expect("a connection has a hello")
+        .connection_id
+        .try_into()
+        .expect("connection IDs are fixed-width");
 
     for nonce in 1..=3 {
+        assert!(
+            state.connections().send(
+                connection_id,
+                portalis_nexus_server::binary_frame(&unsolicited_ping(nonce)),
+            ),
+            "the real service knows where to deliver its event"
+        );
         let event = timeout(PATIENCE, events.recv())
             .await
             .expect("an event arrives")
