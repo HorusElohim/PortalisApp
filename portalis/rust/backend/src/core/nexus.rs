@@ -34,7 +34,7 @@ use crate::projection::state::{
     Accepted, CollectionState, Command, CommandError, Connectivity, Detail, DeviceState, Handle,
     PortalisState, Role, Status,
 };
-use crate::store::records::{Role as StoredRole, StoredCollection};
+use crate::store::records::{Role as StoredRole, StoredCollection, StoredImportEntry};
 use crate::store::{Store, StoreError};
 
 /// Where the core keeps its file, and who it is.
@@ -93,6 +93,7 @@ impl LocalCollections {
         let mut local = Self::default();
         let mut projected = Vec::new();
         for (key, stored) in store.collections()? {
+            let imported_entries = store.torrent_import_entries(&key)?;
             let handle = local.assign(key.clone());
             let revision = store
                 .current_revision(&key)?
@@ -112,8 +113,8 @@ impl LocalCollections {
                 revision,
                 status,
                 members: Vec::new(),
-                entries: 0,
-                total_bytes: 0,
+                entries: u32::try_from(imported_entries.len()).unwrap_or(u32::MAX),
+                total_bytes: imported_entries.iter().map(|entry| entry.bytes).sum(),
                 transfer: None,
                 pending: None,
             });
@@ -238,7 +239,9 @@ impl Nexus {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .watch_detail(collection);
-        if collection.is_none() {
+        if let Some(collection) = collection {
+            self.details.send_replace(self.import_detail(collection));
+        } else {
             // Stop holding what nobody is looking at.
             self.details.send_replace(None);
         }
@@ -323,8 +326,16 @@ impl Nexus {
 
     fn import_torrent(&self, source: &str) -> Result<(), CommandError> {
         let id = crate::collections::model::CollectionId::generate();
+        let metadata = is_torrent_path(source)
+            .then(|| crate::torrent::metadata_from_torrent_path(source))
+            .transpose()
+            .map_err(|error| {
+                CommandError::Invalid(format!("could not read the .torrent file: {error}"))
+            })?;
         let stored = StoredCollection {
-            name: torrent_name(source),
+            name: metadata
+                .as_ref()
+                .map_or_else(|| torrent_name(source), |metadata| metadata.name.clone()),
             role: StoredRole::Owner,
             content_key: portalis_nexus_client::generate_content_key(),
             media_path: String::new(),
@@ -337,6 +348,28 @@ impl Nexus {
             // before returning rather than leaving a half-import visible.
             let _ = self.store.forget_collection(id.as_bytes());
             return Err(persistence(error));
+        }
+        if let Some(metadata) = &metadata {
+            let entries = metadata
+                .files
+                .iter()
+                .map(|file| StoredImportEntry {
+                    label: file.label.clone(),
+                    bytes: file.bytes,
+                })
+                .collect::<Vec<_>>();
+            if let Err(error) = self
+                .store
+                .put_torrent_import_entries(id.as_bytes(), &entries)
+                .and_then(|()| {
+                    self.store
+                        .put_torrent_import_descriptor(id.as_bytes(), &metadata.descriptor)
+                })
+            {
+                let _ = self.store.forget_torrent_import(id.as_bytes());
+                let _ = self.store.forget_collection(id.as_bytes());
+                return Err(persistence(error));
+            }
         }
 
         let handle = self
@@ -352,8 +385,12 @@ impl Nexus {
             revision: 0,
             status: Status::Preparing,
             members: Vec::new(),
-            entries: 0,
-            total_bytes: 0,
+            entries: metadata.as_ref().map_or(0, |metadata| {
+                u32::try_from(metadata.files.len()).unwrap_or(u32::MAX)
+            }),
+            total_bytes: metadata.as_ref().map_or(0, |metadata| {
+                metadata.files.iter().map(|file| file.bytes).sum()
+            }),
             transfer: None,
             pending: None,
         });
@@ -416,6 +453,27 @@ impl Nexus {
             .ok_or_else(|| missing_collection(handle))
     }
 
+    fn import_detail(&self, collection: Handle) -> Option<Detail> {
+        let key = self.collection_key(collection).ok()?;
+        self.store.torrent_import(&key).ok().flatten()?;
+        let entries = self.store.torrent_import_entries(&key).ok()?;
+        Some(Detail {
+            id: collection,
+            entries: entries
+                .into_iter()
+                .enumerate()
+                .map(|(index, entry)| crate::projection::state::EntryState {
+                    id: Handle(u32::try_from(index).unwrap_or(u32::MAX).saturating_add(1)),
+                    label: entry.label,
+                    bytes: entry.bytes,
+                    available: false,
+                })
+                .collect(),
+            pieces: Vec::new(),
+            samples: Vec::new(),
+        })
+    }
+
     /// Publishes a new snapshot, if it differs from the last one sent.
     ///
     /// The projector decides; this only carries the result. Called by whatever
@@ -475,7 +533,7 @@ fn validate(command: &Command) -> Result<(), CommandError> {
             "choose a magnet URI or .torrent file"
         }
         Command::ImportTorrent { source }
-            if !source.starts_with("magnet:?") && !source.ends_with(".torrent") =>
+            if !source.starts_with("magnet:?") && !is_torrent_path(source) =>
         {
             "choose a magnet URI or a .torrent file"
         }
@@ -493,6 +551,13 @@ fn torrent_name(source: &str) -> String {
         .and_then(std::ffi::OsStr::to_str)
         .filter(|name| !name.is_empty())
         .map_or_else(|| "Torrent import".to_owned(), ToOwned::to_owned)
+}
+
+fn is_torrent_path(source: &str) -> bool {
+    std::path::Path::new(source)
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("torrent"))
 }
 
 #[cfg(test)]
@@ -834,6 +899,49 @@ mod tests {
         let reopened = open(&scratch);
         assert_eq!(reopened.state().collections.len(), 1);
         assert_eq!(reopened.state().collections[0].status, Status::Preparing);
+        reopened.close().await;
+    }
+
+    #[tokio::test]
+    async fn a_local_torrent_resolves_a_durable_selection_without_downloading() {
+        let scratch = Scratch::new("local-torrent-import");
+        let source = scratch.0.join("fixture.torrent");
+        std::fs::write(
+            &source,
+            b"d4:infod6:lengthi5e4:name8:file.txt12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaee",
+        )
+        .expect("writes descriptor");
+        let nexus = open(&scratch);
+
+        nexus
+            .command(&Command::ImportTorrent {
+                source: source.display().to_string(),
+            })
+            .expect("imports metadata only");
+        let imported = nexus.state().collections[0].clone();
+        assert_eq!(imported.name, "file.txt");
+        assert_eq!(imported.status, Status::Preparing);
+        assert_eq!(imported.entries, 1);
+        assert_eq!(imported.total_bytes, 5);
+
+        let detail = nexus.watch_detail(Some(imported.id));
+        let detail = detail.borrow().clone().expect("selection detail");
+        assert_eq!(detail.entries.len(), 1);
+        assert_eq!(detail.entries[0].label, "file.txt");
+        assert_eq!(detail.entries[0].bytes, 5);
+        assert!(!detail.entries[0].available, "nothing was downloaded");
+        nexus.close().await;
+
+        std::fs::remove_file(source).expect("the original path is no longer needed");
+        let reopened = open(&scratch);
+        let restored = reopened.state().collections[0].clone();
+        assert_eq!(restored.entries, 1);
+        let detail = reopened.watch_detail(Some(restored.id));
+        assert_eq!(
+            detail.borrow().as_ref().map(|detail| detail.entries.len()),
+            Some(1),
+            "the selection was persisted with the collection"
+        );
         reopened.close().await;
     }
 

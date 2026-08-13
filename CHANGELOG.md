@@ -30,6 +30,11 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Local `.torrent` imports now resolve their descriptor and file metadata
+  before a collection is shown. The persisted preparation view exposes every
+  file and its size for later selection, while deliberately fetching no
+  payload bytes.
+
 - Torrent imports now start as durable owner-controlled Nexus collections in
   a preparation state. Portalis records a magnet URI or local `.torrent`
   source without downloading payload bytes, ready for metadata selection in

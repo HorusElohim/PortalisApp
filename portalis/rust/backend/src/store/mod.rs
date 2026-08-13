@@ -33,10 +33,13 @@ use std::sync::{Mutex, OnceLock};
 use redb::{Database, ReadableTable, TableDefinition};
 use thiserror::Error;
 
-use records::{Malformed, StoredCollection, StoredContact, StoredEntry, StoredSample};
+use records::{
+    Malformed, StoredCollection, StoredContact, StoredEntry, StoredImportEntry, StoredSample,
+};
 use schema::{
     COLLECTIONS, CONTACTS, DEVICE_LOG, ENTRIES, IDENTITY, MANIFESTS, META, OUTBOX, REVISIONS,
-    SAMPLES, SCHEMA_VERSION, SCHEMA_VERSION_KEY, TORRENT_IMPORTS,
+    SAMPLES, SCHEMA_VERSION, SCHEMA_VERSION_KEY, TORRENT_IMPORTS, TORRENT_IMPORT_DESCRIPTORS,
+    TORRENT_IMPORT_ENTRIES,
 };
 
 /// Why the store could not answer.
@@ -171,6 +174,8 @@ impl Store {
             write.open_table(MANIFESTS)?;
             write.open_table(ENTRIES)?;
             write.open_table(TORRENT_IMPORTS)?;
+            write.open_table(TORRENT_IMPORT_ENTRIES)?;
+            write.open_table(TORRENT_IMPORT_DESCRIPTORS)?;
             write.open_table(OUTBOX)?;
             write.open_table(SAMPLES)?;
             write
@@ -363,12 +368,100 @@ impl Store {
     /// # Errors
     /// Returns [`StoreError`] when the write fails.
     pub fn forget_torrent_import(&self, collection_id: &[u8]) -> Result<(), StoreError> {
+        let (low, high) = schema::range_of(collection_id);
         let write = self.database.begin_write()?;
         {
             write.open_table(TORRENT_IMPORTS)?.remove(collection_id)?;
+            write
+                .open_table(TORRENT_IMPORT_DESCRIPTORS)?
+                .remove(collection_id)?;
+            let mut entries = write.open_table(TORRENT_IMPORT_ENTRIES)?;
+            let keys = entries
+                .range(low.as_slice()..=high.as_slice())?
+                .map(|row| row.map(|(key, _)| key.value().to_vec()))
+                .collect::<Result<Vec<_>, _>>()?;
+            for key in keys {
+                entries.remove(key.as_slice())?;
+            }
         }
         write.commit()?;
         Ok(())
+    }
+
+    /// Persists a resolved `.torrent` descriptor as this collection's initial
+    /// content, so the local path is no longer needed after import.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the write fails.
+    pub fn put_torrent_import_descriptor(
+        &self,
+        collection_id: &[u8],
+        descriptor: &[u8],
+    ) -> Result<(), StoreError> {
+        self.put(TORRENT_IMPORT_DESCRIPTORS, collection_id, descriptor)
+    }
+
+    /// The imported `.torrent` descriptor, if metadata has resolved.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the row cannot be read.
+    pub fn torrent_import_descriptor(
+        &self,
+        collection_id: &[u8],
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        self.get(TORRENT_IMPORT_DESCRIPTORS, collection_id)
+    }
+
+    /// Replaces one import's metadata-only file selection.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the transaction cannot be committed.
+    pub fn put_torrent_import_entries(
+        &self,
+        collection_id: &[u8],
+        entries: &[StoredImportEntry],
+    ) -> Result<(), StoreError> {
+        let (low, high) = schema::range_of(collection_id);
+        let write = self.database.begin_write()?;
+        {
+            let mut table = write.open_table(TORRENT_IMPORT_ENTRIES)?;
+            let old = table
+                .range(low.as_slice()..=high.as_slice())?
+                .map(|row| row.map(|(key, _)| key.value().to_vec()))
+                .collect::<Result<Vec<_>, _>>()?;
+            for key in old {
+                table.remove(key.as_slice())?;
+            }
+            for (ordinal, entry) in entries.iter().enumerate() {
+                let ordinal = u64::try_from(ordinal).map_err(|_| StoreError::Malformed)?;
+                table.insert(
+                    schema::keyed(collection_id, ordinal).as_slice(),
+                    entry.encode().as_slice(),
+                )?;
+            }
+        }
+        write.commit()?;
+        Ok(())
+    }
+
+    /// Imported files in their torrent order.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when a row cannot be decoded.
+    pub fn torrent_import_entries(
+        &self,
+        collection_id: &[u8],
+    ) -> Result<Vec<StoredImportEntry>, StoreError> {
+        let (low, high) = schema::range_of(collection_id);
+        let read = self.database.begin_read()?;
+        let table = read.open_table(TORRENT_IMPORT_ENTRIES)?;
+        table
+            .range(low.as_slice()..=high.as_slice())?
+            .map(|row| {
+                let (_, value) = row?;
+                StoredImportEntry::decode(value.value()).map_err(StoreError::from)
+            })
+            .collect()
     }
 
     // ----- identity, contacts, device logs ------------------------------
@@ -568,7 +661,7 @@ mod tests {
     //! module exists for, which is surviving a restart.
 
     use portalis_nexus_protocol::CONTENT_KEY_BYTES;
-    use records::{EntryStatus, Role};
+    use records::{EntryStatus, Role, StoredImportEntry};
 
     use super::*;
 
@@ -878,8 +971,47 @@ mod tests {
         );
         assert_eq!(store.torrent_import(&OTHER).expect("reads"), None);
 
+        let entries = vec![
+            StoredImportEntry {
+                label: "cover.jpg".to_owned(),
+                bytes: 12,
+            },
+            StoredImportEntry {
+                label: "episode.mp4".to_owned(),
+                bytes: 34,
+            },
+        ];
+        store
+            .put_torrent_import_entries(&COLLECTION, &entries)
+            .expect("stores metadata");
+        store
+            .put_torrent_import_descriptor(&COLLECTION, b"torrent descriptor")
+            .expect("stores descriptor");
+        assert_eq!(
+            store
+                .torrent_import_entries(&COLLECTION)
+                .expect("reads metadata"),
+            entries
+        );
+        assert_eq!(
+            store
+                .torrent_import_descriptor(&COLLECTION)
+                .expect("reads descriptor"),
+            Some(b"torrent descriptor".to_vec())
+        );
+
         store.forget_torrent_import(&COLLECTION).expect("forgets");
         assert_eq!(store.torrent_import(&COLLECTION).expect("reads"), None);
+        assert!(store
+            .torrent_import_entries(&COLLECTION)
+            .expect("reads metadata")
+            .is_empty());
+        assert_eq!(
+            store
+                .torrent_import_descriptor(&COLLECTION)
+                .expect("reads descriptor"),
+            None
+        );
     }
 
     #[test]

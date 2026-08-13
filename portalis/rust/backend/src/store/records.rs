@@ -148,6 +148,35 @@ impl StoredEntry {
     }
 }
 
+/// One selectable file resolved from an imported torrent descriptor.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredImportEntry {
+    pub label: String,
+    pub bytes: u64,
+}
+
+impl StoredImportEntry {
+    #[must_use]
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(self.label.len() + 12);
+        bytes.extend_from_slice(&self.bytes.to_be_bytes());
+        write_string(&mut bytes, &self.label);
+        bytes
+    }
+
+    /// # Errors
+    ///
+    /// Returns [`Malformed`] when the row is truncated or carries trailing
+    /// bytes.
+    pub fn decode(bytes: &[u8]) -> Result<Self, Malformed> {
+        let mut reader = Reader::new(bytes);
+        let bytes = reader.u64()?;
+        let label = reader.string()?;
+        reader.finish()?;
+        Ok(Self { label, bytes })
+    }
+}
+
 /// One reading of a transfer, at one moment.
 ///
 /// Fixed width on purpose (§13): the history is a ring of these, and rows that

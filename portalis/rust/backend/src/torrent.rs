@@ -73,6 +73,22 @@ pub struct SourceFile {
     pub length_bytes: Option<u64>,
 }
 
+/// Metadata obtained from a `.torrent` descriptor before any payload bytes
+/// are requested. It is deliberately smaller than the live torrent DTO: the
+/// collection workflow needs a selection list, not an engine session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TorrentMetadata {
+    pub(crate) name: String,
+    pub(crate) files: Vec<TorrentMetadataFile>,
+    pub(crate) descriptor: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TorrentMetadataFile {
+    pub(crate) label: String,
+    pub(crate) bytes: u64,
+}
+
 pub(crate) fn make_source_names_unique(files: &mut [SourceFile]) {
     let mut names = std::collections::HashSet::new();
     for file in files {
@@ -121,6 +137,63 @@ pub(crate) async fn inspect_source_files(files: &[SourceFile]) -> anyhow::Result
     tokio::task::spawn_blocking(move || validate_source_files(&files))
         .await
         .map_err(|error| anyhow::anyhow!("source inspection task failed: {error}"))?
+}
+
+/// Reads and validates a local `.torrent` descriptor without creating an
+/// engine session or fetching any payload bytes.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn metadata_from_torrent_path(path: &str) -> anyhow::Result<TorrentMetadata> {
+    const MAX_DESCRIPTOR_BYTES: u64 = 16 * 1024 * 1024;
+    let metadata = std::fs::metadata(path)?;
+    anyhow::ensure!(
+        metadata.len() <= MAX_DESCRIPTOR_BYTES,
+        "the .torrent descriptor is larger than 16 MiB"
+    );
+    let bytes = std::fs::read(path)?;
+    metadata_from_torrent_bytes(&bytes)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn metadata_from_torrent_path(_path: &str) -> anyhow::Result<TorrentMetadata> {
+    anyhow::bail!("torrent imports are unavailable on web")
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn metadata_from_torrent_bytes(bytes: &[u8]) -> anyhow::Result<TorrentMetadata> {
+    use anyhow::Context;
+    use buffers::ByteBuf;
+    use librqbit_core::torrent_metainfo::torrent_from_bytes_ext;
+
+    let parsed = torrent_from_bytes_ext::<ByteBuf>(bytes)?;
+    let name = parsed
+        .meta
+        .info
+        .name
+        .as_ref()
+        .map(|name| std::str::from_utf8(name.as_ref()))
+        .transpose()?
+        .filter(|name| !name.is_empty())
+        .unwrap_or("Torrent import")
+        .to_owned();
+    let files = parsed
+        .meta
+        .info
+        .iter_file_details()?
+        .map(|file| {
+            Ok(TorrentMetadataFile {
+                label: file
+                    .filename
+                    .to_string()
+                    .context("decoding torrent filename")?,
+                bytes: file.len,
+            })
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    Ok(TorrentMetadata {
+        name,
+        files,
+        descriptor: bytes.to_vec(),
+    })
 }
 
 pub(crate) const TORRENT_PIECE_LENGTH: u64 = 2 * 1024 * 1024;
