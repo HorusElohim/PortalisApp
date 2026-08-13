@@ -14,8 +14,10 @@
 //! branch per test, which is the thing it exists to prevent.
 
 use portalis_nexus_server_core::{
-    DeviceRecord, IdentityRepository, InMemoryIdentities, RepositoryError, ShareMembershipRecord,
-    ShareRecord, ShareRepository, ShareSnapshotRecord, UserDirectory, UserRecord,
+    DeviceRecord, EnvelopeRepository, FriendRepository, FriendshipEdge, FriendshipRecord,
+    IdentityRepository, InMemoryIdentities, KeyEnvelopePage, KeyEnvelopeRecord, RepositoryError,
+    ShareMembershipRecord, ShareRecord, ShareRepository, ShareSnapshotRecord, UserDirectory,
+    UserRecord,
 };
 use portalis_nexus_storage::embedded::Embedded;
 
@@ -215,6 +217,40 @@ impl Engine {
 
     async fn list_share_members(&self, share: [u8; 16]) -> Result<Vec<[u8; 16]>, RepositoryError> {
         delegate!(self, ShareRepository::list_share_members, share)
+    }
+
+    async fn find_friendship(
+        &self,
+        edge: FriendshipEdge,
+    ) -> Result<Option<FriendshipRecord>, RepositoryError> {
+        delegate!(self, FriendRepository::find_friendship, edge)
+    }
+
+    async fn save_friendship(
+        &self,
+        record: FriendshipRecord,
+        expected: u64,
+    ) -> Result<(), RepositoryError> {
+        delegate!(self, FriendRepository::save_friendship, record, expected)
+    }
+
+    async fn list_friendships(
+        &self,
+        user: [u8; 16],
+    ) -> Result<Vec<FriendshipRecord>, RepositoryError> {
+        delegate!(self, FriendRepository::list_friendships, user)
+    }
+
+    async fn put_key_envelope(&self, envelope: KeyEnvelopeRecord) -> Result<(), RepositoryError> {
+        delegate!(self, EnvelopeRepository::put_key_envelope, envelope)
+    }
+
+    async fn list_key_envelopes(
+        &self,
+        device: [u8; 32],
+        after: Option<[u8; 16]>,
+    ) -> Result<KeyEnvelopePage, RepositoryError> {
+        delegate!(self, EnvelopeRepository::list_key_envelopes, device, after)
     }
 }
 
@@ -454,6 +490,119 @@ async fn what_was_never_stored_is_absent_in_either_engine() {
                 .list_authorized_shares(ADA)
                 .await
                 .expect("reads")
+                .is_empty()
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_friendship_is_versioned_in_either_engine() {
+    against_every_engine("friends", |store| async move {
+        let edge = FriendshipEdge::between(ADA, GRACE).expect("two different people");
+        let requested = FriendshipRecord {
+            edge,
+            requested_by: ADA,
+            state: portalis_nexus_protocol::v1::FriendshipState::Pending,
+            version: 1,
+            created_at_unix_ns: 1,
+            updated_at_unix_ns: 1,
+        };
+
+        // Version zero means "must not exist yet", which is how a first
+        // request is told apart from an answer to one.
+        store
+            .save_friendship(requested.clone(), 0)
+            .await
+            .expect("the first request");
+        assert_eq!(
+            store.find_friendship(edge).await.expect("reads"),
+            Some(requested.clone())
+        );
+
+        // A device that read the older version loses rather than overwriting.
+        assert_eq!(
+            store.save_friendship(requested.clone(), 0).await,
+            Err(RepositoryError::VersionConflict)
+        );
+
+        let accepted = FriendshipRecord {
+            state: portalis_nexus_protocol::v1::FriendshipState::Accepted,
+            version: 2,
+            updated_at_unix_ns: 2,
+            ..requested
+        };
+        store
+            .save_friendship(accepted.clone(), 1)
+            .await
+            .expect("the answer");
+
+        assert_eq!(
+            store.list_friendships(ADA).await.expect("reads"),
+            vec![accepted.clone()]
+        );
+        assert_eq!(
+            store.list_friendships(GRACE).await.expect("reads"),
+            vec![accepted],
+            "either half of the pair finds it"
+        );
+        assert!(
+            store
+                .list_friendships([9; 16])
+                .await
+                .expect("reads")
+                .is_empty()
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_sealed_key_is_replaced_and_paged_in_either_engine() {
+    against_every_engine("envelopes", |store| async move {
+        let envelope = |share: [u8; 16], ciphertext: &[u8]| KeyEnvelopeRecord {
+            share_id: share,
+            recipient_device_id: [1; 32],
+            ephemeral_public_key: [2; 32],
+            ciphertext: ciphertext.to_vec(),
+            created_at_unix_ns: 1,
+        };
+
+        store
+            .put_key_envelope(envelope(SHARE, b"first"))
+            .await
+            .expect("stores");
+        // A rotated key replaces rather than accumulating, so a device never
+        // has to guess which of several is current.
+        store
+            .put_key_envelope(envelope(SHARE, b"rotated"))
+            .await
+            .expect("replaces");
+        store
+            .put_key_envelope(envelope(OTHER_SHARE, b"another"))
+            .await
+            .expect("stores");
+
+        let page = store
+            .list_key_envelopes([1; 32], None)
+            .await
+            .expect("reads");
+        assert_eq!(page.envelopes.len(), 2);
+        assert!(
+            page.envelopes
+                .iter()
+                .any(|held| held.ciphertext == b"rotated"),
+            "the newest, not the first"
+        );
+        assert_eq!(page.next_after_share_id, None, "both fit in one page");
+
+        // Another device's post is not this one's.
+        assert!(
+            store
+                .list_key_envelopes([9; 32], None)
+                .await
+                .expect("reads")
+                .envelopes
                 .is_empty()
         );
     })

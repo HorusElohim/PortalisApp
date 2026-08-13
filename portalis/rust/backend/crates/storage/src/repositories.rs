@@ -195,3 +195,50 @@ impl Embedded {
             .map_err(RepositoryError::from)
     }
 }
+
+impl portalis_nexus_server_core::FriendRepository for Embedded {
+    async fn find_friendship(
+        &self,
+        edge: portalis_nexus_server_core::FriendshipEdge,
+    ) -> Result<Option<portalis_nexus_server_core::FriendshipRecord>, RepositoryError> {
+        self.friends().find(edge).map_err(RepositoryError::from)
+    }
+
+    async fn save_friendship(
+        &self,
+        record: portalis_nexus_server_core::FriendshipRecord,
+        expected_version: u64,
+    ) -> Result<(), RepositoryError> {
+        self.friends()
+            .save(&record, expected_version)
+            .map_err(RepositoryError::from)
+    }
+
+    async fn list_friendships(
+        &self,
+        user: UserId,
+    ) -> Result<Vec<portalis_nexus_server_core::FriendshipRecord>, RepositoryError> {
+        self.friends().list(user).map_err(RepositoryError::from)
+    }
+}
+
+impl portalis_nexus_server_core::EnvelopeRepository for Embedded {
+    async fn put_key_envelope(
+        &self,
+        envelope: portalis_nexus_server_core::KeyEnvelopeRecord,
+    ) -> Result<(), RepositoryError> {
+        self.envelopes()
+            .put(&envelope)
+            .map_err(RepositoryError::from)
+    }
+
+    async fn list_key_envelopes(
+        &self,
+        recipient_device_id: DeviceId,
+        after_share_id: Option<ShareId>,
+    ) -> Result<portalis_nexus_server_core::KeyEnvelopePage, RepositoryError> {
+        self.envelopes()
+            .page(recipient_device_id, after_share_id)
+            .map_err(RepositoryError::from)
+    }
+}

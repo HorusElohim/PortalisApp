@@ -11,6 +11,7 @@ use portalis_nexus_server_core::{
     UserDirectory, UserId, UserRecord,
 };
 
+use portalis_nexus_storage::embedded::Embedded;
 use portalis_nexus_storage::mongo::MongoStore;
 
 /// Where durable identity and friend state lives.
@@ -21,6 +22,9 @@ pub enum NexusStore {
     Memory(Box<InMemoryIdentities>),
     /// Durable, indexed, and transactional.
     Mongo(Box<MongoStore>),
+    /// Durable, and a directory of files rather than a server to operate.
+    /// What a self-hoster runs (D5).
+    Embedded(Box<Embedded>),
 }
 
 impl Default for NexusStore {
@@ -33,6 +37,11 @@ impl NexusStore {
     #[must_use]
     pub fn mongo(store: MongoStore) -> Self {
         Self::Mongo(Box::new(store))
+    }
+
+    #[must_use]
+    pub fn embedded(store: Embedded) -> Self {
+        Self::Embedded(Box::new(store))
     }
 
     /// Makes an in-memory store fail, for exercising degraded paths. Has no
@@ -57,6 +66,7 @@ impl NexusStore {
         match self {
             Self::Memory(_) => "memory",
             Self::Mongo(_) => "mongodb",
+            Self::Embedded(_) => "embedded",
         }
     }
 }
@@ -66,6 +76,7 @@ impl UserDirectory for NexusStore {
         match self {
             Self::Memory(store) => store.find_user(user_id).await,
             Self::Mongo(store) => store.find_user(user_id).await,
+            Self::Embedded(store) => store.find_user(user_id).await,
         }
     }
 
@@ -85,6 +96,11 @@ impl UserDirectory for NexusStore {
                     .find_user_by_handle(normalized_username, discriminator)
                     .await
             }
+            Self::Embedded(store) => {
+                store
+                    .find_user_by_handle(normalized_username, discriminator)
+                    .await
+            }
         }
     }
 }
@@ -98,6 +114,7 @@ impl IdentityRepository for NexusStore {
         match self {
             Self::Memory(store) => store.insert_registration(user, device).await,
             Self::Mongo(store) => store.insert_registration(user, device).await,
+            Self::Embedded(store) => store.insert_registration(user, device).await,
         }
     }
 
@@ -108,6 +125,7 @@ impl IdentityRepository for NexusStore {
         match self {
             Self::Memory(store) => store.find_device(device_id).await,
             Self::Mongo(store) => store.find_device(device_id).await,
+            Self::Embedded(store) => store.find_device(device_id).await,
         }
     }
 
@@ -115,6 +133,7 @@ impl IdentityRepository for NexusStore {
         match self {
             Self::Memory(store) => store.list_devices(user).await,
             Self::Mongo(store) => store.list_devices(user).await,
+            Self::Embedded(store) => store.list_devices(user).await,
         }
     }
 
@@ -122,6 +141,7 @@ impl IdentityRepository for NexusStore {
         match self {
             Self::Memory(store) => store.link_device(device).await,
             Self::Mongo(store) => store.link_device(device).await,
+            Self::Embedded(store) => store.link_device(device).await,
         }
     }
 
@@ -133,6 +153,7 @@ impl IdentityRepository for NexusStore {
         match self {
             Self::Memory(store) => store.touch_device(device_id, at_unix_ns).await,
             Self::Mongo(store) => store.touch_device(device_id, at_unix_ns).await,
+            Self::Embedded(store) => store.touch_device(device_id, at_unix_ns).await,
         }
     }
 
@@ -144,6 +165,7 @@ impl IdentityRepository for NexusStore {
         match self {
             Self::Memory(store) => store.revoke_device(device_id, at_unix_ns).await,
             Self::Mongo(store) => store.revoke_device(device_id, at_unix_ns).await,
+            Self::Embedded(store) => store.revoke_device(device_id, at_unix_ns).await,
         }
     }
 }
@@ -156,6 +178,7 @@ impl FriendRepository for NexusStore {
         match self {
             Self::Memory(store) => store.find_friendship(edge).await,
             Self::Mongo(store) => store.find_friendship(edge).await,
+            Self::Embedded(store) => store.find_friendship(edge).await,
         }
     }
 
@@ -167,6 +190,7 @@ impl FriendRepository for NexusStore {
         match self {
             Self::Memory(store) => store.save_friendship(record, expected_version).await,
             Self::Mongo(store) => store.save_friendship(record, expected_version).await,
+            Self::Embedded(store) => store.save_friendship(record, expected_version).await,
         }
     }
 
@@ -177,6 +201,7 @@ impl FriendRepository for NexusStore {
         match self {
             Self::Memory(store) => store.list_friendships(user).await,
             Self::Mongo(store) => store.list_friendships(user).await,
+            Self::Embedded(store) => store.list_friendships(user).await,
         }
     }
 }
@@ -186,6 +211,7 @@ impl EnvelopeRepository for NexusStore {
         match self {
             Self::Memory(store) => store.put_key_envelope(envelope).await,
             Self::Mongo(store) => store.put_key_envelope(envelope).await,
+            Self::Embedded(store) => store.put_key_envelope(envelope).await,
         }
     }
 
@@ -205,6 +231,11 @@ impl EnvelopeRepository for NexusStore {
                     .list_key_envelopes(recipient_device_id, after_share_id)
                     .await
             }
+            Self::Embedded(store) => {
+                store
+                    .list_key_envelopes(recipient_device_id, after_share_id)
+                    .await
+            }
         }
     }
 }
@@ -214,6 +245,7 @@ impl ShareRepository for NexusStore {
         match self {
             Self::Memory(store) => store.find_share(share_id).await,
             Self::Mongo(store) => store.find_share(share_id).await,
+            Self::Embedded(store) => store.find_share(share_id).await,
         }
     }
 
@@ -234,6 +266,11 @@ impl ShareRepository for NexusStore {
                     .save_publication(share, snapshot, expected_revision)
                     .await
             }
+            Self::Embedded(store) => {
+                store
+                    .save_publication(share, snapshot, expected_revision)
+                    .await
+            }
         }
     }
 
@@ -245,6 +282,7 @@ impl ShareRepository for NexusStore {
         match self {
             Self::Memory(store) => store.find_snapshot(share_id, revision).await,
             Self::Mongo(store) => store.find_snapshot(share_id, revision).await,
+            Self::Embedded(store) => store.find_snapshot(share_id, revision).await,
         }
     }
 
@@ -255,6 +293,7 @@ impl ShareRepository for NexusStore {
         match self {
             Self::Memory(store) => store.grant_share_access(membership).await,
             Self::Mongo(store) => store.grant_share_access(membership).await,
+            Self::Embedded(store) => store.grant_share_access(membership).await,
         }
     }
 
@@ -266,6 +305,7 @@ impl ShareRepository for NexusStore {
         match self {
             Self::Memory(store) => store.revoke_share_access(share_id, user_id).await,
             Self::Mongo(store) => store.revoke_share_access(share_id, user_id).await,
+            Self::Embedded(store) => store.revoke_share_access(share_id, user_id).await,
         }
     }
 
@@ -277,6 +317,7 @@ impl ShareRepository for NexusStore {
         match self {
             Self::Memory(store) => store.has_share_access(share_id, user_id).await,
             Self::Mongo(store) => store.has_share_access(share_id, user_id).await,
+            Self::Embedded(store) => store.has_share_access(share_id, user_id).await,
         }
     }
 
@@ -287,6 +328,7 @@ impl ShareRepository for NexusStore {
         match self {
             Self::Memory(store) => store.list_authorized_shares(user_id).await,
             Self::Mongo(store) => store.list_authorized_shares(user_id).await,
+            Self::Embedded(store) => store.list_authorized_shares(user_id).await,
         }
     }
 
@@ -294,6 +336,7 @@ impl ShareRepository for NexusStore {
         match self {
             Self::Memory(store) => store.list_share_members(share_id).await,
             Self::Mongo(store) => store.list_share_members(share_id).await,
+            Self::Embedded(store) => store.list_share_members(share_id).await,
         }
     }
 }
@@ -438,5 +481,176 @@ mod tests {
         ));
         assert!(unavailable(&store.list_authorized_shares(ADA).await));
         assert!(unavailable(&store.list_share_members(share.share_id).await));
+    }
+
+    /// Every method dispatched to the embedded engine, against a real file.
+    ///
+    /// The point of `NexusStore` is that the service cannot tell which engine
+    /// is underneath, and the only way that stays true is to drive all of it
+    /// through each one. The engine's own behaviour is the storage crate's
+    /// conformance suite; what is checked here is that the wiring reaches it.
+    #[tokio::test]
+    async fn every_operation_reaches_the_embedded_engine() {
+        let directory = std::env::temp_dir().join(format!(
+            "portalis-store-embedded-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let store = NexusStore::embedded(
+            portalis_nexus_storage::embedded::Embedded::open(&directory).expect("opens"),
+        );
+        assert_eq!(store.kind(), "embedded");
+
+        store
+            .insert_registration(user(), device())
+            .await
+            .expect("registers");
+        assert_eq!(store.find_user(ADA).await.expect("reads"), Some(user()));
+        assert_eq!(
+            store
+                .find_user_by_handle("ada", "7Q2XZ")
+                .await
+                .expect("reads"),
+            Some(user())
+        );
+        assert_eq!(
+            store.find_device(device().device_id).await.expect("reads"),
+            Some(device())
+        );
+        assert_eq!(store.list_devices(ADA).await.expect("reads").len(), 1);
+        store
+            .touch_device(device().device_id, 5)
+            .await
+            .expect("touches");
+        store
+            .revoke_device(device().device_id, 6)
+            .await
+            .expect("revokes");
+
+        collections_friends_and_keys(&store).await;
+
+        // Faults are an in-memory affair; a durable engine fails for real
+        // reasons, and saying so is these calls having no effect.
+        store.set_unavailable(true);
+        store.set_devices_unavailable(true);
+        assert_eq!(
+            store.find_user(ADA).await.expect("still reads"),
+            Some(user())
+        );
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    /// The rest of the dispatch, so every arm is walked rather than the
+    /// identity half only.
+    async fn collections_friends_and_keys(store: &NexusStore) {
+        let share = ShareRecord {
+            share_id: [3; 16],
+            owner: ADA,
+            revision: 1,
+            snapshot_id: [4; 32],
+            capsule: b"sealed".to_vec(),
+            capsule_signature: vec![9; 64],
+            created_at_unix_ns: 1,
+            updated_at_unix_ns: 1,
+        };
+        let snapshot = ShareSnapshotRecord {
+            share_id: share.share_id,
+            revision: 1,
+            snapshot_id: share.snapshot_id,
+            capsule: share.capsule.clone(),
+            capsule_signature: share.capsule_signature.clone(),
+            created_at_unix_ns: 1,
+        };
+        store
+            .save_publication(share.clone(), snapshot.clone(), None)
+            .await
+            .expect("publishes");
+        assert_eq!(
+            store.find_share(share.share_id).await.expect("reads"),
+            Some(share.clone())
+        );
+        assert_eq!(
+            store.find_snapshot(share.share_id, 1).await.expect("reads"),
+            Some(snapshot)
+        );
+        store
+            .grant_share_access(ShareMembershipRecord {
+                share_id: share.share_id,
+                user_id: GRACE,
+                granted_at_unix_ns: 1,
+            })
+            .await
+            .expect("grants");
+        assert!(
+            store
+                .has_share_access(share.share_id, GRACE)
+                .await
+                .expect("reads")
+        );
+        assert_eq!(
+            store
+                .list_share_members(share.share_id)
+                .await
+                .expect("reads"),
+            vec![GRACE]
+        );
+        assert_eq!(
+            store.list_authorized_shares(GRACE).await.expect("reads"),
+            vec![share.clone()]
+        );
+        store
+            .revoke_share_access(share.share_id, GRACE)
+            .await
+            .expect("revokes");
+
+        friends_and_keys(store, share.share_id).await;
+    }
+
+    /// Friendships and sealed keys, split out only because the whole walk is
+    /// longer than one function should be.
+    async fn friends_and_keys(store: &NexusStore, share_id: ShareId) {
+        let edge = FriendshipEdge::between(ADA, GRACE).expect("two people");
+        let friendship = FriendshipRecord {
+            edge,
+            requested_by: ADA,
+            state: portalis_nexus_protocol::v1::FriendshipState::Pending,
+            version: 1,
+            created_at_unix_ns: 1,
+            updated_at_unix_ns: 1,
+        };
+        store
+            .save_friendship(friendship.clone(), 0)
+            .await
+            .expect("saves");
+        assert_eq!(
+            store.find_friendship(edge).await.expect("reads"),
+            Some(friendship.clone())
+        );
+        assert_eq!(
+            store.list_friendships(ADA).await.expect("reads"),
+            vec![friendship]
+        );
+
+        store
+            .put_key_envelope(KeyEnvelopeRecord {
+                share_id,
+                recipient_device_id: device().device_id,
+                ephemeral_public_key: [5; 32],
+                ciphertext: b"sealed key".to_vec(),
+                created_at_unix_ns: 1,
+            })
+            .await
+            .expect("stores");
+        assert_eq!(
+            store
+                .list_key_envelopes(device().device_id, None)
+                .await
+                .expect("reads")
+                .envelopes
+                .len(),
+            1
+        );
     }
 }

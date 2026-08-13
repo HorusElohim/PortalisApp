@@ -12,8 +12,8 @@
 //! difference between engines is operational rather than semantic.
 //!
 //! - [`store`]: the machinery every endpoint's file shares.
-//! - [`identity`], [`collections`], [`mailbox`], [`directory`]: one endpoint
-//!   each, one file each, autonomous.
+//! - [`identity`], [`collections`], [`friends`], [`envelopes`], [`mailbox`],
+//!   [`directory`]: one endpoint each, one file each, autonomous.
 //! - [`embedded`]: the four of them together, as one engine.
 //! - [`mongo`]: the engine an operator already running `MongoDB` wants.
 //! - [`repositories`]: the engine wearing the service's own vocabulary.
@@ -25,6 +25,8 @@
 pub mod collections;
 pub mod directory;
 pub mod embedded;
+pub mod envelopes;
+pub mod friends;
 pub mod identity;
 pub mod mailbox;
 pub mod mongo;

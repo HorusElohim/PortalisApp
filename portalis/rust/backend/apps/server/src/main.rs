@@ -1,8 +1,9 @@
 use std::error::Error;
 
 use portalis_nexus_server::{
-    AppState, GRACEFUL_DRAIN_TIMEOUT, MongoStore, NexusStore, ServerConfig, app,
+    AppState, GRACEFUL_DRAIN_TIMEOUT, MongoStore, NexusStore, ServerConfig, Storage, app,
 };
+use portalis_nexus_storage::embedded::Embedded;
 use tokio::time::timeout;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
@@ -17,9 +18,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .init();
 
     let config = ServerConfig::from_environment()?;
-    let uri = config.require_mongodb_uri()?;
-    info!(database = %config.database, "connecting to MongoDB");
-    let store = NexusStore::mongo(MongoStore::connect(uri, &config.database).await?);
+    // One binary, and the engine is whichever was configured (D5). Logged
+    // because a service running on storage nobody expected is otherwise
+    // diagnosed by guesswork.
+    let store = match config.storage()? {
+        Storage::Embedded { data_dir } => {
+            info!(path = %data_dir.display(), "opening the embedded store");
+            NexusStore::embedded(Embedded::open(&data_dir)?)
+        }
+        Storage::Mongo { uri, database } => {
+            info!(database = %database, "connecting to MongoDB");
+            NexusStore::mongo(MongoStore::connect(&uri, &database).await?)
+        }
+    };
     let listener = tokio::net::TcpListener::bind(config.listen_addr).await?;
     // Clients sign against the name they dialled, so a deployment reached by
     // any other name refuses every signature. Logged for exactly that reason.

@@ -10,17 +10,35 @@ pub const DEFAULT_SERVER_AUTHORITY: &str = "127.0.0.1:8080";
 /// The database used when none is configured.
 pub const DEFAULT_DATABASE: &str = "portalis_nexus";
 
-/// The production server cannot run without durable identity storage.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MissingMongoUri;
+/// Which engine to run, chosen rather than assumed.
+///
+/// One binary, two engines (D5). A self-hoster sets a directory and gets a few
+/// files; an operator already running `MongoDB` sets a URI. Neither is the
+/// default, because a service that silently picks its own storage is a service
+/// somebody has to read the source of to understand.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Storage {
+    /// A directory of files. No server, no replica set.
+    Embedded { data_dir: std::path::PathBuf },
+    /// A `MongoDB` deployment, which needs a replica set for transactions.
+    Mongo { uri: String, database: String },
+}
 
-impl fmt::Display for MissingMongoUri {
+/// The production server cannot run without durable identity storage, and
+/// will not guess which kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MissingStorage;
+
+impl fmt::Display for MissingStorage {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("PORTALIS_NEXUS_MONGODB_URI must be set")
+        formatter.write_str(
+            "set PORTALIS_NEXUS_DATA_DIR for the embedded engine, \
+             or PORTALIS_NEXUS_MONGODB_URI for MongoDB",
+        )
     }
 }
 
-impl std::error::Error for MissingMongoUri {}
+impl std::error::Error for MissingStorage {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ServerConfig {
@@ -34,6 +52,8 @@ pub struct ServerConfig {
     /// this value; retaining the optional representation keeps configuration
     /// parsing independently testable.
     pub mongodb_uri: Option<String>,
+    /// Where the embedded engine keeps its files.
+    pub data_dir: Option<std::path::PathBuf>,
     pub database: String,
 }
 
@@ -51,6 +71,7 @@ impl ServerConfig {
             // for local development, and nowhere else.
             server_authority: listen_addr.to_string(),
             mongodb_uri: None,
+            data_dir: None,
             database: DEFAULT_DATABASE.to_owned(),
         })
     }
@@ -74,6 +95,7 @@ impl ServerConfig {
             server_authority: lookup("PORTALIS_NEXUS_SERVER_AUTHORITY")
                 .unwrap_or(defaults.server_authority),
             mongodb_uri: lookup("PORTALIS_NEXUS_MONGODB_URI"),
+            data_dir: lookup("PORTALIS_NEXUS_DATA_DIR").map(std::path::PathBuf::from),
             database: lookup("PORTALIS_NEXUS_DATABASE")
                 .unwrap_or_else(|| DEFAULT_DATABASE.to_owned()),
             listen_addr: defaults.listen_addr,
@@ -84,9 +106,24 @@ impl ServerConfig {
     ///
     /// # Errors
     ///
-    /// Returns [`MissingMongoUri`] when durable storage was not configured.
-    pub fn require_mongodb_uri(&self) -> Result<&str, MissingMongoUri> {
-        self.mongodb_uri.as_deref().ok_or(MissingMongoUri)
+    /// Returns [`MissingStorage`] when neither engine was configured.
+    ///
+    /// The embedded engine wins if both are set, because it is the one that
+    /// needs nothing else running — a machine with both configured is one
+    /// being moved, and the local files are the safer half to believe.
+    pub fn storage(&self) -> Result<Storage, MissingStorage> {
+        if let Some(data_dir) = &self.data_dir {
+            return Ok(Storage::Embedded {
+                data_dir: data_dir.clone(),
+            });
+        }
+        self.mongodb_uri
+            .as_deref()
+            .map(|uri| Storage::Mongo {
+                uri: uri.to_owned(),
+                database: self.database.clone(),
+            })
+            .ok_or(MissingStorage)
     }
 }
 
@@ -120,7 +157,13 @@ mod tests {
 
         assert_eq!(config.mongodb_uri, None);
         assert_eq!(config.database, DEFAULT_DATABASE);
-        assert_eq!(config.require_mongodb_uri(), Err(MissingMongoUri));
+        assert_eq!(config.storage(), Err(MissingStorage));
+        assert!(
+            MissingStorage
+                .to_string()
+                .contains("PORTALIS_NEXUS_DATA_DIR"),
+            "and says how to fix it"
+        );
     }
 
     #[test]
@@ -131,7 +174,13 @@ mod tests {
         assert_eq!(config.server_authority, DEFAULT_LISTEN_ADDR);
         assert_eq!(config.mongodb_uri, None);
         assert_eq!(config.database, DEFAULT_DATABASE);
-        assert_eq!(config.require_mongodb_uri(), Err(MissingMongoUri));
+        assert_eq!(config.storage(), Err(MissingStorage));
+        assert!(
+            MissingStorage
+                .to_string()
+                .contains("PORTALIS_NEXUS_DATA_DIR"),
+            "and says how to fix it"
+        );
     }
 
     #[test]
@@ -153,7 +202,31 @@ mod tests {
         assert_eq!(config.server_authority, "nexus.example");
         assert_eq!(config.mongodb_uri.as_deref(), Some("mongodb://example/"));
         assert_eq!(config.database, "custom_db");
-        assert_eq!(config.require_mongodb_uri(), Ok("mongodb://example/"));
+        assert_eq!(
+            config.storage(),
+            Ok(Storage::Mongo {
+                uri: "mongodb://example/".to_owned(),
+                database: "custom_db".to_owned()
+            })
+        );
+    }
+
+    /// Both engines configured means a machine being moved, and the local
+    /// files are the safer half to believe.
+    #[test]
+    fn the_embedded_engine_wins_when_both_are_configured() {
+        let config = ServerConfig {
+            mongodb_uri: Some("mongodb://example/".to_owned()),
+            data_dir: Some(std::path::PathBuf::from("/var/lib/portalis")),
+            ..ServerConfig::from_listen_value(None).expect("the default address is valid")
+        };
+
+        assert_eq!(
+            config.storage(),
+            Ok(Storage::Embedded {
+                data_dir: std::path::PathBuf::from("/var/lib/portalis")
+            })
+        );
     }
 
     /// Bound and dialled are the same only for local development. A container

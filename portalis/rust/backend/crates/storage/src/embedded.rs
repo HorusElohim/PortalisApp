@@ -33,6 +33,8 @@ use portalis_nexus_server_core::RepositoryError;
 use crate::StorageError;
 use crate::collections::Collections;
 use crate::directory::Directory;
+use crate::envelopes::Envelopes;
+use crate::friends::Friends;
 use crate::identity::Identity;
 use crate::mailbox::{Limits, Mailbox};
 
@@ -41,6 +43,8 @@ use crate::mailbox::{Limits, Mailbox};
 pub struct Embedded {
     identity: Identity,
     collections: Collections,
+    friends: Friends,
+    envelopes: Envelopes,
     mailbox: Mailbox,
     directory: Directory,
 }
@@ -70,6 +74,8 @@ impl Embedded {
         Ok(Self {
             identity: Identity::open(directory.join("identity.redb"))?,
             collections: Collections::open(directory.join("collections.redb"))?,
+            friends: Friends::open(directory.join("friends.redb"))?,
+            envelopes: Envelopes::open(directory.join("envelopes.redb"))?,
             mailbox: Mailbox::with_limits(directory.join("mailbox.redb"), limits)?,
             directory: Directory::open(directory.join("directory.redb"))?,
         })
@@ -85,6 +91,18 @@ impl Embedded {
     #[must_use]
     pub const fn collections(&self) -> &Collections {
         &self.collections
+    }
+
+    /// The friends endpoint.
+    #[must_use]
+    pub const fn friends(&self) -> &Friends {
+        &self.friends
+    }
+
+    /// The sealed-key endpoint.
+    #[must_use]
+    pub const fn envelopes(&self) -> &Envelopes {
+        &self.envelopes
     }
 
     /// The mailbox endpoint.
