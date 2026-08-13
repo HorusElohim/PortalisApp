@@ -33,8 +33,8 @@ async fn main() -> anyhow::Result<()> {
     let mira_device = derive_device_id(&mira.person.public_key());
 
     section("The service knows very little");
-    let service = Embedded::open(directory.join("service.redb"))?;
-    println!("  one file, no replica set, nothing to operate");
+    let service = Embedded::open(directory.join("service"))?;
+    println!("  four small files, no replica set, nothing to operate");
     println!(
         "  limits: {MAX_ITEMS} items and {} MiB per device",
         MAX_BYTES / 1024 / 1024
@@ -44,19 +44,19 @@ async fn main() -> anyhow::Result<()> {
     let (collection, descriptors) = a_collection_with(NAME, &ada.person, 2);
     let (collection, publication) = ada.publish_to(&collection, &[&ada, &mira], &descriptors, NOW);
     let bytes = encode(&publication);
-    let sequence = service.deliver(mira_device, &bytes)?;
+    let sequence = service.mailbox().deliver(mira_device, &bytes)?;
     println!(
         "  revision {} · {} bytes left as item {sequence}",
         collection.number(),
         bytes.len()
     );
-    let (count, held) = service.mailbox_size(mira_device)?;
+    let (count, held) = service.mailbox().size(mira_device)?;
     println!("  Mira's mailbox: {count} item, {held} bytes");
     println!("  All the service sees is a blob addressed to a device. Not the");
     println!("  collection, not the members, not a byte of what is in it.");
 
     section("Mira's phone comes back");
-    let waiting = service.drain(mira_device)?;
+    let waiting = service.mailbox().drain(mira_device)?;
     println!("  collected {} item(s), oldest first", waiting.len());
     let received = mira.follow(&decode(&waiting[0].body)?, &ada, NAME).await?;
     println!(
@@ -70,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
     assert_eq!(received.descriptors, descriptors);
 
     section("Collecting is what empties it");
-    let (count, _) = service.mailbox_size(mira_device)?;
+    let (count, _) = service.mailbox().size(mira_device)?;
     println!("  after draining: {count} item(s)");
     println!("  Reading and removing are one operation, so a client that dies");
     println!("  between them does not leave a mailbox that fills forever.");
@@ -79,16 +79,16 @@ async fn main() -> anyhow::Result<()> {
     section("A mailbox that is full says so");
     // Small limits, so the boundary is reachable without writing 64 MiB.
     let tight = Embedded::with_limits(
-        directory.join("tight.redb"),
+        directory.join("tight"),
         Limits {
             items: 2,
             bytes: 1_024,
         },
     )?;
     for index in 0..2 {
-        tight.deliver(mira_device, &[index; 16])?;
+        tight.mailbox().deliver(mira_device, &[index; 16])?;
     }
-    match tight.deliver(mira_device, b"one too many") {
+    match tight.mailbox().deliver(mira_device, b"one too many") {
         Err(error) => println!("  a third item → {error}"),
         Ok(_) => panic!("a full mailbox must refuse"),
     }

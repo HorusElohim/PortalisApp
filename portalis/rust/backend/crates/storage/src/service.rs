@@ -84,15 +84,15 @@ impl Service {
             Request::Publication { .. } => Err(ServiceError::NotOurs),
 
             Request::Collect => {
-                let items = self.store.drain(caller)?;
+                let items = self.store.mailbox().drain(caller)?;
                 Ok(Answer(pack(items.into_iter().map(|item| item.body))))
             }
             Request::Deliver { device, body } => {
-                self.store.deliver(*device, body)?;
+                self.store.mailbox().deliver(*device, body)?;
                 Ok(Answer(Vec::new()))
             }
             Request::DeviceLog { root_key } => {
-                let entries = self.store.fetch_log(root_key)?;
+                let entries = self.store.directory().fetch_log(root_key)?;
                 Ok(Answer(pack(entries.into_iter().map(|(_, entry)| entry))))
             }
         }
@@ -229,6 +229,7 @@ mod tests {
         let service = scratch.service();
         service
             .store()
+            .directory()
             .publish_log(&ADA, &[(1, b"root".to_vec()), (2, b"enrol".to_vec())])
             .expect("publishes");
 

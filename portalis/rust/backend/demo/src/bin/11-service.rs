@@ -33,11 +33,11 @@ async fn main() -> anyhow::Result<()> {
     let mira_device = derive_device_id(&mira.person.public_key());
 
     section("A service, and the little it knows");
-    let store = Embedded::open(directory.join("service.redb"))?;
+    let store = Embedded::open(directory.join("service"))?;
     let service = Service::new(store);
     let endpoint = bind(&operator).await?;
     let address = endpoint.addr_when_ready().await;
-    println!("  one file, no replica set, and a QUIC listener");
+    println!("  four small files, no replica set, and a QUIC listener");
     println!("  It answers the same requests a peer does, and can read none of");
     println!("  what it carries.");
 

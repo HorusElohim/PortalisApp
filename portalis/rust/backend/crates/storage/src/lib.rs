@@ -11,22 +11,26 @@
 //! chain is the source of truth, a store is a cache with durability, and the
 //! difference between engines is operational rather than semantic.
 //!
-//! - [`embedded`]: one file, no server, no replica set.
-//! - [`directory`]: device logs, stored and served.
+//! - [`store`]: the machinery every endpoint's file shares.
+//! - [`identity`], [`collections`], [`mailbox`], [`directory`]: one endpoint
+//!   each, one file each, autonomous.
+//! - [`embedded`]: the four of them together, as one engine.
 //! - [`mongo`]: the engine an operator already running `MongoDB` wants.
 //! - [`repositories`]: the engine wearing the service's own vocabulary.
 //! - [`service`]: answering a peer that happens to be a service.
-//! - [`mailbox`]: what a device missed while it was asleep.
 //!
 //! Both answer to one conformance suite, which is the only way "either engine"
 //! means anything: two implementations nobody compares are two behaviours.
 
+pub mod collections;
 pub mod directory;
 pub mod embedded;
+pub mod identity;
 pub mod mailbox;
 pub mod mongo;
 mod repositories;
 pub mod service;
+pub mod store;
 
 use thiserror::Error;
 
@@ -75,6 +79,12 @@ macro_rules! unavailable_from {
         })+
     };
 }
+impl StorageError {
+    pub(crate) fn unavailable(error: impl std::fmt::Display) -> Self {
+        Self::Unavailable(error.to_string())
+    }
+}
+
 unavailable_from!(
     redb::DatabaseError,
     redb::TransactionError,

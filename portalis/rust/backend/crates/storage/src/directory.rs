@@ -18,15 +18,35 @@
 use redb::{ReadableTable, TableDefinition};
 
 use crate::StorageError;
-use crate::embedded::{Embedded, keyed, prefix_range};
+use crate::store::{Store, keyed, number_of, prefix_range};
 
 /// Verified log entries, by owner. Key: root key ‖ sequence, big-endian.
-pub(crate) const DEVICE_LOGS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("device_logs");
+const ENTRIES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("entries");
 
 /// How many entries one person's log may hold (§ limits).
 pub const MAX_ENTRIES: usize = 512;
 
-impl Embedded {
+/// The directory endpoint.
+#[derive(Debug)]
+pub struct Directory {
+    store: Store,
+}
+
+impl Directory {
+    /// Opens this endpoint's file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError`] when the file cannot be opened or prepared.
+    pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, StorageError> {
+        let store = Store::open(path)?;
+        store.declare(|write| {
+            write.open_table(ENTRIES)?;
+            Ok(())
+        })?;
+        Ok(Self { store })
+    }
+
     /// Appends entries to a person's log.
     ///
     /// Takes encoded entries rather than parsed ones: the service does not
@@ -43,8 +63,8 @@ impl Embedded {
         root_key: &[u8],
         entries: &[(u64, Vec<u8>)],
     ) -> Result<usize, StorageError> {
-        self.transact(|write| {
-            let mut logs = write.open_table(DEVICE_LOGS)?;
+        self.store.transact(|write| {
+            let mut logs = write.open_table(ENTRIES)?;
             let (low, high) = prefix_range(root_key);
             let held = logs.range(low.as_slice()..=high.as_slice())?.count();
             if held + entries.len() > MAX_ENTRIES {
@@ -77,20 +97,17 @@ impl Embedded {
     ///
     /// Returns [`StorageError`] when the read fails.
     pub fn fetch_log(&self, root_key: &[u8]) -> Result<Vec<(u64, Vec<u8>)>, StorageError> {
-        let read = self.begin_read()?;
-        let logs = read.open_table(DEVICE_LOGS)?;
+        let read = self.store.read()?;
+        let logs = read.open_table(ENTRIES)?;
         let (low, high) = prefix_range(root_key);
 
         let mut entries = Vec::new();
         for row in logs.range(low.as_slice()..=high.as_slice())? {
             let (key, value) = row?;
-            let sequence = key
-                .value()
-                .get(root_key.len()..)
-                .and_then(|tail| <[u8; 8]>::try_from(tail).ok())
-                .map(u64::from_be_bytes)
-                .ok_or(StorageError::Malformed)?;
-            entries.push((sequence, value.value().to_vec()));
+            entries.push((
+                number_of(key.value(), root_key.len())?,
+                value.value().to_vec(),
+            ));
         }
         Ok(entries)
     }
@@ -114,8 +131,8 @@ mod tests {
             Self(path)
         }
 
-        fn open(&self) -> Embedded {
-            Embedded::open(self.0.join("service.redb")).expect("opens")
+        fn open(&self) -> Directory {
+            Directory::open(self.0.join("directory.redb")).expect("opens")
         }
     }
 
