@@ -1,7 +1,7 @@
 //! Answering a peer that happens to be a service.
 //!
 //! A service is a peer that also stores. It speaks the same session vocabulary
-//! (`client::session::Request`), and a client fetching a device log does not
+//! ([`portalis_nexus_protocol::Request`]), and a client fetching a device log does not
 //! care whether the bytes came from the person who signed it or from something
 //! holding a copy. That is only safe because an object is valid on its own
 //! terms (§9) — and it is what keeps the peer path from being second class.
@@ -73,9 +73,9 @@ impl Service {
     pub fn answer(
         &self,
         caller: [u8; 32],
-        request: &portalis_nexus_client::Request,
+        request: &portalis_nexus_protocol::Request,
     ) -> Result<Answer, ServiceError> {
-        use portalis_nexus_client::Request;
+        use portalis_nexus_protocol::Request;
 
         match request {
             // A publication lives with whoever published it. The service
@@ -133,7 +133,7 @@ pub fn unpack(bytes: &[u8]) -> Result<Vec<Vec<u8>>, StorageError> {
 
 #[cfg(test)]
 mod tests {
-    use portalis_nexus_client::Request;
+    use portalis_nexus_protocol::Request;
 
     use super::*;
 

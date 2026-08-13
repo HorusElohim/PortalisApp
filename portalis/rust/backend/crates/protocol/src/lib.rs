@@ -1,8 +1,8 @@
 //! The authoritative Portalis Nexus protocol contract.
 //!
-//! This crate owns the generated protobuf types, the wire limits from
-//! `SPEC.md`, and the validation every peer applies before dispatch. It has no
-//! sockets, database drivers, or platform adapters.
+//! This crate owns the generated protobuf types, the peer request vocabulary,
+//! the wire limits from `SPEC.md`, and the validation every peer applies before
+//! dispatch. It has no sockets, database drivers, or platform adapters.
 
 #[allow(clippy::doc_markdown, clippy::must_use_candidate)]
 pub mod v1 {
@@ -16,6 +16,7 @@ mod ids;
 mod limits;
 mod payload;
 mod sealing;
+mod session;
 mod signing;
 mod validate;
 
@@ -58,6 +59,7 @@ pub use sealing::{
     EnvelopeContext, SealError, SealedEnvelope, is_contributory_x25519_public_key,
     open as open_envelope, seal as seal_envelope,
 };
+pub use session::{MAX_OBJECT_BYTES, Request, SessionError};
 pub use signing::{
     AUTHENTICATION_CONTEXT, LINK_DEVICE_CONTEXT, REGISTRATION_CONTEXT, SessionBinding,
     SignatureError, authentication_payload, link_device_payload, registration_payload,

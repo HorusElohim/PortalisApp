@@ -21,19 +21,12 @@
 
 use std::collections::HashSet;
 
-use portalis_nexus_protocol::{DEVICE_ID_BYTES, DEVICE_KEY_BYTES, MAX_FRAME_BYTES};
-use thiserror::Error;
+use portalis_nexus_protocol::DEVICE_KEY_BYTES;
+pub use portalis_nexus_protocol::{MAX_OBJECT_BYTES, Request, SessionError};
 
 use crate::endpoint::{ConnectionPath, NEXUS_ALPN, NexusEndpoint};
 use iroh::PublicKey;
 use iroh::endpoint::Connection;
-
-/// The most a peer may ask for or send in one exchange.
-///
-/// A publication is a manifest and its entry payloads, so it is bounded by the
-/// same limit as a frame. A peer that claims more is refused before anything
-/// is allocated for it.
-pub const MAX_OBJECT_BYTES: usize = MAX_FRAME_BYTES;
 
 /// Whether the bytes are travelling directly or through a relay.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -122,114 +115,9 @@ impl KnownPeers {
     }
 }
 
-/// Why an exchange did not happen.
-#[derive(Debug, Error)]
-pub enum SessionError {
-    /// The remote key belongs to nobody this device knows. Refused before any
-    /// object is asked for or sent, so an unknown peer learns nothing beyond
-    /// the fact that something is listening.
-    #[error("that peer is not a contact of this device")]
-    UnknownPeer,
-    #[error("the peer asked for or sent {actual} bytes, over the {MAX_OBJECT_BYTES}-byte limit")]
-    TooLarge { actual: usize },
-    #[error("the peer closed the connection before finishing")]
-    Incomplete,
-    #[error("the peer sent a request this device does not understand")]
-    Unintelligible,
-    #[error("the connection failed: {0}")]
-    Connection(String),
-}
-
-impl SessionError {
-    /// Turns any transport failure into one this crate's callers understand.
-    ///
-    /// A named function rather than a closure at each call site, so
-    /// `map_err(SessionError::connection)` reads as what it is and there is
-    /// one conversion to test rather than one per operation.
-    fn connection(error: impl std::fmt::Display) -> Self {
-        Self::Connection(error.to_string())
-    }
-}
-
-/// What one party asks another for.
-///
-/// One vocabulary for peers and for the service, deliberately. A service is a
-/// peer that also stores: it answers the same requests, and a client that
-/// fetches a device log does not care whether the bytes came from the person
-/// who signed it or from something holding a copy. That is only safe because
-/// an object is valid on its own terms (§9) — if where it came from mattered,
-/// this enum would have to be two.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Request {
-    /// The current publication of a collection, whatever revision that is.
-    Publication { collection_id: [u8; 16] },
-    /// Everything waiting for this device. Answered only by a service.
-    Collect,
-    /// Leave something for a device that is not reachable.
-    Deliver {
-        device: [u8; DEVICE_ID_BYTES],
-        body: Vec<u8>,
-    },
-    /// Somebody's device log, so it can be verified against what is held.
-    DeviceLog { root_key: [u8; DEVICE_KEY_BYTES] },
-}
-
-impl Request {
-    const PUBLICATION: u8 = 1;
-    const COLLECT: u8 = 2;
-    const DELIVER: u8 = 3;
-    const DEVICE_LOG: u8 = 4;
-
-    #[must_use]
-    pub fn encode(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        match self {
-            Self::Publication { collection_id } => {
-                bytes.push(Self::PUBLICATION);
-                bytes.extend_from_slice(collection_id);
-            }
-            Self::Collect => bytes.push(Self::COLLECT),
-            Self::Deliver { device, body } => {
-                bytes.push(Self::DELIVER);
-                bytes.extend_from_slice(device);
-                bytes.extend_from_slice(body);
-            }
-            Self::DeviceLog { root_key } => {
-                bytes.push(Self::DEVICE_LOG);
-                bytes.extend_from_slice(root_key);
-            }
-        }
-        bytes
-    }
-
-    /// # Errors
-    ///
-    /// Returns [`SessionError::Unintelligible`] for anything this device does
-    /// not recognise, including a request kind from a newer version.
-    pub fn decode(bytes: &[u8]) -> Result<Self, SessionError> {
-        let (&kind, rest) = bytes.split_first().ok_or(SessionError::Unintelligible)?;
-        match (kind, rest.len()) {
-            (Self::PUBLICATION, 16) => Ok(Self::Publication {
-                collection_id: fixed(rest)?,
-            }),
-            (Self::COLLECT, 0) => Ok(Self::Collect),
-            (Self::DELIVER, length) if length > DEVICE_ID_BYTES => {
-                let (device, body) = rest.split_at(DEVICE_ID_BYTES);
-                Ok(Self::Deliver {
-                    device: fixed(device)?,
-                    body: body.to_vec(),
-                })
-            }
-            (Self::DEVICE_LOG, DEVICE_KEY_BYTES) => Ok(Self::DeviceLog {
-                root_key: fixed(rest)?,
-            }),
-            _ => Err(SessionError::Unintelligible),
-        }
-    }
-}
-
-fn fixed<const N: usize>(bytes: &[u8]) -> Result<[u8; N], SessionError> {
-    <[u8; N]>::try_from(bytes).map_err(|_| SessionError::Unintelligible)
+/// Turns any transport failure into one this crate's callers understand.
+fn connection_error(error: impl std::fmt::Display) -> SessionError {
+    SessionError::Connection(error.to_string())
 }
 
 /// One connection to one peer.
@@ -260,7 +148,7 @@ impl Session {
         let connection = endpoint
             .connect(peer, NEXUS_ALPN)
             .await
-            .map_err(SessionError::connection)?;
+            .map_err(connection_error)?;
         Self::establish(endpoint, connection, known)
     }
 
@@ -284,9 +172,7 @@ impl Session {
         connection: Connection,
         known: &KnownPeers,
     ) -> Result<Self, SessionError> {
-        let remote_id = connection
-            .remote_node_id()
-            .map_err(SessionError::connection)?;
+        let remote_id = connection.remote_node_id().map_err(connection_error)?;
         let remote = *PublicKey::as_bytes(&remote_id);
 
         let peer = known.trust(&remote);
@@ -330,21 +216,17 @@ impl Session {
     /// Returns [`SessionError`] when the stream fails or the peer answers with
     /// more than the limit allows.
     pub async fn request(&self, request: Request) -> Result<Vec<u8>, SessionError> {
-        let (mut send, mut receive) = self
-            .connection
-            .open_bi()
-            .await
-            .map_err(SessionError::connection)?;
+        let (mut send, mut receive) = self.connection.open_bi().await.map_err(connection_error)?;
 
         send.write_all(&request.encode())
             .await
-            .map_err(SessionError::connection)?;
-        send.finish().map_err(SessionError::connection)?;
+            .map_err(connection_error)?;
+        send.finish().map_err(connection_error)?;
 
         receive
             .read_to_end(MAX_OBJECT_BYTES)
             .await
-            .map_err(SessionError::connection)
+            .map_err(connection_error)
     }
 
     /// Reads one request from the peer and hands back the stream to answer on.
@@ -362,7 +244,7 @@ impl Session {
             .connection
             .accept_bi()
             .await
-            .map_err(SessionError::connection)?;
+            .map_err(connection_error)?;
 
         let asked = receive
             .read_to_end(MAX_OBJECT_BYTES)
@@ -399,8 +281,8 @@ impl Responder {
         self.send
             .write_all(object)
             .await
-            .map_err(SessionError::connection)?;
-        self.send.finish().map_err(SessionError::connection)
+            .map_err(connection_error)?;
+        self.send.finish().map_err(connection_error)
     }
 }
 
@@ -415,66 +297,6 @@ mod tests {
     const ADA: [u8; DEVICE_KEY_BYTES] = [1; DEVICE_KEY_BYTES];
     const MIRA: [u8; DEVICE_KEY_BYTES] = [2; DEVICE_KEY_BYTES];
     const STRANGER: [u8; DEVICE_KEY_BYTES] = [9; DEVICE_KEY_BYTES];
-
-    #[test]
-    fn every_request_round_trips_and_anything_else_is_refused() {
-        let requests = [
-            Request::Publication {
-                collection_id: [7; 16],
-            },
-            Request::Collect,
-            Request::Deliver {
-                device: [8; DEVICE_ID_BYTES],
-                body: b"a publication".to_vec(),
-            },
-            Request::DeviceLog {
-                root_key: [9; DEVICE_KEY_BYTES],
-            },
-        ];
-
-        for request in &requests {
-            let encoded = request.encode();
-            assert_eq!(&Request::decode(&encoded).expect("decodes"), request);
-
-            // A fixed-width request refuses a byte more or a byte less.
-            // `Deliver` is exempt from both: its body is the part that varies,
-            // so a longer or shorter one is simply a different valid request.
-            if !matches!(request, Request::Deliver { .. }) {
-                let mut padded = encoded.clone();
-                padded.push(0);
-                assert!(
-                    matches!(Request::decode(&padded), Err(SessionError::Unintelligible)),
-                    "{request:?} accepted a trailing byte"
-                );
-                assert!(
-                    matches!(
-                        Request::decode(&encoded[..encoded.len() - 1]),
-                        Err(SessionError::Unintelligible)
-                    ),
-                    "{request:?} accepted a truncation"
-                );
-            }
-        }
-
-        // A kind from a future version, and nothing at all.
-        for refused in [vec![9_u8, 0], Vec::new()] {
-            assert!(matches!(
-                Request::decode(&refused),
-                Err(SessionError::Unintelligible)
-            ));
-        }
-        // A delivery with an address and no body is not a delivery.
-        assert!(matches!(
-            Request::decode(
-                &Request::Deliver {
-                    device: [8; DEVICE_ID_BYTES],
-                    body: Vec::new(),
-                }
-                .encode()
-            ),
-            Err(SessionError::Unintelligible)
-        ));
-    }
 
     /// A service authenticates a key and has no opinion about whose it is.
     #[test]
@@ -707,12 +529,23 @@ mod tests {
             Err(SessionError::Connection(_))
         ));
 
-        // The stranger does not know the server either, so its own side
-        // refuses before a packet of application data is sent.
+        // A stranger that knows the server still does not become a session:
+        // the refusal is the server's to make, and it makes it before any
+        // request can be read. Knowing who you are dialling is not the same as
+        // being known.
+        let stranger_knows_the_server = KnownPeers::new().verified(server_key);
+        let _ = Session::connect(&stranger, address.clone(), &stranger_knows_the_server).await;
+        refused_rx
+            .recv()
+            .await
+            .expect("the server refused a stranger");
+
+        // And a stranger that does not know the server refuses on its own
+        // side, before a packet of application data is sent.
         assert!(matches!(
             Session::connect(&stranger, address, &KnownPeers::new()).await,
             Err(SessionError::UnknownPeer | SessionError::Connection(_))
         ));
-        listening.abort();
+        listening.await.expect("the listener");
     }
 }
