@@ -8,14 +8,14 @@
 use portalis_nexus_protocol::v1::ServerHello;
 use portalis_nexus_protocol::{CURRENT_PROTOCOL_VERSION, SessionBinding};
 use portalis_nexus_server_core::{ChallengeError, Identity, IssuedChallenge};
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::IpAddr;
 
 /// One connection's view of who it is.
 #[derive(Debug)]
 pub struct Session {
     challenge: IssuedChallenge,
     identity: Option<Identity>,
-    observed_ip: IpAddr,
+    observed_ip: Option<IpAddr>,
 }
 
 impl Session {
@@ -45,20 +45,20 @@ impl Session {
         Self {
             challenge: IssuedChallenge::new(connection_id, challenge, hello.server_time_unix_ns),
             identity: None,
-            observed_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            observed_ip: None,
         }
     }
 
-    /// Attaches the address observed by the TCP socket. Discovery never takes
-    /// a public address from a client message.
+    /// Attaches the address observed by the authenticated transport.
+    /// Discovery never takes a public address from a client message.
     #[must_use]
     pub fn with_observed_ip(mut self, observed_ip: IpAddr) -> Self {
-        self.observed_ip = observed_ip;
+        self.observed_ip = Some(observed_ip);
         self
     }
 
     #[must_use]
-    pub const fn observed_ip(&self) -> IpAddr {
+    pub const fn observed_ip(&self) -> Option<IpAddr> {
         self.observed_ip
     }
 

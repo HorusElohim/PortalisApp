@@ -184,11 +184,16 @@ async fn unknown_handles_and_peers_are_refused() {
 
 #[tokio::test]
 async fn an_answer_of_the_wrong_shape_is_rejected() {
-    use common::{misanswering_router, serve};
+    use common::{misanswering_peer, peer_endpoint, start_peer};
 
     let address = reserve_address().await;
-    let server = serve(address, misanswering_router()).await;
-    let client = NexusClient::connect(&endpoint(address))
+    let server = start_peer(
+        address,
+        vec![portalis_nexus_client::NEXUS_ALPN.to_vec()],
+        misanswering_peer,
+    )
+    .await;
+    let client = NexusClient::connect(peer_endpoint(address))
         .await
         .expect("connect");
 

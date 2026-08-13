@@ -12,7 +12,7 @@ use crate::protocol::validate_hello;
 use crate::reconnect::ReconnectPolicy;
 use crate::transport::Socket;
 use crate::transport::error::TransportError;
-use crate::{EndpointAddr, NexusEndpoint, NEXUS_ALPN};
+use crate::{EndpointAddr, NEXUS_ALPN, NexusEndpoint};
 
 /// Connects once and validates the server's hello, within `limit`.
 ///
@@ -37,12 +37,19 @@ async fn connect_and_greet(
     let (send, mut receive) = connection.accept_bi().await?;
     let hello = validate_hello(receive_envelope(&mut receive).await?)?;
 
-    Ok((Socket { send, receive }, hello))
+    Ok((
+        Socket {
+            endpoint: local.clone(),
+            connection,
+            send,
+            receive,
+        },
+        hello,
+    ))
 }
 
 /// Connects under a bounded exponential retry policy.
 pub(crate) async fn handshake_with_retry(
-    local: &NexusEndpoint,
     endpoint: EndpointAddr,
     policy: &ReconnectPolicy,
     limit: Duration,
@@ -50,7 +57,8 @@ pub(crate) async fn handshake_with_retry(
     let mut attempts = 0;
     loop {
         attempts += 1;
-        match handshake(local, endpoint.clone(), limit).await {
+        let local = crate::transport::bind_endpoint().await?;
+        match handshake(&local, endpoint.clone(), limit).await {
             Ok(connection) => {
                 debug!(attempts, "Nexus handshake succeeded");
                 return Ok(connection);

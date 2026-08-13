@@ -39,6 +39,8 @@ use portalis_nexus_protocol::MAX_OUTBOUND_QUEUE;
 
 /// The one bidirectional QUIC stream the service opens for this connection.
 pub(crate) struct Socket {
+    pub(crate) endpoint: NexusEndpoint,
+    pub(crate) connection: iroh::endpoint::Connection,
     pub(crate) send: iroh::endpoint::SendStream,
     pub(crate) receive: iroh::endpoint::RecvStream,
 }
@@ -50,7 +52,6 @@ pub(crate) struct Socket {
 /// socket ends, so commands issued through the handle survive a server restart.
 pub struct NexusClient {
     shared: Arc<Shared>,
-    endpoint: NexusEndpoint,
     events: Mutex<Option<mpsc::Receiver<Envelope>>>,
     supervisor: Option<JoinHandle<()>>,
 }
@@ -65,12 +66,14 @@ impl NexusClient {
     ///
     /// Returns [`TransportError`] when QUIC, ALPN, or the protobuf hello is
     /// invalid.
-    pub async fn connect(endpoint: impl std::borrow::Borrow<EndpointAddr>) -> Result<Self, TransportError> {
+    pub async fn connect(
+        endpoint: impl std::borrow::Borrow<EndpointAddr>,
+    ) -> Result<Self, TransportError> {
         let endpoint = endpoint.borrow().clone();
         let config = ClientConfig::default();
         let local = bind_endpoint().await?;
         let connection = handshake(&local, endpoint.clone(), config.request_timeout).await?;
-        Ok(Self::supervised(endpoint, local, connection, config))
+        Ok(Self::supervised(endpoint, connection, config))
     }
 
     /// Connects under the configured retry policy, then supervises the socket.
@@ -84,22 +87,16 @@ impl NexusClient {
         config: &ClientConfig,
     ) -> Result<Self, TransportError> {
         let endpoint = endpoint.borrow().clone();
-        let local = bind_endpoint().await?;
-        let connection = handshake_with_retry(
-            &local,
-            endpoint.clone(),
-            &config.reconnect,
-            config.request_timeout,
-        )
-        .await?;
-        Ok(Self::supervised(endpoint, local, connection, config.clone()))
+        let connection =
+            handshake_with_retry(endpoint.clone(), &config.reconnect, config.request_timeout)
+                .await?;
+        Ok(Self::supervised(endpoint, connection, config.clone()))
     }
 
     /// Publishes the first connection before returning, so a caller can send a
     /// command immediately without racing the supervisor's first iteration.
     fn supervised(
         endpoint: EndpointAddr,
-        local: NexusEndpoint,
         connection: (Socket, ServerHello),
         config: ClientConfig,
     ) -> Self {
@@ -116,7 +113,6 @@ impl NexusClient {
         let supervisor = tokio::spawn(supervise(
             Arc::clone(&shared),
             endpoint,
-            local.clone(),
             config.reconnect,
             first,
             shutdown,
@@ -124,7 +120,6 @@ impl NexusClient {
 
         Self {
             shared,
-            endpoint: local,
             events: Mutex::new(Some(inbox)),
             supervisor: Some(supervisor),
         }
@@ -175,9 +170,12 @@ impl NexusClient {
 
         // Scoped so no queue sender is held across the await below, which would
         // stop the writer task from observing a closed queue.
-        let queued = {
-            let outbound = self.shared.outbound().ok_or(TransportError::Disconnected)?;
-            outbound.try_send(frame)
+        let queued = match self.shared.outbound() {
+            Some(outbound) => outbound.try_send(frame),
+            None => {
+                self.shared.pending.cancel(&request.message_id);
+                return Err(TransportError::Disconnected);
+            }
         };
         if let Err(error) = queued {
             self.shared.pending.cancel(&request.message_id);
@@ -535,7 +533,6 @@ impl NexusClient {
         if let Some(supervisor) = self.supervisor.take() {
             let _ = supervisor.await;
         }
-        self.endpoint.close().await;
         debug!(authority = self.authority(), "Nexus client stopped");
     }
 }
@@ -583,7 +580,7 @@ fn binding<'a>(hello: &'a ServerHello, server_authority: &'a str) -> SessionBind
     }
 }
 
-/// The `host:port` a WebSocket endpoint addresses.
+/// The first direct address advertised by a Nexus endpoint.
 ///
 /// Signatures are bound to it, so what the client signs is the server it meant
 /// to reach rather than whatever a relay claims to be.
@@ -595,7 +592,7 @@ pub fn authority_of(endpoint: &EndpointAddr) -> String {
         .map_or_else(String::new, ToString::to_string)
 }
 
-async fn bind_endpoint() -> Result<NexusEndpoint, TransportError> {
+pub(super) async fn bind_endpoint() -> Result<NexusEndpoint, TransportError> {
     let mut secret = [0_u8; 32];
     secret[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
     secret[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());

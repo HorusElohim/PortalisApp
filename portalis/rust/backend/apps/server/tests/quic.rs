@@ -80,7 +80,9 @@ async fn connected() -> (Client, tokio::task::JoinHandle<()>, AppState) {
             let Ok(connection) = incoming.await else {
                 continue;
             };
-            portalis_nexus_server::quic::serve(connection, serving_state.clone()).await;
+            let observed_ip = portalis_nexus_server::quic::direct_peer_ip(&service, &connection);
+            portalis_nexus_server::quic::serve(connection, serving_state.clone(), observed_ip)
+                .await;
         }
     });
 
@@ -230,7 +232,8 @@ async fn a_draining_server_lets_its_connections_go() {
             let Ok(connection) = incoming.await else {
                 continue;
             };
-            portalis_nexus_server::quic::serve(connection, state.clone()).await;
+            let observed_ip = portalis_nexus_server::quic::direct_peer_ip(&service, &connection);
+            portalis_nexus_server::quic::serve(connection, state.clone(), observed_ip).await;
         }
     });
 
@@ -289,10 +292,11 @@ async fn a_peer_gone_before_the_stream_opens_is_let_go() {
     let serving = tokio::spawn(async move {
         let incoming = service.accept().await.expect("an incoming connection");
         let connection = incoming.await.expect("the handshake completes");
+        let observed_ip = portalis_nexus_server::quic::direct_peer_ip(&service, &connection);
         // Serving begins only once the peer has definitely gone, so the
         // failure under test is the one being tested and not a race with it.
         connection.closed().await;
-        portalis_nexus_server::quic::serve(connection, state).await;
+        portalis_nexus_server::quic::serve(connection, state, observed_ip).await;
     });
 
     let endpoint = iroh::Endpoint::builder()

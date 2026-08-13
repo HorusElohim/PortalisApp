@@ -15,9 +15,10 @@
 //! most [`MAX_OUTBOUND_QUEUE`] entries and loses its connection rather than
 //! growing the server's memory.
 
+use std::net::IpAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use iroh::endpoint::{Connection, RecvStream, SendStream};
+use iroh::endpoint::{Connection, ConnectionType, RecvStream, SendStream};
 use portalis_nexus_protocol::{
     LENGTH_PREFIX_BYTES, MAX_OUTBOUND_QUEUE, decode_frame, format_id, frame_length, length_prefix,
     payload_name,
@@ -33,8 +34,9 @@ use crate::state::AppState;
 /// Runs one QUIC connection until the peer leaves or the server drains.
 ///
 /// The caller has already accepted the connection, which is where a peer's
-/// identity is established — this only carries what it says afterwards.
-pub async fn serve(connection: Connection, state: AppState) {
+/// identity and observed source address are established — this only carries
+/// what it says afterwards.
+pub async fn serve(connection: Connection, state: AppState, observed_ip: Option<IpAddr>) {
     let issued_at = now_unix_ns();
     let hello = hello_payload(state.protocol_policy(), issued_at);
     let span = info_span!(
@@ -54,7 +56,13 @@ pub async fn serve(connection: Connection, state: AppState) {
         let (outbound, inbox) = mpsc::channel(MAX_OUTBOUND_QUEUE);
         let writer = tokio::spawn(write_outbound(send, inbox));
 
-        let mut session = Session::new(&hello);
+        // Swarm leases publish only the address this authenticated transport
+        // observed; never an address claimed by a client envelope.
+        let session = Session::new(&hello);
+        let mut session = match observed_ip {
+            Some(address) => session.with_observed_ip(address),
+            None => session,
+        };
         // Registered before the greeting, so an event caused by this
         // connection's own first command can already reach it.
         state
@@ -77,6 +85,19 @@ pub async fn serve(connection: Connection, state: AppState) {
     }
     .instrument(span)
     .await;
+}
+
+/// Returns the peer's direct UDP source address after Iroh has authenticated it.
+///
+/// The raw QUIC connection address is an Iroh overlay address, not an address
+/// that swarm peers can dial. A relay path has no directly publishable source.
+#[must_use]
+pub fn direct_peer_ip(endpoint: &iroh::Endpoint, connection: &Connection) -> Option<IpAddr> {
+    let node_id = connection.remote_node_id().ok()?;
+    match endpoint.remote_info(node_id)?.conn_type {
+        ConnectionType::Direct(address) => Some(address.ip()),
+        ConnectionType::Mixed(_, _) | ConnectionType::Relay(_) | ConnectionType::None => None,
+    }
 }
 
 /// Reads until the peer leaves, the queue fills, or the server starts draining.

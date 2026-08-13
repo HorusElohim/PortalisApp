@@ -1,19 +1,14 @@
 //! The reader, writer, and supervisor tasks behind one client handle.
 
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
-
 use portalis_nexus_protocol::v1::{Envelope, ServerHello};
 use portalis_nexus_protocol::{
     LENGTH_PREFIX_BYTES, MAX_OUTBOUND_QUEUE, decode_frame, format_id, frame_length, length_prefix,
 };
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
-use tokio::time::timeout;
 use tracing::{debug, warn};
-
-/// How long a closing socket may take before it is dropped outright.
-const CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
 
 use crate::pending::PendingRequests;
 use crate::protocol::ClientProtocol;
@@ -81,6 +76,8 @@ impl Shared {
 
 /// The reader, writer, and queue belonging to one live socket.
 pub(crate) struct Tasks {
+    endpoint: crate::NexusEndpoint,
+    connection: iroh::endpoint::Connection,
     reader: JoinHandle<()>,
     writer: JoinHandle<()>,
     outbound: mpsc::Sender<Vec<u8>>,
@@ -103,6 +100,8 @@ pub(crate) fn start_connection(
     });
 
     Tasks {
+        endpoint: socket.endpoint,
+        connection: socket.connection,
         writer: tokio::spawn(write_socket(socket.send, inbox)),
         reader: tokio::spawn(read_socket(Arc::clone(shared), socket.receive)),
         outbound,
@@ -117,7 +116,6 @@ pub(crate) fn start_connection(
 pub(crate) async fn supervise(
     shared: Arc<Shared>,
     endpoint: crate::EndpointAddr,
-    local: crate::NexusEndpoint,
     policy: ReconnectPolicy,
     first: Tasks,
     mut shutdown: watch::Receiver<bool>,
@@ -129,7 +127,7 @@ pub(crate) async fn supervise(
         } else {
             let attempt = tokio::select! {
                 _ = shutdown.changed() => return,
-                attempt = handshake_with_retry(&local, endpoint.clone(), &policy, shared.request_timeout) => attempt,
+                attempt = handshake_with_retry(endpoint.clone(), &policy, shared.request_timeout) => attempt,
             };
             match attempt {
                 Ok(connection) => start_connection(&shared, connection),
@@ -150,6 +148,8 @@ pub(crate) async fn supervise(
 /// Runs one connection until its reader ends or the handle shuts down.
 async fn run_connection(shared: &Arc<Shared>, tasks: Tasks, shutdown: &mut watch::Receiver<bool>) {
     let Tasks {
+        endpoint,
+        connection,
         mut reader,
         writer,
         outbound,
@@ -166,18 +166,17 @@ async fn run_connection(shared: &Arc<Shared>, tasks: Tasks, shutdown: &mut watch
     // reader remains alive long enough to observe the service finishing too.
     drop(outbound);
     shared.clear_live();
-    let closed = timeout(CLOSE_TIMEOUT, async {
-        let _ = writer.await;
-        if !reader_finished {
-            let _ = (&mut reader).await;
-        }
-    })
-    .await;
-    if closed.is_err() {
-        // A peer that never answers must not hold up shutdown.
-        debug!("Nexus connection did not close cleanly");
+    // One Nexus session owns one stream. A closed stream is not reusable for a
+    // later handshake, so close the QUIC connection before retrying rather
+    // than letting Iroh return a stale connection for the same peer ID.
+    connection.close(0_u32.into(), b"Nexus stream ended");
+    writer.abort();
+    if !reader_finished {
         reader.abort();
+        let _ = reader.await;
     }
+    let _ = writer.await;
+    drop(endpoint);
     shared.pending.cancel_all();
 }
 

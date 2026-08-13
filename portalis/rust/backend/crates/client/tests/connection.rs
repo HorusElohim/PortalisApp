@@ -13,7 +13,7 @@ use tokio::time::timeout;
 mod common;
 
 use common::{
-    PATIENCE, bare_router, endpoint, future_router, reserve_address, serve, silent_router,
+    PATIENCE, endpoint, future_peer, peer_endpoint, reserve_address, silent_peer, start_peer,
     start_server, wait_until,
 };
 
@@ -111,14 +111,14 @@ async fn relays_a_correlated_protocol_error_to_its_caller() {
 #[tokio::test]
 async fn rejects_a_server_that_does_not_speak_the_nexus_alpn() {
     let address = reserve_address().await;
-    let server = serve(address, bare_router()).await;
+    let server = start_peer(address, vec![b"not-nexus".to_vec()], |_| async {}).await;
 
-    let error = NexusClient::connect(&endpoint(address))
+    let error = NexusClient::connect(peer_endpoint(address))
         .await
         .expect_err("the ALPN is mandatory");
 
     assert!(
-        matches!(error, TransportError::HandshakeTimeout(_)),
+        matches!(error, TransportError::IrohConnect(_)),
         "expected the handshake to reject the ALPN, got {error:?}"
     );
     server.abort();
@@ -127,15 +127,23 @@ async fn rejects_a_server_that_does_not_speak_the_nexus_alpn() {
 #[tokio::test]
 async fn rejects_a_server_speaking_an_unsupported_protocol_version() {
     let address = reserve_address().await;
-    let server = serve(address, future_router()).await;
+    let server = start_peer(
+        address,
+        vec![portalis_nexus_client::NEXUS_ALPN.to_vec()],
+        future_peer,
+    )
+    .await;
 
-    let error = NexusClient::connect(&endpoint(address))
+    let error = NexusClient::connect(peer_endpoint(address))
         .await
         .expect_err("the protocol range excludes this client");
 
     assert!(
-        matches!(error, TransportError::HandshakeTimeout(_)),
-        "expected a peer that does not speak QUIC Nexus to time out, got {error:?}"
+        matches!(
+            error,
+            TransportError::Client(ClientError::UnsupportedProtocolVersion)
+        ),
+        "expected an unsupported version, got {error:?}"
     );
     server.abort();
 }
@@ -145,8 +153,8 @@ async fn rejects_an_endpoint_without_an_address() {
     let error = NexusClient::connect(portalis_nexus_client::EndpointAddr::new(
         iroh::SecretKey::from_bytes(&[9; 32]).public(),
     ))
-        .await
-        .expect_err("the endpoint cannot be reached without an address");
+    .await
+    .expect_err("the endpoint cannot be reached without an address");
 
     assert!(
         matches!(error, TransportError::IrohConnect(_)),
@@ -157,13 +165,18 @@ async fn rejects_an_endpoint_without_an_address() {
 #[tokio::test]
 async fn refuses_more_than_the_pending_request_limit() {
     let address = reserve_address().await;
-    let server = serve(address, silent_router()).await;
+    let server = start_peer(
+        address,
+        vec![portalis_nexus_client::NEXUS_ALPN.to_vec()],
+        silent_peer,
+    )
+    .await;
     let config = ClientConfig {
         request_timeout: Duration::from_secs(30),
         ..ClientConfig::default()
     };
     let client = Arc::new(
-        NexusClient::connect_with_config(&endpoint(address), &config)
+        NexusClient::connect_with_config(peer_endpoint(address), &config)
             .await
             .expect("connect to the silent server"),
     );

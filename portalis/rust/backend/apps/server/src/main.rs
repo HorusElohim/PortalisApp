@@ -86,11 +86,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 async fn serve_quic(endpoint: &Endpoint, state: AppState) {
     while let Some(incoming) = endpoint.accept().await {
         let state = state.clone();
+        let endpoint = endpoint.clone();
         tokio::spawn(async move {
             let Ok(connection) = incoming.await else {
                 return;
             };
-            portalis_nexus_server::quic::serve(connection, state).await;
+            let observed_ip = portalis_nexus_server::quic::direct_peer_ip(&endpoint, &connection);
+            portalis_nexus_server::quic::serve(connection, state, observed_ip).await;
         });
     }
 }

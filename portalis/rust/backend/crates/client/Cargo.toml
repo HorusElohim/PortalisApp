@@ -9,19 +9,17 @@ license.workspace = true
 blake3.workspace = true
 chacha20poly1305.workspace = true
 ed25519-dalek.workspace = true
-futures-util.workspace = true
 iroh.workspace = true
 portalis-nexus-protocol.workspace = true
 unicode-normalization.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-tokio-tungstenite.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-axum.workspace = true
 ed25519-dalek.workspace = true
+futures-util.workspace = true
 portalis-nexus-server = { path = "../../apps/server" }
 x25519-dalek.workspace = true
 

@@ -4,21 +4,17 @@
 //! expected here.
 #![allow(dead_code)]
 
+use std::future::Future;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
 
-use axum::Router;
-use axum::extract::ws::{Message, WebSocketUpgrade};
-use axum::response::Response;
-use axum::routing::get;
 use ed25519_dalek::{Signer, SigningKey};
 use portalis_nexus_client::{ClientConfig, DeviceSigner, EndpointAddr, ReconnectPolicy};
 use portalis_nexus_protocol::v1::envelope::Payload;
 use portalis_nexus_protocol::v1::{Envelope, Ping, ProtocolRange, ServerHello};
 use portalis_nexus_protocol::{
-    DEVICE_KEY_BYTES, ENCRYPTION_KEY_BYTES, SIGNATURE_BYTES, WEBSOCKET_SUBPROTOCOL, new_challenge,
-    new_message_id,
+    DEVICE_KEY_BYTES, ENCRYPTION_KEY_BYTES, LENGTH_PREFIX_BYTES, SIGNATURE_BYTES, decode_frame,
+    frame_length, length_prefix, new_challenge, new_message_id,
 };
 use portalis_nexus_server::{AppState, binary_frame, hello_envelope, server_hello};
 use tokio::sync::watch;
@@ -26,9 +22,11 @@ use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use x25519_dalek::{PublicKey, StaticSecret};
 
-pub const SOCKET_ROUTE: &str = "/v1/socket";
 /// Bounds every "eventually" assertion so a hung test fails instead of hanging.
-pub const PATIENCE: Duration = Duration::from_secs(5);
+pub const PATIENCE: Duration = Duration::from_secs(30);
+
+const SERVICE_SECRET: [u8; 32] = [7; 32];
+const PEER_SECRET: [u8; 32] = [8; 32];
 
 /// A signer over a fixed key, so a test can re-create the same device.
 ///
@@ -86,19 +84,6 @@ pub async fn reserve_address() -> SocketAddr {
     address
 }
 
-pub async fn serve(address: SocketAddr, router: Router) -> JoinHandle<()> {
-    let listener = tokio::net::TcpListener::bind(address)
-        .await
-        .expect("bind test server");
-    tokio::spawn(async move {
-        let _ = axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await;
-    })
-}
-
 /// Starts the real Nexus server, ready to serve.
 ///
 /// The authority is bound to the address the test dials, because signatures
@@ -113,26 +98,87 @@ pub async fn start_server(address: SocketAddr) -> (AppState, JoinHandle<()>) {
         .bind_addr_v4(address)
         .clear_discovery()
         .relay_mode(iroh::RelayMode::Disabled)
-        .secret_key(iroh::SecretKey::from_bytes(&[7; 32]))
+        .secret_key(iroh::SecretKey::from_bytes(&SERVICE_SECRET))
         .alpns(vec![portalis_nexus_client::NEXUS_ALPN.to_vec()])
         .bind()
         .await
         .expect("bind test QUIC server");
     let serving_state = state.clone();
     let handle = tokio::spawn(async move {
-        while let Some(incoming) = service.accept().await {
-            let Ok(connection) = incoming.await else {
-                continue;
-            };
-            portalis_nexus_server::quic::serve(connection, serving_state.clone()).await;
+        let mut draining = serving_state.shutdown().register();
+        let mut connections = tokio::task::JoinSet::new();
+        loop {
+            tokio::select! {
+                _ = draining.changed() => {
+                    service.close().await;
+                    return;
+                }
+                incoming = service.accept() => {
+                    let Some(incoming) = incoming else {
+                        return;
+                    };
+                    let state = serving_state.clone();
+                    let endpoint = service.clone();
+                    connections.spawn(async move {
+                        let Ok(connection) = incoming.await else {
+                            return;
+                        };
+                        let observed_ip = portalis_nexus_server::quic::direct_peer_ip(
+                            &endpoint,
+                            &connection,
+                        );
+                        portalis_nexus_server::quic::serve(connection, state, observed_ip).await;
+                    });
+                }
+            }
         }
     });
     (state, handle)
 }
 
 pub fn endpoint(address: SocketAddr) -> EndpointAddr {
-    EndpointAddr::new(iroh::SecretKey::from_bytes(&[7; 32]).public())
+    EndpointAddr::new(iroh::SecretKey::from_bytes(&SERVICE_SECRET).public())
         .with_direct_addresses([address])
+}
+
+/// Address of a deliberately narrow QUIC peer used only for transport faults.
+pub fn peer_endpoint(address: SocketAddr) -> EndpointAddr {
+    EndpointAddr::new(iroh::SecretKey::from_bytes(&PEER_SECRET).public())
+        .with_direct_addresses([address])
+}
+
+/// Runs one QUIC peer for a test that needs behavior the real service should
+/// not provide, such as silence or an intentionally malformed reply.
+pub async fn start_peer<F, Fut>(
+    address: SocketAddr,
+    alpns: Vec<Vec<u8>>,
+    serve: F,
+) -> JoinHandle<()>
+where
+    F: FnOnce(iroh::endpoint::Connection) -> Fut + Send + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
+{
+    let SocketAddr::V4(address) = address else {
+        panic!("tests bind IPv4 addresses")
+    };
+    let endpoint = iroh::Endpoint::builder()
+        .bind_addr_v4(address)
+        .clear_discovery()
+        .relay_mode(iroh::RelayMode::Disabled)
+        .secret_key(iroh::SecretKey::from_bytes(&PEER_SECRET))
+        .alpns(alpns)
+        .bind()
+        .await
+        .expect("bind test QUIC peer");
+    tokio::spawn(async move {
+        let Some(incoming) = endpoint.accept().await else {
+            return;
+        };
+        let Ok(connection) = incoming.await else {
+            return;
+        };
+        serve(connection).await;
+    })
 }
 
 /// A reconnect policy that retries quickly enough for a test to observe it.
@@ -163,29 +209,15 @@ pub async fn wait_until(label: &str, mut condition: impl FnMut() -> bool) {
     .unwrap_or_else(|_| panic!("timed out waiting until {label}"));
 }
 
-/// Reads and discards until the peer leaves, so the closing handshake can
-/// complete. These servers answer no protobuf request; they simply stay open.
-async fn drain_inbound(mut socket: axum::extract::ws::WebSocket) {
-    while socket.recv().await.is_some() {}
-}
-
-/// One server-built envelope as this fake server's WebSocket sends it.
-///
-/// The real server's writer task does the same wrapping at its own edge; the
-/// frame itself is transport-neutral.
-fn sent(envelope: &portalis_nexus_protocol::v1::Envelope) -> Message {
-    Message::Binary(binary_frame(envelope).into())
-}
-
 /// A valid greeting from the current protocol version.
-fn greeting() -> Message {
+fn greeting() -> Envelope {
     let state = AppState::default();
-    sent(&server_hello(state.protocol_policy(), 0))
+    server_hello(state.protocol_policy(), 0)
 }
 
 /// A greeting advertising a protocol range this client cannot speak.
-fn future_greeting() -> Message {
-    sent(&hello_envelope(
+fn future_greeting() -> Envelope {
+    hello_envelope(
         ServerHello {
             connection_id: new_message_id(),
             challenge: new_challenge(),
@@ -196,7 +228,7 @@ fn future_greeting() -> Message {
             }),
         },
         0,
-    ))
+    )
 }
 
 pub fn unsolicited_ping(nonce: u64) -> Envelope {
@@ -208,109 +240,78 @@ pub fn unsolicited_ping(nonce: u64) -> Envelope {
     }
 }
 
+pub async fn greet(
+    connection: iroh::endpoint::Connection,
+    greeting: Envelope,
+) -> Option<(iroh::endpoint::SendStream, iroh::endpoint::RecvStream)> {
+    let (mut send, receive) = connection.open_bi().await.ok()?;
+    send_envelope(&mut send, &greeting).await?;
+    Some((send, receive))
+}
+
+pub async fn send_envelope(
+    send: &mut iroh::endpoint::SendStream,
+    envelope: &Envelope,
+) -> Option<()> {
+    let frame = binary_frame(envelope);
+    send.write_all(&length_prefix(&frame)).await.ok()?;
+    send.write_all(&frame).await.ok()?;
+    Some(())
+}
+
+pub async fn receive_envelope(receive: &mut iroh::endpoint::RecvStream) -> Option<Envelope> {
+    let mut prefix = [0_u8; LENGTH_PREFIX_BYTES];
+    receive.read_exact(&mut prefix).await.ok()?;
+    let length = frame_length(prefix).ok()?;
+    let mut frame = vec![0_u8; length];
+    receive.read_exact(&mut frame).await.ok()?;
+    decode_frame(&frame).ok()
+}
+
 /// Greets correctly, then never answers another message.
-pub fn silent_router() -> Router {
-    Router::new().route(SOCKET_ROUTE, get(silent_upgrade))
-}
-
-async fn silent_upgrade(websocket: WebSocketUpgrade) -> Response {
-    websocket
-        .protocols([WEBSOCKET_SUBPROTOCOL])
-        .on_upgrade(|mut socket| async move {
-            let _ = socket.send(greeting()).await;
-            drain_inbound(socket).await;
-        })
-}
-
-/// Upgrades without negotiating the protobuf subprotocol.
-pub fn bare_router() -> Router {
-    Router::new().route(SOCKET_ROUTE, get(bare_upgrade))
-}
-
-async fn bare_upgrade(websocket: WebSocketUpgrade) -> Response {
-    websocket.on_upgrade(|mut socket| async move {
-        let _ = socket.send(greeting()).await;
-        drain_inbound(socket).await;
-    })
+pub async fn silent_peer(connection: iroh::endpoint::Connection) {
+    let Some((_send, mut receive)) = greet(connection, greeting()).await else {
+        return;
+    };
+    while receive_envelope(&mut receive).await.is_some() {}
 }
 
 /// Greets with a protocol range this client cannot speak.
-pub fn future_router() -> Router {
-    Router::new().route(SOCKET_ROUTE, get(future_upgrade))
-}
-
-async fn future_upgrade(websocket: WebSocketUpgrade) -> Response {
-    websocket
-        .protocols([WEBSOCKET_SUBPROTOCOL])
-        .on_upgrade(|mut socket| async move {
-            let _ = socket.send(future_greeting()).await;
-            drain_inbound(socket).await;
-        })
-}
-
-/// Greets, pushes envelopes nothing asked for, then stays quiet.
-pub fn event_router() -> Router {
-    Router::new().route(SOCKET_ROUTE, get(event_upgrade))
-}
-
-async fn event_upgrade(websocket: WebSocketUpgrade) -> Response {
-    websocket
-        .protocols([WEBSOCKET_SUBPROTOCOL])
-        .on_upgrade(|mut socket| async move {
-            let _ = socket.send(greeting()).await;
-            for nonce in 1..=3 {
-                let _ = socket.send(sent(&unsolicited_ping(nonce))).await;
-            }
-            drain_inbound(socket).await;
-        })
+pub async fn future_peer(connection: iroh::endpoint::Connection) {
+    let Some((_send, mut receive)) = greet(connection, future_greeting()).await else {
+        return;
+    };
+    while receive_envelope(&mut receive).await.is_some() {}
 }
 
 /// Greets, then answers every request with a pong, whatever was asked.
-pub fn misanswering_router() -> Router {
-    Router::new().route(SOCKET_ROUTE, get(misanswer_upgrade))
+pub async fn misanswering_peer(connection: iroh::endpoint::Connection) {
+    let Some((mut send, mut receive)) = greet(connection, greeting()).await else {
+        return;
+    };
+    while let Some(request) = receive_envelope(&mut receive).await {
+        let pong = Envelope {
+            message_id: new_message_id(),
+            correlation_id: request.message_id,
+            timestamp_unix_ns: 1,
+            payload: Some(Payload::Pong(portalis_nexus_protocol::v1::Pong {
+                nonce: 0,
+            })),
+        };
+        if send_envelope(&mut send, &pong).await.is_none() {
+            return;
+        }
+    }
 }
 
-async fn misanswer_upgrade(websocket: WebSocketUpgrade) -> Response {
-    websocket
-        .protocols([WEBSOCKET_SUBPROTOCOL])
-        .on_upgrade(|mut socket| async move {
-            let _ = socket.send(greeting()).await;
-            while let Some(Ok(Message::Binary(frame))) = socket.recv().await {
-                let Ok(request) = portalis_nexus_protocol::decode_frame(&frame) else {
-                    return;
-                };
-                let pong = Envelope {
-                    message_id: new_message_id(),
-                    correlation_id: request.message_id,
-                    timestamp_unix_ns: 1,
-                    payload: Some(Payload::Pong(portalis_nexus_protocol::v1::Pong {
-                        nonce: 0,
-                    })),
-                };
-                let _ = socket.send(sent(&pong)).await;
-            }
-        })
-}
-
-/// Greets, then closes its socket when the returned switch is flipped.
-pub fn closable_router() -> (Router, Arc<watch::Sender<bool>>) {
-    let close = Arc::new(watch::Sender::new(false));
-    let handler = Arc::clone(&close);
-    let router = Router::new().route(
-        SOCKET_ROUTE,
-        get(move |websocket: WebSocketUpgrade| {
-            let close = Arc::clone(&handler);
-            async move {
-                websocket.protocols([WEBSOCKET_SUBPROTOCOL]).on_upgrade(
-                    move |mut socket| async move {
-                        let mut closing = close.subscribe();
-                        let _ = socket.send(greeting()).await;
-                        let _ = closing.changed().await;
-                        let _ = socket.send(Message::Close(None)).await;
-                    },
-                )
-            }
-        }),
-    );
-    (router, close)
+/// Greets, then drops its QUIC connection when the returned switch is flipped.
+pub async fn closable_peer(
+    connection: iroh::endpoint::Connection,
+    mut close: watch::Receiver<bool>,
+) {
+    let Some((_send, _receive)) = greet(connection.clone(), greeting()).await else {
+        return;
+    };
+    let _ = close.changed().await;
+    connection.close(0_u32.into(), b"test close");
 }

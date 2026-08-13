@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- Completed the Nexus client QUIC migration: connection and fault tests now
+  exercise real Iroh peers, reconnecting clients release failed in-flight
+  registrations, and swarm leases use only Iroh-verified direct UDP source
+  addresses rather than internal transport addresses.
+
 ### Added
 
 <!-- New user-visible features go here before the next release. -->

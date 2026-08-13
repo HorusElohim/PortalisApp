@@ -328,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "backend"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4071,7 +4071,6 @@ checksum = "3d20d5497ef88037a52ff98267d066e7f11fcc5e99bbfbd58a42336193aacec3"
 name = "portalis-nexus-client"
 version = "0.1.0"
 dependencies = [
- "axum",
  "blake3",
  "chacha20poly1305",
  "ed25519-dalek",
@@ -4081,7 +4080,6 @@ dependencies = [
  "portalis-nexus-server",
  "thiserror 2.0.20",
  "tokio",
- "tokio-tungstenite",
  "tracing",
  "unicode-normalization",
  "uuid",
@@ -5852,12 +5850,8 @@ checksum = "8f72a05e828585856dacd553fba484c242c46e391fb0e58917c942ee9202915c"
 dependencies = [
  "futures-util",
  "log",
- "rustls",
- "rustls-pki-types",
  "tokio",
- "tokio-rustls",
  "tungstenite",
- "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -6126,8 +6120,6 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.9.5",
- "rustls",
- "rustls-pki-types",
  "sha1",
  "thiserror 2.0.20",
 ]

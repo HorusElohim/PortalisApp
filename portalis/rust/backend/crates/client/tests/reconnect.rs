@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant};
 
-use portalis_nexus_client::{ClientConfig, NexusClient, TransportError};
+use portalis_nexus_client::{ClientConfig, DEFAULT_REQUEST_TIMEOUT, NexusClient, TransportError};
 use portalis_nexus_protocol::v1::Pong;
 use portalis_nexus_protocol::v1::envelope::Payload;
 use tokio::time::{sleep, timeout};
@@ -10,8 +10,8 @@ use tokio::time::{sleep, timeout};
 mod common;
 
 use common::{
-    PATIENCE, brisk_config, brisk_policy, closable_router, endpoint, reserve_address, serve,
-    start_server, wait_until,
+    PATIENCE, brisk_config, brisk_policy, closable_peer, endpoint, peer_endpoint, reserve_address,
+    start_peer, start_server, wait_until,
 };
 
 /// Retries until the supervisor has re-established a connection.
@@ -30,7 +30,7 @@ async fn ping_when_reconnected(client: &NexusClient, nonce: u64) -> Payload {
 }
 
 #[tokio::test]
-async fn connect_fails_fast_on_an_unreachable_endpoint() {
+async fn connect_stops_after_one_bounded_attempt_on_an_unreachable_endpoint() {
     let address = reserve_address().await;
     let started = Instant::now();
 
@@ -43,8 +43,8 @@ async fn connect_fails_fast_on_an_unreachable_endpoint() {
         "connect makes a single attempt, got {error:?}"
     );
     assert!(
-        started.elapsed() < Duration::from_secs(2),
-        "connect should not spend a retry budget"
+        started.elapsed() < DEFAULT_REQUEST_TIMEOUT + Duration::from_secs(1),
+        "connect should stop after one handshake timeout"
     );
 }
 
@@ -90,7 +90,7 @@ async fn connects_once_a_late_server_appears() {
 #[tokio::test]
 async fn supervised_clients_recover_from_a_forced_server_restart() {
     let address = reserve_address().await;
-    let (_state, initial_server) = start_server(address).await;
+    let (initial_state, initial_server) = start_server(address).await;
     let config = brisk_config(u32::MAX);
     let first = NexusClient::connect_with_config(&endpoint(address), &config)
         .await
@@ -103,8 +103,9 @@ async fn supervised_clients_recover_from_a_forced_server_restart() {
         Some(Payload::Pong(Pong { nonce: 1 }))
     );
 
-    initial_server.abort();
+    initial_state.shutdown().drain().await;
     let _ = initial_server.await;
+    sleep(Duration::from_millis(100)).await;
     let (_restarted_state, restarted_server) = start_server(address).await;
 
     // Neither caller reconnects; each supervisor restores its own connection.
@@ -131,18 +132,17 @@ async fn reports_connection_state_across_a_drop_and_recovery() {
         .expect("connect Nexus client");
     assert!(client.is_connected());
 
-    // Draining closes the live socket and aborting stops the listener, so the
-    // client cannot reconnect and stays observably disconnected.
-    timeout(PATIENCE, state.shutdown().drain())
-        .await
-        .expect("drain closes the live socket");
-    server.abort();
+    // A graceful service restart still severs the stream under the client.
+    // This test proves the supervisor reports that drop and restores itself
+    // when the service returns.
+    state.shutdown().drain().await;
     let _ = server.await;
     wait_until("the dropped connection is reported", || {
         !client.is_connected()
     })
     .await;
 
+    sleep(Duration::from_millis(100)).await;
     let (_state, restarted) = start_server(address).await;
     wait_until("the connection is restored", || client.is_connected()).await;
 
@@ -157,15 +157,21 @@ async fn reports_connection_state_across_a_drop_and_recovery() {
 #[tokio::test]
 async fn in_flight_requests_fail_as_soon_as_the_connection_drops() {
     let address = reserve_address().await;
-    let (router, close) = closable_router();
-    let server = serve(address, router).await;
+    let close = tokio::sync::watch::Sender::new(false);
+    let close_peer = close.subscribe();
+    let server = start_peer(
+        address,
+        vec![portalis_nexus_client::NEXUS_ALPN.to_vec()],
+        move |connection| closable_peer(connection, close_peer),
+    )
+    .await;
     let config = ClientConfig {
         // Far longer than the test: the request must fail on disconnect, not
         // by timing out.
         request_timeout: Duration::from_secs(120),
         reconnect: brisk_policy(u32::MAX),
     };
-    let client = NexusClient::connect_with_config(&endpoint(address), &config)
+    let client = NexusClient::connect_with_config(peer_endpoint(address), &config)
         .await
         .expect("connect to the closable server");
 

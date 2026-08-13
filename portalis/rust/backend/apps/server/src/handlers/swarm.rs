@@ -24,12 +24,15 @@ pub(crate) fn announce(
     let Ok(family) = family(announce.address_family) else {
         return malformed(request, "address_family is required", now);
     };
+    let Some(address) = session.observed_ip() else {
+        return malformed(request, "a direct source address is unavailable", now);
+    };
     match state.swarm().announce(
         PeerAnnouncement {
             info_hash: &announce.info_hash,
             device_id: identity.device.device_id,
             connection_id: session.connection_id(),
-            address: session.observed_ip(),
+            address,
             port: announce.listen_port,
             family,
             transport_capabilities: announce.transport_capabilities,
