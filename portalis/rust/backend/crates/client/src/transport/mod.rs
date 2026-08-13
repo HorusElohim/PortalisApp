@@ -170,12 +170,11 @@ impl NexusClient {
 
         // Scoped so no queue sender is held across the await below, which would
         // stop the writer task from observing a closed queue.
-        let queued = match self.shared.outbound() {
-            Some(outbound) => outbound.try_send(frame),
-            None => {
-                self.shared.pending.cancel(&request.message_id);
-                return Err(TransportError::Disconnected);
-            }
+        let queued = if let Some(outbound) = self.shared.outbound() {
+            outbound.try_send(frame)
+        } else {
+            self.shared.pending.cancel(&request.message_id);
+            return Err(TransportError::Disconnected);
         };
         if let Err(error) = queued {
             self.shared.pending.cancel(&request.message_id);

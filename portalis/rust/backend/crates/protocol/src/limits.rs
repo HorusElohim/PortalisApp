@@ -46,4 +46,3 @@ pub const INFO_HASH_V2_BYTES: usize = 32;
 pub const SWARM_LEASE_SECONDS: u64 = 90;
 pub const SWARM_REFRESH_SECONDS: u64 = 30;
 pub const MAX_SWARM_CANDIDATES: usize = 32;
-pub const WEBSOCKET_SUBPROTOCOL: &str = "portalis.protobuf.v1";

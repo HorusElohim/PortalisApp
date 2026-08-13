@@ -1,9 +1,7 @@
-//! The service over QUIC, answered by the same handlers as the WebSocket.
+//! The service over QUIC, through the same dispatch that owns every command.
 //!
-//! The point of this test is the word "same". Two transports over one dispatch
-//! is only worth having if the second one needs no rules of its own, and the
-//! way to show that is to complete a real operation through it — a
-//! registration, with a real signature, verified by the same code.
+//! A real registration here proves that transport plumbing does not own
+//! identity rules: it carries a signature to the server's normal handlers.
 
 use ed25519_dalek::{Signer, SigningKey};
 use iroh::Watcher as _;

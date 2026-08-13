@@ -57,7 +57,7 @@ pub struct ServerConfig {
     /// The hexadecimal 32-byte Iroh private key supplied by an operator.
     ///
     /// When omitted, embedded deployments generate and keep the same secret
-    /// beside their data. MongoDB deployments must supply this value because
+    /// beside their data. `MongoDB` deployments must supply this value because
     /// their storage is not a suitable private-key location.
     pub node_secret: Option<String>,
     pub database: String,

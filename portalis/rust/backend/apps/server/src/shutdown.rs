@@ -1,4 +1,4 @@
-//! Graceful draining of upgraded WebSocket connections.
+//! Graceful draining of live Nexus connections.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,10 +10,9 @@ pub const GRACEFUL_DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Broadcasts the draining signal and tracks how many sockets remain live.
 ///
-/// Upgraded WebSocket connections outlive the HTTP connections that created
-/// them, so `axum`'s graceful shutdown cannot wait for them. Every socket holds
-/// one registration for its lifetime; [`Shutdown::drain`] asks them all to
-/// close and resolves once the last registration is dropped.
+/// Every live connection holds one registration for its lifetime;
+/// [`Shutdown::drain`] asks them all to close and resolves once the last
+/// registration is dropped.
 #[derive(Clone, Debug)]
 pub struct Shutdown {
     signal: Arc<watch::Sender<bool>>,

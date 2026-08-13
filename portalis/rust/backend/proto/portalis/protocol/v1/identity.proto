@@ -26,7 +26,7 @@ message AuthenticateDevice {
 
 // An already-authorized device approves one new signing/encryption key pair.
 // The approval signature is durable: it binds the approving device and both
-// candidate keys, rather than one WebSocket challenge.
+// candidate keys, rather than one connection challenge.
 message LinkDevice {
   bytes candidate_signing_public_key = 1;
   bytes candidate_encryption_public_key = 2;

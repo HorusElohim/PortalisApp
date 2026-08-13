@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Excluded as platform adapters, per SPEC.md section 18:
 #   apps/server/src/main.rs      process bootstrap
-#   apps/server/src/socket.rs    WebSocket plumbing driven by covered decisions
+#   apps/server/src/quic.rs      QUIC plumbing driven by covered decisions
 #   crates/storage/src/mongo/mod.rs MongoDB driver plumbing (see below)
 #   crates/client/src/transport  socket actor driven by covered decisions
 #   demo/                        runnable examples, exercised by running them

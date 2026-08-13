@@ -4,7 +4,7 @@
 //!
 //! - [`config`]: process configuration read at startup.
 //! - [`state`]: state shared by every handler.
-//! - [`shutdown`]: graceful draining of upgraded sockets.
+//! - [`shutdown`]: graceful draining of live Nexus connections.
 //! - [`health`]: liveness and readiness endpoints.
 //! - [`connections`]: where to reach a live connection.
 //! - [`environment`]: the production clock and random source.
@@ -13,10 +13,9 @@
 //! - [`messages`]: envelope construction and inbound dispatch decisions.
 //! - [`session`]: per-connection authentication state.
 //! - [`handlers`]: domain commands, one module per subsystem.
-//! - `socket`: the WebSocket plumbing those decisions drive.
+//! - [`quic`]: the QUIC transport that carries those decisions.
 
 use axum::Router;
-use axum::routing::get;
 use tower_http::trace::TraceLayer;
 
 mod config;
@@ -30,7 +29,6 @@ mod node;
 pub mod quic;
 mod session;
 mod shutdown;
-mod socket;
 mod state;
 mod store;
 
@@ -46,8 +44,8 @@ pub use identity::{
     DefaultStore, NexusFriends, NexusIdentities, NexusShares, friends, identities, shares,
 };
 pub use messages::{
-    SocketReply, authenticated_reply, binary_frame, hello_envelope, hello_payload, presence_event,
-    protocol_error, reply_to, reply_with, response_for, server_hello,
+    authenticated_reply, binary_frame, hello_envelope, hello_payload, presence_event,
+    protocol_error, reply_with, response_for, server_hello,
 };
 pub use node::{NodeSecretError, load_node_secret};
 pub use portalis_nexus_storage::mongo::MongoStore;
@@ -56,12 +54,9 @@ pub use shutdown::{GRACEFUL_DRAIN_TIMEOUT, Shutdown};
 pub use state::AppState;
 pub use store::NexusStore;
 
-pub const SOCKET_PATH: &str = "/v1/socket";
-
 pub fn app(state: &AppState) -> Router {
     Router::new()
         .merge(health::routes())
-        .route(SOCKET_PATH, get(socket::upgrade))
         .layer(TraceLayer::new_for_http())
         .with_state(state.clone())
 }

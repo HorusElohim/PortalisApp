@@ -20,14 +20,14 @@ The architecture and migration contract live in [`SPEC.md`](SPEC.md).
 - `crates/client`: canonical Manifest data, protocol rules, the current
   command actor, and the authenticated direct-or-relayed QUIC endpoint.
 - `crates/server-core`: transport-independent server rules.
-- `apps/server`: `config`, `state`, `shutdown`, `health`, `messages`, `socket`.
+- `apps/server`: `config`, `state`, `shutdown`, `health`, `messages`, `quic`.
 - `proto`: authoritative protobuf schemas.
 - `demo`: runnable examples — see [`demo/README.md`](demo/README.md).
 - `demo-m6`: standalone server and concurrent-client M6 walkthrough — see
   [`demo-m6/README.md`](demo-m6/README.md).
 
 Deterministic rules live in their own modules and are covered by tests; the
-socket plumbing they drive (`apps/server/src/socket.rs`, `crates/client/src/
+QUIC plumbing they drive (`apps/server/src/quic.rs`, `crates/client/src/
 transport/`) is excluded from the coverage gate as a platform adapter.
 
 The QUIC endpoint uses Iroh 0.92 with default metrics disabled. That is the

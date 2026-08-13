@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Removed the obsolete Nexus WebSocket endpoint and client dependencies. The
+  service now has one authenticated QUIC transport, while its HTTP surface is
+  limited to liveness and readiness checks.
+
 - Completed the Nexus client QUIC migration: connection and fault tests now
   exercise real Iroh peers, reconnecting clients release failed in-flight
   registrations, and swarm leases use only Iroh-verified direct UDP source

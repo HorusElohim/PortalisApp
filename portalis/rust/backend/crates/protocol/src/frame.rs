@@ -1,9 +1,8 @@
 //! Bounded encoding and decoding of one protocol frame.
 //!
-//! A WebSocket delimits messages for us; a QUIC stream does not, so a frame
-//! sent over one carries its length in front. Both ends of that agreement live
-//! here rather than in the two transports, because a length prefix is the kind
-//! of thing that is easy to write twice and easy to write twice differently.
+//! A QUIC stream does not delimit messages, so each frame carries its length
+//! in front. Both ends of that agreement live here, because a length prefix is
+//! the kind of thing that is easy to write twice and easy to write differently.
 
 use prost::Message;
 use thiserror::Error;
@@ -55,7 +54,7 @@ pub enum FrameError {
     InvalidEnvelope(#[from] ValidationError),
 }
 
-/// Encodes one bounded protobuf WebSocket binary message.
+/// Encodes one bounded protobuf envelope.
 ///
 /// # Errors
 ///
@@ -68,7 +67,7 @@ pub fn encode_frame(envelope: &v1::Envelope) -> Result<Vec<u8>, FrameError> {
     Ok(bytes)
 }
 
-/// Decodes and validates one bounded protobuf WebSocket binary message.
+/// Decodes and validates one bounded protobuf envelope.
 ///
 /// # Errors
 ///
@@ -81,7 +80,7 @@ pub fn decode_frame(bytes: &[u8]) -> Result<v1::Envelope, FrameError> {
     Ok(envelope)
 }
 
-/// Validates a WebSocket binary payload length before allocating or decoding.
+/// Validates a protobuf payload length before allocating or decoding.
 ///
 /// # Errors
 ///

@@ -1,19 +1,8 @@
-//! The same service, over QUIC instead of a WebSocket.
+//! The Nexus service over one long-lived QUIC stream per connection.
 //!
-//! Nothing about what the service *does* is here. Connections carry the same
-//! framed envelopes, answered by the same [`dispatch`], with the same session
-//! state — this module is the pipe, and it exists so the pipe can be replaced
-//! without the rules moving.
-//!
-//! That is also why it is written before the WebSocket one is deleted. Two
-//! transports over one dispatch proves the seam is real; deleting the old one
-//! first would have proved only that it compiled.
-//!
-//! The shape matches the WebSocket loop deliberately: one long-lived
-//! bidirectional stream per connection, a bounded read loop, and one writer
-//! task owning the send half. A peer that stops reading fills a queue of at
-//! most [`MAX_OUTBOUND_QUEUE`] entries and loses its connection rather than
-//! growing the server's memory.
+//! Connections carry framed envelopes through the same [`dispatch`] and
+//! session state as every other server operation. A bounded read loop and one
+//! writer task keep a peer that stops reading from growing server memory.
 
 use std::net::IpAddr;
 use std::time::{SystemTime, UNIX_EPOCH};

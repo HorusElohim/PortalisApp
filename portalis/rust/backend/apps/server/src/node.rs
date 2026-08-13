@@ -47,7 +47,7 @@ pub enum NodeSecretError {
 /// # Errors
 ///
 /// Returns [`NodeSecretError`] when the configured value is malformed, a
-/// durable secret cannot be read or created, or MongoDB has no private-key
+/// durable secret cannot be read or created, or `MongoDB` has no private-key
 /// location configured.
 pub fn load_node_secret(config: &ServerConfig) -> Result<SecretKey, NodeSecretError> {
     if let Some(secret) = &config.node_secret {
