@@ -36,7 +36,19 @@ impl Identity {
     ///
     /// Returns [`StorageError`] when the file cannot be opened or prepared.
     pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, StorageError> {
-        let store = Store::open(path)?;
+        Self::over(Store::open(path)?)
+    }
+
+    /// The same endpoint, backed by memory.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError`] when the store cannot be created.
+    pub fn in_memory() -> Result<Self, StorageError> {
+        Self::over(Store::in_memory()?)
+    }
+
+    fn over(store: Store) -> Result<Self, StorageError> {
         store.declare(|write| {
             write.open_table(USERS)?;
             write.open_table(HANDLES)?;

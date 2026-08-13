@@ -106,7 +106,19 @@ impl Mailbox {
         path: impl AsRef<std::path::Path>,
         limits: Limits,
     ) -> Result<Self, StorageError> {
-        let store = Store::open(path)?;
+        Self::over(Store::open(path)?, limits)
+    }
+
+    /// The same endpoint, backed by memory.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError`] when the store cannot be created.
+    pub fn in_memory(limits: Limits) -> Result<Self, StorageError> {
+        Self::over(Store::in_memory()?, limits)
+    }
+
+    fn over(store: Store, limits: Limits) -> Result<Self, StorageError> {
         store.declare(|write| {
             write.open_table(ITEMS)?;
             write.open_table(NEXT)?;

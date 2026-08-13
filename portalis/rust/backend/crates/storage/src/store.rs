@@ -59,6 +59,26 @@ impl Store {
         })
     }
 
+    /// The same engine, backed by memory instead of a file.
+    ///
+    /// For tests, and for anything that wants the real code path without a
+    /// file to clean up. It is deliberately not a second implementation: a
+    /// store that behaves *almost* like the durable one is a store that
+    /// disagrees with it eventually, and this project has already watched that
+    /// happen once — two engines differed about whether revoking a device
+    /// twice moved the revocation time, and only a conformance suite noticed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::Unavailable`] when the database cannot be
+    /// created, which for memory means allocation failed.
+    pub fn in_memory() -> Result<Self, StorageError> {
+        Ok(Self {
+            database: Database::builder()
+                .create_with_backend(redb::backends::InMemoryBackend::new())?,
+        })
+    }
+
     /// Runs `work` in one transaction, committing only if it succeeds.
     ///
     /// Every write goes through here, which is what makes "both rows or

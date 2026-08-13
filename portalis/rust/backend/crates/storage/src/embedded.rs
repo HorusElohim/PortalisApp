@@ -81,6 +81,28 @@ impl Embedded {
         })
     }
 
+    /// The same engine, backed by memory rather than files.
+    ///
+    /// This is what tests use, and it is the production code path — not a
+    /// double that behaves almost like it. There is one implementation of
+    /// every rule in here, so a test cannot pass against a store the service
+    /// does not run. The parallel in-memory store this replaced had its own
+    /// copy of every rule, and the two eventually disagreed about one.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError`] when a store cannot be created.
+    pub fn in_memory() -> Result<Self, StorageError> {
+        Ok(Self {
+            identity: Identity::in_memory()?,
+            collections: Collections::in_memory()?,
+            friends: Friends::in_memory()?,
+            envelopes: Envelopes::in_memory()?,
+            mailbox: Mailbox::in_memory(Limits::default())?,
+            directory: Directory::in_memory()?,
+        })
+    }
+
     /// The identity endpoint.
     #[must_use]
     pub const fn identity(&self) -> &Identity {
@@ -140,6 +162,66 @@ impl From<StorageError> for RepositoryError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The same engine, without a file. Not a second implementation: the
+    /// rules are the ones the durable engine runs, so a test cannot pass
+    /// against behaviour the service does not have.
+    #[test]
+    fn the_engine_runs_in_memory_with_the_same_behaviour() {
+        use portalis_nexus_server_core::{ShareRecord, ShareSnapshotRecord};
+
+        let store = Embedded::in_memory().expect("opens");
+        let share = |revision: u64| ShareRecord {
+            share_id: [1; 16],
+            owner: [2; 16],
+            revision,
+            snapshot_id: [3; 32],
+            capsule: b"sealed".to_vec(),
+            capsule_signature: vec![9; 64],
+            created_at_unix_ns: 1,
+            updated_at_unix_ns: revision,
+        };
+        let snapshot = |revision: u64| ShareSnapshotRecord {
+            share_id: [1; 16],
+            revision,
+            snapshot_id: [3; 32],
+            capsule: b"sealed".to_vec(),
+            capsule_signature: vec![9; 64],
+            created_at_unix_ns: revision,
+        };
+
+        store
+            .collections()
+            .save_publication(&share(1), &snapshot(1), None)
+            .expect("publishes");
+        assert_eq!(
+            store.collections().find_share([1; 16]).expect("reads"),
+            Some(share(1))
+        );
+        // The compare-and-set is the real one, not a simplification of it.
+        assert!(matches!(
+            store
+                .collections()
+                .save_publication(&share(2), &snapshot(2), None),
+            Err(StorageError::Conflict)
+        ));
+
+        store
+            .mailbox()
+            .deliver([4; 32], b"waiting")
+            .expect("delivers");
+        assert_eq!(store.mailbox().drain([4; 32]).expect("drains").len(), 1);
+
+        // And it is genuinely separate storage: a second one shares nothing.
+        assert_eq!(
+            Embedded::in_memory()
+                .expect("opens")
+                .collections()
+                .find_share([1; 16])
+                .expect("reads"),
+            None
+        );
+    }
 
     #[test]
     fn a_directory_that_cannot_be_made_is_reported() {
