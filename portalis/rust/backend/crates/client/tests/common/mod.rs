@@ -148,15 +148,23 @@ async fn drain_inbound(mut socket: axum::extract::ws::WebSocket) {
     while socket.recv().await.is_some() {}
 }
 
+/// One server-built envelope as this fake server's WebSocket sends it.
+///
+/// The real server's writer task does the same wrapping at its own edge; the
+/// frame itself is transport-neutral.
+fn sent(envelope: &portalis_nexus_protocol::v1::Envelope) -> Message {
+    Message::Binary(binary_frame(envelope).into())
+}
+
 /// A valid greeting from the current protocol version.
 fn greeting() -> Message {
     let state = AppState::default();
-    binary_frame(&server_hello(state.protocol_policy(), 0))
+    sent(&server_hello(state.protocol_policy(), 0))
 }
 
 /// A greeting advertising a protocol range this client cannot speak.
 fn future_greeting() -> Message {
-    binary_frame(&hello_envelope(
+    sent(&hello_envelope(
         ServerHello {
             connection_id: new_message_id(),
             challenge: new_challenge(),
@@ -230,7 +238,7 @@ async fn event_upgrade(websocket: WebSocketUpgrade) -> Response {
         .on_upgrade(|mut socket| async move {
             let _ = socket.send(greeting()).await;
             for nonce in 1..=3 {
-                let _ = socket.send(binary_frame(&unsolicited_ping(nonce))).await;
+                let _ = socket.send(sent(&unsolicited_ping(nonce))).await;
             }
             drain_inbound(socket).await;
         })
@@ -258,7 +266,7 @@ async fn misanswer_upgrade(websocket: WebSocketUpgrade) -> Response {
                         nonce: 0,
                     })),
                 };
-                let _ = socket.send(binary_frame(&pong)).await;
+                let _ = socket.send(sent(&pong)).await;
             }
         })
 }

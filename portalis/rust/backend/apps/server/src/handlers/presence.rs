@@ -102,7 +102,7 @@ mod tests {
 
     /// A server where Ada and Grace are accepted friends, and Grace has a
     /// connection whose outbound queue the test can read.
-    async fn befriended() -> (AppState, mpsc::Receiver<axum::extract::ws::Message>) {
+    async fn befriended() -> (AppState, mpsc::Receiver<Vec<u8>>) {
         let state = AppState::default();
         for (id, name) in [(ADA, "ada"), (GRACE, "grace")] {
             state
@@ -138,8 +138,8 @@ mod tests {
     }
 
     /// The next payload queued for a connection, or `None` when none is.
-    fn received(inbox: &mut mpsc::Receiver<axum::extract::ws::Message>) -> Option<Payload> {
-        let frame = inbox.try_recv().ok()?.into_data();
+    fn received(inbox: &mut mpsc::Receiver<Vec<u8>>) -> Option<Payload> {
+        let frame = inbox.try_recv().ok()?;
         decode_frame(&frame)
             .expect("a server frame is valid")
             .payload

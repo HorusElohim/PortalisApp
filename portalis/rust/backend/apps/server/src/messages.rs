@@ -17,7 +17,7 @@ use portalis_nexus_server_core::{Identity, ProtocolPolicy, UserId};
 /// What a socket owes its peer after one inbound WebSocket message.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SocketReply {
-    Send(Message),
+    Send(Vec<u8>),
     Idle,
     Close,
 }
@@ -143,14 +143,17 @@ pub fn presence_event(
 
 /// Encodes one server-generated envelope as a bounded binary frame.
 ///
+/// Bytes, not a transport's message type: the same frame is written to a
+/// WebSocket and to a QUIC stream, and the queue between the service and
+/// either one carries only this.
+///
 /// # Panics
 ///
 /// Panics when the envelope is invalid or exceeds the frame limit, which would
 /// mean the server itself built a message the protocol forbids.
 #[must_use]
-pub fn binary_frame(envelope: &Envelope) -> Message {
-    let frame = encode_frame(envelope).expect("server-generated envelopes are valid and bounded");
-    Message::Binary(frame.into())
+pub fn binary_frame(envelope: &Envelope) -> Vec<u8> {
+    encode_frame(envelope).expect("server-generated envelopes are valid and bounded")
 }
 
 /// Maps one inbound WebSocket message to the reply queued for its peer.
@@ -175,8 +178,9 @@ pub fn reply_to(message: &Message, timestamp_unix_ns: u64) -> SocketReply {
             "expected a binary protobuf envelope".to_owned(),
             timestamp_unix_ns,
         ))),
-        Message::Ping(payload) => SocketReply::Send(Message::Pong(payload.clone())),
-        Message::Pong(_) => SocketReply::Idle,
+        // Nothing to do: the WebSocket implementation answers pings itself,
+        // so replying here would put a second pong on the wire.
+        Message::Ping(_) | Message::Pong(_) => SocketReply::Idle,
         Message::Close(_) => SocketReply::Close,
     }
 }
@@ -192,7 +196,7 @@ mod tests {
 
     /// Decodes a binary reply's payload, or `None` when the reply is not one.
     fn replied_payload(reply: SocketReply) -> Option<Payload> {
-        let SocketReply::Send(Message::Binary(frame)) = reply else {
+        let SocketReply::Send(frame) = reply else {
             return None;
         };
         decode_frame(&frame)
@@ -251,7 +255,7 @@ mod tests {
             payload: Some(Payload::Ping(Ping { nonce: 7 })),
         };
         assert_eq!(
-            replied_payload(reply_to(&binary_frame(&ping), 2)),
+            replied_payload(reply_to(&Message::Binary(binary_frame(&ping).into()), 2)),
             Some(Payload::Pong(Pong { nonce: 7 }))
         );
         assert_eq!(
@@ -264,11 +268,14 @@ mod tests {
         );
     }
 
+    /// Pings and pongs are the transport's business, not the protocol's: the
+    /// WebSocket implementation answers a ping itself, so a reply built here
+    /// would be a second pong.
     #[test]
     fn answers_websocket_control_frames() {
         assert_eq!(
             reply_to(&Message::Ping(vec![1, 2].into()), 1),
-            SocketReply::Send(Message::Pong(vec![1, 2].into()))
+            SocketReply::Idle
         );
         assert_eq!(
             reply_to(&Message::Pong(vec![].into()), 1),

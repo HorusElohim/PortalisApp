@@ -8,19 +8,18 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
 
-use axum::extract::ws::Message;
 use portalis_nexus_server_core::ConnectionId;
 use tokio::sync::mpsc;
 
 /// The outbound queue of every live connection.
 #[derive(Debug, Default)]
 pub struct Connections {
-    outbound: Mutex<HashMap<ConnectionId, mpsc::Sender<Message>>>,
+    outbound: Mutex<HashMap<ConnectionId, mpsc::Sender<Vec<u8>>>>,
 }
 
 impl Connections {
     /// Publishes where to reach `connection`.
-    pub fn register(&self, connection: ConnectionId, outbound: mpsc::Sender<Message>) {
+    pub fn register(&self, connection: ConnectionId, outbound: mpsc::Sender<Vec<u8>>) {
         self.lock().insert(connection, outbound);
     }
 
@@ -34,11 +33,11 @@ impl Connections {
     /// Returns whether it was queued. A full queue means the peer is not
     /// reading, and an event is dropped rather than allowed to block the
     /// server or grow without bound; the peer refreshes state on reconnect.
-    pub fn send(&self, connection: ConnectionId, message: Message) -> bool {
+    pub fn send(&self, connection: ConnectionId, frame: Vec<u8>) -> bool {
         let Some(outbound) = self.lock().get(&connection).cloned() else {
             return false;
         };
-        outbound.try_send(message).is_ok()
+        outbound.try_send(frame).is_ok()
     }
 
     #[must_use]
@@ -51,7 +50,7 @@ impl Connections {
         self.len() == 0
     }
 
-    fn lock(&self) -> MutexGuard<'_, HashMap<ConnectionId, mpsc::Sender<Message>>> {
+    fn lock(&self) -> MutexGuard<'_, HashMap<ConnectionId, mpsc::Sender<Vec<u8>>>> {
         // Never held across an await, so poisoning would mean a bug elsewhere.
         self.outbound
             .lock()
@@ -66,8 +65,8 @@ mod tests {
     const PHONE: ConnectionId = [10; 16];
     const LAPTOP: ConnectionId = [11; 16];
 
-    fn note() -> Message {
-        Message::Binary(vec![1, 2, 3].into())
+    fn note() -> Vec<u8> {
+        vec![1, 2, 3]
     }
 
     #[tokio::test]

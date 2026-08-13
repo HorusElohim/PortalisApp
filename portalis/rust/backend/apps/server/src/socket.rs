@@ -79,7 +79,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, peer: SocketAddr) {
 /// Reads until the peer leaves, the queue fills, or the server starts draining.
 async fn read_inbound(
     stream: &mut SplitStream<WebSocket>,
-    outbound: &mpsc::Sender<Message>,
+    outbound: &mpsc::Sender<Vec<u8>>,
     draining: &mut watch::Receiver<bool>,
     session: &mut Session,
     state: &AppState,
@@ -147,13 +147,16 @@ async fn read_inbound(
     }
 }
 
-/// Writes queued messages, then closes the socket once the queue is dropped.
+/// Writes queued frames, then closes the socket once the queue is dropped.
+///
+/// The one place a frame becomes a WebSocket message, which is what lets the
+/// service and the connection registry stay unaware there is a WebSocket.
 async fn write_outbound(
     mut sink: SplitSink<WebSocket, Message>,
-    mut inbox: mpsc::Receiver<Message>,
+    mut inbox: mpsc::Receiver<Vec<u8>>,
 ) {
-    while let Some(message) = inbox.recv().await {
-        if let Err(error) = sink.send(message).await {
+    while let Some(frame) = inbox.recv().await {
+        if let Err(error) = sink.send(Message::Binary(frame.into())).await {
             warn!(%error, "socket write failed");
             return;
         }

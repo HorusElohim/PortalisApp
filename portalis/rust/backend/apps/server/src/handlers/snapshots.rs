@@ -429,13 +429,8 @@ mod tests {
     }
 
     /// The envelope inside one queued outbound frame.
-    fn pushed(message: &axum::extract::ws::Message) -> Option<Envelope> {
-        match message {
-            axum::extract::ws::Message::Binary(bytes) => {
-                portalis_nexus_protocol::decode_frame(bytes).ok()
-            }
-            _ => None,
-        }
+    fn pushed(frame: &[u8]) -> Option<Envelope> {
+        portalis_nexus_protocol::decode_frame(frame).ok()
     }
 
     /// A connection bound to a registered user and one of its devices.
@@ -643,7 +638,7 @@ mod tests {
         assert!(announced(&other).is_none());
         assert!(revocation(&other).is_none());
         assert!(refusal(&other).is_none());
-        assert!(pushed(&axum::extract::ws::Message::Text("not a frame".into())).is_none());
+        assert!(pushed(b"not a frame").is_none());
     }
 
     /// A share is private: a stranger asking for one by identifier learns
