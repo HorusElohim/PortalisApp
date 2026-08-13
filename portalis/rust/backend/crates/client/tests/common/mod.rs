@@ -13,7 +13,7 @@ use axum::extract::ws::{Message, WebSocketUpgrade};
 use axum::response::Response;
 use axum::routing::get;
 use ed25519_dalek::{Signer, SigningKey};
-use portalis_nexus_client::{ClientConfig, DeviceSigner, ReconnectPolicy};
+use portalis_nexus_client::{ClientConfig, DeviceSigner, EndpointAddr, ReconnectPolicy};
 use portalis_nexus_protocol::v1::envelope::Payload;
 use portalis_nexus_protocol::v1::{Envelope, Ping, ProtocolRange, ServerHello};
 use portalis_nexus_protocol::{
@@ -106,12 +106,33 @@ pub async fn serve(address: SocketAddr, router: Router) -> JoinHandle<()> {
 pub async fn start_server(address: SocketAddr) -> (AppState, JoinHandle<()>) {
     let state = AppState::default().with_server_authority(&address.to_string());
     state.mark_ready();
-    let handle = serve(address, portalis_nexus_server::app(&state)).await;
+    let SocketAddr::V4(address) = address else {
+        panic!("tests bind IPv4 addresses")
+    };
+    let service = iroh::Endpoint::builder()
+        .bind_addr_v4(address)
+        .clear_discovery()
+        .relay_mode(iroh::RelayMode::Disabled)
+        .secret_key(iroh::SecretKey::from_bytes(&[7; 32]))
+        .alpns(vec![portalis_nexus_client::NEXUS_ALPN.to_vec()])
+        .bind()
+        .await
+        .expect("bind test QUIC server");
+    let serving_state = state.clone();
+    let handle = tokio::spawn(async move {
+        while let Some(incoming) = service.accept().await {
+            let Ok(connection) = incoming.await else {
+                continue;
+            };
+            portalis_nexus_server::quic::serve(connection, serving_state.clone()).await;
+        }
+    });
     (state, handle)
 }
 
-pub fn endpoint(address: SocketAddr) -> String {
-    format!("ws://{address}{SOCKET_ROUTE}")
+pub fn endpoint(address: SocketAddr) -> EndpointAddr {
+    EndpointAddr::new(iroh::SecretKey::from_bytes(&[7; 32]).public())
+        .with_direct_addresses([address])
 }
 
 /// A reconnect policy that retries quickly enough for a test to observe it.

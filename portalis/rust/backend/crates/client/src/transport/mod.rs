@@ -65,7 +65,8 @@ impl NexusClient {
     ///
     /// Returns [`TransportError`] when QUIC, ALPN, or the protobuf hello is
     /// invalid.
-    pub async fn connect(endpoint: EndpointAddr) -> Result<Self, TransportError> {
+    pub async fn connect(endpoint: impl std::borrow::Borrow<EndpointAddr>) -> Result<Self, TransportError> {
+        let endpoint = endpoint.borrow().clone();
         let config = ClientConfig::default();
         let local = bind_endpoint().await?;
         let connection = handshake(&local, endpoint.clone(), config.request_timeout).await?;
@@ -79,9 +80,10 @@ impl NexusClient {
     /// Returns [`TransportError::ReconnectExhausted`] after the policy's final
     /// failed attempt, preserving the final transport error as its source.
     pub async fn connect_with_config(
-        endpoint: EndpointAddr,
+        endpoint: impl std::borrow::Borrow<EndpointAddr>,
         config: &ClientConfig,
     ) -> Result<Self, TransportError> {
+        let endpoint = endpoint.borrow().clone();
         let local = bind_endpoint().await?;
         let connection = handshake_with_retry(
             &local,

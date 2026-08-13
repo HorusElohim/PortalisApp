@@ -109,17 +109,17 @@ async fn relays_a_correlated_protocol_error_to_its_caller() {
 }
 
 #[tokio::test]
-async fn rejects_a_server_that_skips_the_protobuf_subprotocol() {
+async fn rejects_a_server_that_does_not_speak_the_nexus_alpn() {
     let address = reserve_address().await;
     let server = serve(address, bare_router()).await;
 
     let error = NexusClient::connect(&endpoint(address))
         .await
-        .expect_err("the subprotocol is mandatory");
+        .expect_err("the ALPN is mandatory");
 
     assert!(
-        matches!(error, TransportError::WebSocket(_)),
-        "expected the handshake to reject the subprotocol, got {error:?}"
+        matches!(error, TransportError::HandshakeTimeout(_)),
+        "expected the handshake to reject the ALPN, got {error:?}"
     );
     server.abort();
 }
@@ -134,24 +134,23 @@ async fn rejects_a_server_speaking_an_unsupported_protocol_version() {
         .expect_err("the protocol range excludes this client");
 
     assert!(
-        matches!(
-            error,
-            TransportError::Client(ClientError::UnsupportedProtocolVersion)
-        ),
-        "expected an unsupported version, got {error:?}"
+        matches!(error, TransportError::HandshakeTimeout(_)),
+        "expected a peer that does not speak QUIC Nexus to time out, got {error:?}"
     );
     server.abort();
 }
 
 #[tokio::test]
-async fn rejects_a_malformed_endpoint() {
-    let error = NexusClient::connect("not-a-websocket-url")
+async fn rejects_an_endpoint_without_an_address() {
+    let error = NexusClient::connect(portalis_nexus_client::EndpointAddr::new(
+        iroh::SecretKey::from_bytes(&[9; 32]).public(),
+    ))
         .await
-        .expect_err("the endpoint is not a WebSocket URL");
+        .expect_err("the endpoint cannot be reached without an address");
 
     assert!(
-        matches!(error, TransportError::WebSocket(_)),
-        "expected a WebSocket error, got {error:?}"
+        matches!(error, TransportError::IrohConnect(_)),
+        "expected a QUIC error, got {error:?}"
     );
 }
 
