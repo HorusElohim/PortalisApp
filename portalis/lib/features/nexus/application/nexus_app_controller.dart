@@ -61,6 +61,12 @@ class NexusAppController extends ChangeNotifier {
 
   Future<NexusAccepted> send(NexusCommand command) => _repository.send(command);
 
+  /// Selects the one collection whose expensive detail projection is needed.
+  /// Widgets consume this stream directly; it deliberately does not become a
+  /// second app-level cache beside [state].
+  Stream<NexusDetail?> watchDetail(int? collection) =>
+      _repository.watchDetail(collection);
+
   Future<void> stop() async {
     final wasStarted = _starting != null || _subscription != null;
     final subscription = _subscription;

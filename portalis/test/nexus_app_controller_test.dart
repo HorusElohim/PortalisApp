@@ -28,6 +28,31 @@ void main() {
     await controller.stop();
     expect(repository.stops, 1);
   });
+
+  test('forwards the selected detail stream without caching it', () async {
+    final repository = _Repository();
+    final controller = NexusAppController(repository: repository);
+    final detail = NexusDetail(
+      id: 9,
+      entries: [
+        NexusEntry(
+          id: 2,
+          label: 'episode.mp4',
+          bytes: BigInt.from(34),
+          selected: false,
+          available: false,
+        ),
+      ],
+      pieces: const [],
+      samples: const [],
+    );
+
+    final seen = controller.watchDetail(9).first;
+    repository.details.add(detail);
+
+    expect((await seen)?.entries.single.selected, isFalse);
+    expect(repository.detailCollections, [9]);
+  });
 }
 
 NexusAppState _state(String name) => NexusAppState(
@@ -45,7 +70,9 @@ NexusAppState _state(String name) => NexusAppState(
 
 class _Repository implements NexusAppRepository {
   final states = StreamController<NexusAppState>.broadcast();
+  final details = StreamController<NexusDetail?>.broadcast();
   final active = <bool>[];
+  final detailCollections = <int?>[];
   var starts = 0;
   var stops = 0;
 
@@ -63,10 +90,14 @@ class _Repository implements NexusAppRepository {
   Future<void> stop() async {
     stops++;
     await states.close();
+    await details.close();
   }
 
   @override
-  Stream<NexusDetail?> watchDetail(int? collection) => const Stream.empty();
+  Stream<NexusDetail?> watchDetail(int? collection) {
+    detailCollections.add(collection);
+    return details.stream;
+  }
 
   @override
   Stream<NexusAppState> watchStates() => states.stream;

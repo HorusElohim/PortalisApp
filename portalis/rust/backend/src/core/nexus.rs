@@ -286,6 +286,10 @@ impl Nexus {
             }
             Command::DeleteCollection { collection, .. } => self.delete_collection(*collection),
             Command::ImportTorrent { source } => self.import_torrent(source),
+            Command::DownloadSelection {
+                collection,
+                entries,
+            } => self.confirm_torrent_selection(*collection, entries),
             _ => Ok(()),
         }
     }
@@ -356,6 +360,7 @@ impl Nexus {
                 .map(|file| StoredImportEntry {
                     label: file.label.clone(),
                     bytes: file.bytes,
+                    selected: true,
                 })
                 .collect::<Vec<_>>();
             if let Err(error) = self
@@ -444,6 +449,62 @@ impl Nexus {
         Ok(())
     }
 
+    /// Records exactly which resolved files the person confirmed. Starting
+    /// the actual swarm transfer remains the substrate's job; keeping this
+    /// choice durable first prevents a later engine restart from fetching a
+    /// file the person deliberately excluded.
+    fn confirm_torrent_selection(
+        &self,
+        collection: Handle,
+        selected: &[Handle],
+    ) -> Result<(), CommandError> {
+        if selected.is_empty() {
+            return Err(CommandError::Invalid(
+                "choose at least one file before downloading".to_owned(),
+            ));
+        }
+        let key = self.collection_key(collection)?;
+        if self
+            .store
+            .torrent_import(&key)
+            .map_err(persistence)?
+            .is_none()
+        {
+            return Err(CommandError::Invalid(
+                "that collection is not a torrent import".to_owned(),
+            ));
+        }
+        let mut entries = self
+            .store
+            .torrent_import_entries(&key)
+            .map_err(persistence)?;
+        let requested = selected
+            .iter()
+            .map(|handle| handle.0)
+            .collect::<std::collections::HashSet<_>>();
+        if requested.len() != selected.len()
+            || requested.iter().any(|id| {
+                usize::try_from(*id)
+                    .ok()
+                    .and_then(|id| id.checked_sub(1))
+                    .is_none_or(|index| index >= entries.len())
+            })
+        {
+            return Err(CommandError::Invalid(
+                "the selected torrent file is no longer available".to_owned(),
+            ));
+        }
+        for (index, entry) in entries.iter_mut().enumerate() {
+            entry.selected =
+                requested.contains(&u32::try_from(index).unwrap_or(u32::MAX).saturating_add(1));
+        }
+        self.store
+            .put_torrent_import_entries(&key, &entries)
+            .map_err(persistence)?;
+        self.details.send_replace(self.import_detail(collection));
+        Ok(())
+    }
+
     fn collection_key(&self, handle: Handle) -> Result<Vec<u8>, CommandError> {
         self.collections
             .lock()
@@ -466,6 +527,7 @@ impl Nexus {
                     id: Handle(u32::try_from(index).unwrap_or(u32::MAX).saturating_add(1)),
                     label: entry.label,
                     bytes: entry.bytes,
+                    selected: entry.selected,
                     available: false,
                 })
                 .collect(),
@@ -908,7 +970,7 @@ mod tests {
         let source = scratch.0.join("fixture.torrent");
         std::fs::write(
             &source,
-            b"d4:infod6:lengthi5e4:name8:file.txt12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaee",
+            b"d4:infod5:filesld6:lengthi5e4:pathl5:a.txteed6:lengthi7e4:pathl5:b.txteee4:name6:Bundle12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaee",
         )
         .expect("writes descriptor");
         let nexus = open(&scratch);
@@ -919,27 +981,64 @@ mod tests {
             })
             .expect("imports metadata only");
         let imported = nexus.state().collections[0].clone();
-        assert_eq!(imported.name, "file.txt");
+        assert_eq!(imported.name, "Bundle");
         assert_eq!(imported.status, Status::Preparing);
-        assert_eq!(imported.entries, 1);
-        assert_eq!(imported.total_bytes, 5);
+        assert_eq!(imported.entries, 2);
+        assert_eq!(imported.total_bytes, 12);
 
         let detail = nexus.watch_detail(Some(imported.id));
         let detail = detail.borrow().clone().expect("selection detail");
-        assert_eq!(detail.entries.len(), 1);
-        assert_eq!(detail.entries[0].label, "file.txt");
+        assert_eq!(detail.entries.len(), 2);
+        assert_eq!(detail.entries[0].label, "a.txt");
         assert_eq!(detail.entries[0].bytes, 5);
+        assert!(
+            detail.entries.iter().all(|entry| entry.selected),
+            "everything starts selected"
+        );
         assert!(!detail.entries[0].available, "nothing was downloaded");
+
+        assert!(matches!(
+            nexus.command(&Command::DownloadSelection {
+                collection: imported.id,
+                entries: Vec::new(),
+            }),
+            Err(CommandError::Invalid(message)) if message.contains("at least one")
+        ));
+        nexus
+            .command(&Command::DownloadSelection {
+                collection: imported.id,
+                entries: vec![Handle(2)],
+            })
+            .expect("records a confirmed selection");
+        let detail = nexus.watch_detail(Some(imported.id));
+        assert_eq!(
+            detail.borrow().as_ref().map(|detail| detail
+                .entries
+                .iter()
+                .map(|entry| entry.selected)
+                .collect::<Vec<_>>()),
+            Some(vec![false, true]),
+            "only the confirmed file remains selected"
+        );
         nexus.close().await;
 
         std::fs::remove_file(source).expect("the original path is no longer needed");
         let reopened = open(&scratch);
         let restored = reopened.state().collections[0].clone();
-        assert_eq!(restored.entries, 1);
+        assert_eq!(restored.entries, 2);
         let detail = reopened.watch_detail(Some(restored.id));
         assert_eq!(
-            detail.borrow().as_ref().map(|detail| detail.entries.len()),
-            Some(1),
+            detail.borrow().as_ref().map(|detail| {
+                (
+                    detail.entries.len(),
+                    detail
+                        .entries
+                        .iter()
+                        .map(|entry| entry.selected)
+                        .collect::<Vec<_>>(),
+                )
+            }),
+            Some((2, vec![false, true])),
             "the selection was persisted with the collection"
         );
         reopened.close().await;

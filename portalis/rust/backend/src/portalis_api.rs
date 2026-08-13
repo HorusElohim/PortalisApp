@@ -90,6 +90,7 @@ pub struct AppEntry {
     pub id: u32,
     pub label: String,
     pub bytes: u64,
+    pub selected: bool,
     pub available: bool,
 }
 
@@ -359,6 +360,7 @@ fn detail_projection(detail: &Detail) -> AppDetail {
                 id: entry.id.0,
                 label: entry.label.clone(),
                 bytes: entry.bytes,
+                selected: entry.selected,
                 available: entry.available,
             })
             .collect(),
@@ -400,6 +402,21 @@ mod tests {
             command.into_core(),
             Ok(Command::ImportTorrent {
                 source: "magnet:?xt=urn:btih:abc".to_owned()
+            })
+        );
+    }
+
+    #[test]
+    fn maps_a_torrent_selection_to_core_handles() {
+        let mut command = command("downloadSelection");
+        command.collection = Some(7);
+        command.entries = vec![2, 5];
+
+        assert_eq!(
+            command.into_core(),
+            Ok(Command::DownloadSelection {
+                collection: Handle(7),
+                entries: vec![Handle(2), Handle(5)],
             })
         );
     }

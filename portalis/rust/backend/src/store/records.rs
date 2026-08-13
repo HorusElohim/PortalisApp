@@ -153,27 +153,41 @@ impl StoredEntry {
 pub struct StoredImportEntry {
     pub label: String,
     pub bytes: u64,
+    /// All resolved files start selected. The person's later selection is
+    /// durable so restarting before confirmation cannot widen a download.
+    pub selected: bool,
 }
 
 impl StoredImportEntry {
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(self.label.len() + 12);
+        let mut bytes = Vec::with_capacity(self.label.len() + 13);
         bytes.extend_from_slice(&self.bytes.to_be_bytes());
         write_string(&mut bytes, &self.label);
+        bytes.push(u8::from(self.selected));
         bytes
     }
 
     /// # Errors
     ///
     /// Returns [`Malformed`] when the row is truncated or carries trailing
-    /// bytes.
+    /// bytes. Rows written before selection became explicit end after the
+    /// label and mean every file was selected, preserving the safe default.
     pub fn decode(bytes: &[u8]) -> Result<Self, Malformed> {
         let mut reader = Reader::new(bytes);
         let bytes = reader.u64()?;
         let label = reader.string()?;
+        let selected = if reader.bytes.is_empty() {
+            true
+        } else {
+            reader.byte()? != 0
+        };
         reader.finish()?;
-        Ok(Self { label, bytes })
+        Ok(Self {
+            label,
+            bytes,
+            selected,
+        })
     }
 }
 
@@ -434,6 +448,35 @@ mod tests {
         );
         assert_eq!(StoredEntry::decode(&[]), Err(Malformed));
         assert_eq!(StoredEntry::decode(&[9]), Err(Malformed));
+    }
+
+    #[test]
+    fn an_imported_file_keeps_its_selection_and_old_rows_default_to_selected() {
+        let selected = StoredImportEntry {
+            label: "episode.mp4".to_owned(),
+            bytes: 34,
+            selected: true,
+        };
+        let skipped = StoredImportEntry {
+            selected: false,
+            ..selected.clone()
+        };
+        assert_eq!(StoredImportEntry::decode(&selected.encode()), Ok(selected));
+        assert_eq!(StoredImportEntry::decode(&skipped.encode()), Ok(skipped));
+
+        // Version 3 stored the byte count and label only. It meant every
+        // resolved file was selected, which remains the safe interpretation.
+        let mut version_three = Vec::new();
+        version_three.extend_from_slice(&34_u64.to_be_bytes());
+        write_string(&mut version_three, "episode.mp4");
+        assert_eq!(
+            StoredImportEntry::decode(&version_three),
+            Ok(StoredImportEntry {
+                label: "episode.mp4".to_owned(),
+                bytes: 34,
+                selected: true,
+            })
+        );
     }
 
     #[test]

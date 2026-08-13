@@ -294,18 +294,24 @@ class AppEntry {
   final int id;
   final String label;
   final BigInt bytes;
+  final bool selected;
   final bool available;
 
   const AppEntry({
     required this.id,
     required this.label,
     required this.bytes,
+    required this.selected,
     required this.available,
   });
 
   @override
   int get hashCode =>
-      id.hashCode ^ label.hashCode ^ bytes.hashCode ^ available.hashCode;
+      id.hashCode ^
+      label.hashCode ^
+      bytes.hashCode ^
+      selected.hashCode ^
+      available.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -315,6 +321,7 @@ class AppEntry {
           id == other.id &&
           label == other.label &&
           bytes == other.bytes &&
+          selected == other.selected &&
           available == other.available;
 }
 

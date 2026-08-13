@@ -30,6 +30,10 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Imported `.torrent` files now retain their per-file selection in Nexus.
+  Every file starts selected; confirming a narrower selection persists it
+  across restart, while an empty selection is rejected before any download.
+
 - Transfer panels now make download progress, byte totals, speeds, and ETA
   easier to scan. Peer sections show the collection's real local transfer
   progress without inventing a split per anonymous swarm address. The People

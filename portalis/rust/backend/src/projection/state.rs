@@ -169,6 +169,8 @@ pub struct EntryState {
     pub id: Handle,
     pub label: String,
     pub bytes: u64,
+    /// The local choice to include this file when the torrent is confirmed.
+    pub selected: bool,
     pub available: bool,
 }
 

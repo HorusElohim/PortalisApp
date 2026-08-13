@@ -120,12 +120,14 @@ class NexusEntry {
     required this.id,
     required this.label,
     required this.bytes,
+    required this.selected,
     required this.available,
   });
 
   final int id;
   final String label;
   final BigInt bytes;
+  final bool selected;
   final bool available;
 }
 

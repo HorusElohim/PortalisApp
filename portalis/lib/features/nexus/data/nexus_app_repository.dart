@@ -106,6 +106,7 @@ class FrbNexusAppRepository implements NexusAppRepository {
                 id: entry.id,
                 label: entry.label,
                 bytes: entry.bytes,
+                selected: entry.selected,
                 available: entry.available,
               ),
             )

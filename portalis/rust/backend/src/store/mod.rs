@@ -975,10 +975,12 @@ mod tests {
             StoredImportEntry {
                 label: "cover.jpg".to_owned(),
                 bytes: 12,
+                selected: true,
             },
             StoredImportEntry {
                 label: "episode.mp4".to_owned(),
                 bytes: 34,
+                selected: false,
             },
         ];
         store

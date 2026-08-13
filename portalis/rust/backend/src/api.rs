@@ -1633,11 +1633,13 @@ impl SseDecode for crate::portalis_api::AppEntry {
         let mut var_id = <u32>::sse_decode(deserializer);
         let mut var_label = <String>::sse_decode(deserializer);
         let mut var_bytes = <u64>::sse_decode(deserializer);
+        let mut var_selected = <bool>::sse_decode(deserializer);
         let mut var_available = <bool>::sse_decode(deserializer);
         return crate::portalis_api::AppEntry {
             id: var_id,
             label: var_label,
             bytes: var_bytes,
+            selected: var_selected,
             available: var_available,
         };
     }
@@ -2638,6 +2640,7 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppEntry {
             self.id.into_into_dart().into_dart(),
             self.label.into_into_dart().into_dart(),
             self.bytes.into_into_dart().into_dart(),
+            self.selected.into_into_dart().into_dart(),
             self.available.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -3169,6 +3172,7 @@ impl SseEncode for crate::portalis_api::AppEntry {
         <u32>::sse_encode(self.id, serializer);
         <String>::sse_encode(self.label, serializer);
         <u64>::sse_encode(self.bytes, serializer);
+        <bool>::sse_encode(self.selected, serializer);
         <bool>::sse_encode(self.available, serializer);
     }
 }
