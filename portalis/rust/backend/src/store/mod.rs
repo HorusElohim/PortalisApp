@@ -36,7 +36,7 @@ use thiserror::Error;
 use records::{Malformed, StoredCollection, StoredContact, StoredEntry, StoredSample};
 use schema::{
     COLLECTIONS, CONTACTS, DEVICE_LOG, ENTRIES, IDENTITY, MANIFESTS, META, OUTBOX, REVISIONS,
-    SAMPLES, SCHEMA_VERSION, SCHEMA_VERSION_KEY,
+    SAMPLES, SCHEMA_VERSION, SCHEMA_VERSION_KEY, TORRENT_IMPORTS,
 };
 
 /// Why the store could not answer.
@@ -170,6 +170,7 @@ impl Store {
             write.open_table(REVISIONS)?;
             write.open_table(MANIFESTS)?;
             write.open_table(ENTRIES)?;
+            write.open_table(TORRENT_IMPORTS)?;
             write.open_table(OUTBOX)?;
             write.open_table(SAMPLES)?;
             write
@@ -335,6 +336,39 @@ impl Store {
         self.get(ENTRIES, info_hash)?
             .map(|bytes| StoredEntry::decode(&bytes).map_err(StoreError::from))
             .transpose()
+    }
+
+    // ----- torrent imports ---------------------------------------------
+
+    /// Records a descriptor source before any torrent payload is downloaded.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the write fails.
+    pub fn put_torrent_import(&self, collection_id: &[u8], source: &str) -> Result<(), StoreError> {
+        self.put(TORRENT_IMPORTS, collection_id, source.as_bytes())
+    }
+
+    /// The unresolved import source, if this collection came from a torrent.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the row cannot be read or is not UTF-8.
+    pub fn torrent_import(&self, collection_id: &[u8]) -> Result<Option<String>, StoreError> {
+        self.get(TORRENT_IMPORTS, collection_id)?
+            .map(|source| String::from_utf8(source).map_err(|_| StoreError::Malformed))
+            .transpose()
+    }
+
+    /// Removes an import source once its owning collection is gone.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the write fails.
+    pub fn forget_torrent_import(&self, collection_id: &[u8]) -> Result<(), StoreError> {
+        let write = self.database.begin_write()?;
+        {
+            write.open_table(TORRENT_IMPORTS)?.remove(collection_id)?;
+        }
+        write.commit()?;
+        Ok(())
     }
 
     // ----- identity, contacts, device logs ------------------------------
@@ -828,6 +862,24 @@ mod tests {
         // Forgetting something absent is not an error: the end state is what
         // was asked for either way.
         store.forget_collection(&COLLECTION).expect("forgets again");
+    }
+
+    #[test]
+    fn a_torrent_source_belongs_to_its_collection_and_can_be_forgotten() {
+        let scratch = Scratch::new("torrent-import");
+        let store = Store::open(scratch.file()).expect("opens");
+
+        store
+            .put_torrent_import(&COLLECTION, "magnet:?xt=urn:btih:abc")
+            .expect("stores");
+        assert_eq!(
+            store.torrent_import(&COLLECTION).expect("reads"),
+            Some("magnet:?xt=urn:btih:abc".to_owned())
+        );
+        assert_eq!(store.torrent_import(&OTHER).expect("reads"), None);
+
+        store.forget_torrent_import(&COLLECTION).expect("forgets");
+        assert_eq!(store.torrent_import(&COLLECTION).expect("reads"), None);
     }
 
     #[test]

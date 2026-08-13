@@ -17,7 +17,7 @@ use redb::TableDefinition;
 /// [`super::StoreError::FromTheFuture`]) rather than being read with the wrong
 /// assumptions — silently misreading a user's own data is worse than declining
 /// to start.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Where the schema version itself lives.
 pub const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
@@ -38,6 +38,9 @@ pub const REVISIONS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("revis
 pub const MANIFESTS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("manifests");
 /// Descriptor bytes and local status, by info hash.
 pub const ENTRIES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("entries");
+/// A magnet URI or local `.torrent` path waiting for metadata resolution,
+/// keyed by its owning Nexus collection.
+pub const TORRENT_IMPORTS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("torrent_imports");
 /// Commands awaiting connectivity, by sequence.
 pub const OUTBOX: TableDefinition<u64, &[u8]> = TableDefinition::new("outbox");
 /// The transfer history ring. Key: collection ‖ timestamp.

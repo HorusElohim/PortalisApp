@@ -97,6 +97,11 @@ impl LocalCollections {
             let revision = store
                 .current_revision(&key)?
                 .map_or(0, |(number, _)| number);
+            let status = if store.torrent_import(&key)?.is_some() {
+                Status::Preparing
+            } else {
+                Status::Available
+            };
             projected.push(CollectionState {
                 id: handle,
                 name: stored.name,
@@ -105,7 +110,7 @@ impl LocalCollections {
                     StoredRole::Member => Role::Member,
                 },
                 revision,
-                status: Status::Available,
+                status,
                 members: Vec::new(),
                 entries: 0,
                 total_bytes: 0,
@@ -277,6 +282,7 @@ impl Nexus {
                 self.rename_collection(*collection, name)
             }
             Command::DeleteCollection { collection, .. } => self.delete_collection(*collection),
+            Command::ImportTorrent { source } => self.import_torrent(source),
             _ => Ok(()),
         }
     }
@@ -315,6 +321,46 @@ impl Nexus {
         Ok(())
     }
 
+    fn import_torrent(&self, source: &str) -> Result<(), CommandError> {
+        let id = crate::collections::model::CollectionId::generate();
+        let stored = StoredCollection {
+            name: torrent_name(source),
+            role: StoredRole::Owner,
+            content_key: portalis_nexus_client::generate_content_key(),
+            media_path: String::new(),
+        };
+        self.store
+            .put_collection(id.as_bytes(), &stored)
+            .map_err(persistence)?;
+        if let Err(error) = self.store.put_torrent_import(id.as_bytes(), source) {
+            // The collection was never valid without its source. Compensate
+            // before returning rather than leaving a half-import visible.
+            let _ = self.store.forget_collection(id.as_bytes());
+            return Err(persistence(error));
+        }
+
+        let handle = self
+            .collections
+            .lock()
+            .map_err(|_| CommandError::Persistence("the collection index was poisoned".to_owned()))?
+            .assign(id.as_bytes().to_vec());
+        let mut state = self.state();
+        state.collections.push(CollectionState {
+            id: handle,
+            name: stored.name,
+            role: Role::Owner,
+            revision: 0,
+            status: Status::Preparing,
+            members: Vec::new(),
+            entries: 0,
+            total_bytes: 0,
+            transfer: None,
+            pending: None,
+        });
+        self.states.send_replace(state);
+        Ok(())
+    }
+
     fn rename_collection(&self, handle: Handle, name: &str) -> Result<(), CommandError> {
         let key = self.collection_key(handle)?;
         let mut stored = self
@@ -340,6 +386,9 @@ impl Nexus {
 
     fn delete_collection(&self, handle: Handle) -> Result<(), CommandError> {
         let key = self.collection_key(handle)?;
+        self.store
+            .forget_torrent_import(&key)
+            .map_err(persistence)?;
         self.store.forget_collection(&key).map_err(persistence)?;
         self.collections
             .lock()
@@ -425,9 +474,25 @@ fn validate(command: &Command) -> Result<(), CommandError> {
         Command::ImportTorrent { source } if source.trim().is_empty() => {
             "choose a magnet URI or .torrent file"
         }
+        Command::ImportTorrent { source }
+            if !source.starts_with("magnet:?") && !source.ends_with(".torrent") =>
+        {
+            "choose a magnet URI or a .torrent file"
+        }
         _ => return Ok(()),
     };
     Err(CommandError::Invalid(complaint.to_owned()))
+}
+
+fn torrent_name(source: &str) -> String {
+    if source.starts_with("magnet:?") {
+        return "Torrent import".to_owned();
+    }
+    std::path::Path::new(source)
+        .file_stem()
+        .and_then(std::ffi::OsStr::to_str)
+        .filter(|name| !name.is_empty())
+        .map_or_else(|| "Torrent import".to_owned(), ToOwned::to_owned)
 }
 
 #[cfg(test)]
@@ -747,6 +812,43 @@ mod tests {
             Err(CommandError::Invalid(message)) if message.contains("magnet URI")
         ));
 
+        nexus.close().await;
+    }
+
+    #[tokio::test]
+    async fn a_torrent_import_is_a_durable_collection_before_downloading() {
+        let scratch = Scratch::new("torrent-import");
+        let nexus = open(&scratch);
+
+        nexus
+            .command(&Command::ImportTorrent {
+                source: "magnet:?xt=urn:btih:0123456789abcdef".to_owned(),
+            })
+            .expect("records the import");
+        let imported = nexus.state().collections[0].clone();
+        assert_eq!(imported.name, "Torrent import");
+        assert_eq!(imported.status, Status::Preparing);
+        assert_eq!(imported.entries, 0, "metadata has not resolved yet");
+        nexus.close().await;
+
+        let reopened = open(&scratch);
+        assert_eq!(reopened.state().collections.len(), 1);
+        assert_eq!(reopened.state().collections[0].status, Status::Preparing);
+        reopened.close().await;
+    }
+
+    #[tokio::test]
+    async fn a_torrent_import_rejects_a_source_that_is_neither_a_magnet_nor_a_torrent_file() {
+        let scratch = Scratch::new("bad-torrent-import");
+        let nexus = open(&scratch);
+
+        assert!(matches!(
+            nexus.command(&Command::ImportTorrent {
+                source: "https://example.com/movie".to_owned()
+            }),
+            Err(CommandError::Invalid(message)) if message.contains("magnet URI")
+        ));
+        assert!(nexus.state().collections.is_empty());
         nexus.close().await;
     }
 

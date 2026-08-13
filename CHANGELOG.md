@@ -30,6 +30,11 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Torrent imports now start as durable owner-controlled Nexus collections in
+  a preparation state. Portalis records a magnet URI or local `.torrent`
+  source without downloading payload bytes, ready for metadata selection in
+  the next workflow step.
+
 - Portalis now starts one app-owned Nexus runtime and state subscription after
   verifying native/frontend compatibility. Backgrounding pauses its network
   work and shutdown drains it; generated bridge imports for this path are
