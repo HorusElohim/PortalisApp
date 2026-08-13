@@ -1,4 +1,9 @@
-//! Bounded encoding and decoding of one WebSocket binary message.
+//! Bounded encoding and decoding of one protocol frame.
+//!
+//! A WebSocket delimits messages for us; a QUIC stream does not, so a frame
+//! sent over one carries its length in front. Both ends of that agreement live
+//! here rather than in the two transports, because a length prefix is the kind
+//! of thing that is easy to write twice and easy to write twice differently.
 
 use prost::Message;
 use thiserror::Error;
@@ -6,6 +11,39 @@ use thiserror::Error;
 use crate::limits::MAX_FRAME_BYTES;
 use crate::v1;
 use crate::validate::ValidationError;
+
+/// A frame on a byte stream is a four-byte big-endian length, then that many
+/// bytes.
+pub const LENGTH_PREFIX_BYTES: usize = 4;
+
+/// The prefix announcing `frame`.
+///
+/// Takes the frame rather than a length, so there is no way to announce a
+/// number that is not the one about to be written.
+#[must_use]
+pub fn length_prefix(frame: &[u8]) -> [u8; LENGTH_PREFIX_BYTES] {
+    // Bounded by `MAX_FRAME_BYTES`, which is far below `u32::MAX`, and every
+    // frame reaching a transport has been through `encode_frame`.
+    let length = u32::try_from(frame.len()).unwrap_or(u32::MAX);
+    length.to_be_bytes()
+}
+
+/// How many bytes follow, or [`FrameError::TooLarge`] if the peer claims more
+/// than the limit.
+///
+/// Checked before the reader allocates, which is the entire point of having a
+/// limit: a peer that asks for a gigabyte should be refused, not accommodated
+/// and then complained about.
+///
+/// # Errors
+///
+/// Returns [`FrameError::TooLarge`] when the announced length is over
+/// [`MAX_FRAME_BYTES`].
+pub fn frame_length(prefix: [u8; LENGTH_PREFIX_BYTES]) -> Result<usize, FrameError> {
+    let actual = u32::from_be_bytes(prefix) as usize;
+    validate_frame_size(actual)?;
+    Ok(actual)
+}
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum FrameError {
@@ -137,5 +175,31 @@ mod tests {
                 actual: MAX_FRAME_BYTES + 1,
             })
         );
+    }
+
+    /// A prefix says exactly what follows, and a claim over the limit is
+    /// refused on the prefix alone — before a reader has allocated for it.
+    #[test]
+    fn a_frame_announces_its_own_length_and_an_overlong_claim_is_refused() {
+        let frame = encode_frame(&ping_envelope()).expect("encodes");
+        assert_eq!(
+            frame_length(length_prefix(&frame)),
+            Ok(frame.len()),
+            "what is announced is what is written"
+        );
+        assert_eq!(frame_length(length_prefix(b"")), Ok(0));
+
+        let too_long = u32::try_from(MAX_FRAME_BYTES + 1).expect("bounded");
+        assert_eq!(
+            frame_length(too_long.to_be_bytes()),
+            Err(FrameError::TooLarge {
+                actual: MAX_FRAME_BYTES + 1
+            })
+        );
+        // The largest claim there is, refused the same way.
+        assert!(matches!(
+            frame_length(u32::MAX.to_be_bytes()),
+            Err(FrameError::TooLarge { .. })
+        ));
     }
 }

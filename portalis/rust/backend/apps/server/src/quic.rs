@@ -19,7 +19,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use iroh::endpoint::{Connection, RecvStream, SendStream};
 use portalis_nexus_protocol::{
-    MAX_FRAME_BYTES, MAX_OUTBOUND_QUEUE, decode_frame, format_id, payload_name,
+    LENGTH_PREFIX_BYTES, MAX_OUTBOUND_QUEUE, decode_frame, format_id, frame_length, length_prefix,
+    payload_name,
 };
 use tokio::sync::{mpsc, watch};
 use tracing::{Instrument, debug, info_span, warn};
@@ -117,14 +118,11 @@ async fn read_inbound(
 
 /// One length-prefixed frame, or `None` when the peer has finished.
 async fn read_frame(receive: &mut RecvStream) -> Option<Vec<u8>> {
-    let mut length = [0_u8; 4];
-    receive.read_exact(&mut length).await.ok()?;
-    let length = u32::from_be_bytes(length) as usize;
-    if length > MAX_FRAME_BYTES {
-        // Refused before allocating for it, which is the point of the bound.
-        warn!(length, "frame over the limit");
-        return None;
-    }
+    let mut prefix = [0_u8; LENGTH_PREFIX_BYTES];
+    receive.read_exact(&mut prefix).await.ok()?;
+    let length = frame_length(prefix)
+        .inspect_err(|error| warn!(%error, "frame over the limit"))
+        .ok()?;
     let mut frame = vec![0_u8; length];
     receive.read_exact(&mut frame).await.ok()?;
     Some(frame)
@@ -133,8 +131,7 @@ async fn read_frame(receive: &mut RecvStream) -> Option<Vec<u8>> {
 /// Owns the send half, so every outbound message crosses one bounded queue.
 async fn write_outbound(mut send: SendStream, mut inbox: mpsc::Receiver<Vec<u8>>) {
     while let Some(frame) = inbox.recv().await {
-        let length = u32::try_from(frame.len()).unwrap_or(u32::MAX);
-        if send.write_all(&length.to_be_bytes()).await.is_err()
+        if send.write_all(&length_prefix(&frame)).await.is_err()
             || send.write_all(&frame).await.is_err()
         {
             debug!("peer stopped reading");

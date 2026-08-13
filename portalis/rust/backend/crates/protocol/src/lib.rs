@@ -40,7 +40,10 @@ pub use format::sealed::{
     ManifestContext, SEALED_MANIFEST_VERSION, SealedManifestError, open as open_manifest,
     seal as seal_manifest,
 };
-pub use frame::{FrameError, decode_frame, encode_frame, validate_frame_size};
+pub use frame::{
+    FrameError, LENGTH_PREFIX_BYTES, decode_frame, encode_frame, frame_length, length_prefix,
+    validate_frame_size,
+};
 pub use ids::{
     UUID_V7_ENTROPY_BYTES, derive_device_id, format_id, new_challenge, new_message_id, user_id_from,
 };
