@@ -30,6 +30,13 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Transfer panels now make download progress, byte totals, speeds, and ETA
+  easier to scan. Peer sections show the collection's real local transfer
+  progress without inventing a split per anonymous swarm address. The People
+  screen replaces individual removals with a visible “Forget all remembered
+  peers” action, undoable from its toast or `Ctrl+Z` (`⌘Z` on macOS) for six
+  seconds.
+
 - Local `.torrent` imports now resolve their descriptor and file metadata
   before a collection is shown. The persisted preparation view exposes every
   file and its size for later selection, while deliberately fetching no

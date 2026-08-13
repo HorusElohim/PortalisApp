@@ -33,6 +33,9 @@ class CollectionsController extends ChangeNotifier {
   List<Collection> _collections = const [];
   List<PeerObservation> _peerHistory = const [];
   final Set<String> _hiddenPeerAddresses = {};
+  List<PeerObservation>? _forgottenPeerHistory;
+  Set<String>? _forgottenPeerAddresses;
+  Timer? _peerUndoTimer;
   bool _peerHistoryLoaded = false;
   final Map<String, TransferHistory> _transferHistories = {};
   List<Collection> get collections => List.unmodifiable(_collections);
@@ -96,6 +99,13 @@ class CollectionsController extends ChangeNotifier {
   void stop() {
     _timer?.cancel();
     _timer = null;
+  }
+
+  @override
+  void dispose() {
+    _peerUndoTimer?.cancel();
+    stop();
+    super.dispose();
   }
 
   /// Coalesces timer ticks and manual refreshes onto one native snapshot.
@@ -162,12 +172,52 @@ class CollectionsController extends ChangeNotifier {
 
   List<PeerObservation> get peerHistory => _visiblePeerHistory();
 
-  Future<void> forgetPeer(String address) async {
-    _hiddenPeerAddresses.add(address);
-    _peerHistory =
-        _peerHistory.where((peer) => peer.address != address).toList();
-    await _savePeerHistory();
+  /// Clears remembered swarm peers together. The active engine is not
+  /// touched: it may keep transferring, while the UI hides those transient
+  /// addresses until the person undoes the action or the session changes.
+  ///
+  /// Returns the number of distinct addresses removed, so the caller can
+  /// explain exactly what its Undo action restores.
+  Future<int> forgetAllPeers() async {
+    final visible = peerHistory;
+    final addresses = {for (final peer in visible) peer.address};
+    if (addresses.isEmpty) return 0;
+
+    _forgottenPeerHistory = List.of(_peerHistory);
+    _forgottenPeerAddresses = Set.of(_hiddenPeerAddresses);
+    _peerUndoTimer?.cancel();
+    _peerUndoTimer = Timer(const Duration(seconds: 6), _expirePeerUndo);
+    _hiddenPeerAddresses.addAll(addresses);
+    _peerHistory = const [];
+    // Remembering peers is auxiliary state. Do not make the visible removal
+    // and its undo affordance wait for a preferences write.
+    unawaited(_savePeerHistory());
     notifyListeners();
+    return addresses.length;
+  }
+
+  /// Restores the last bulk peer removal while its UI action is still shown.
+  Future<void> undoForgetAllPeers() async {
+    final history = _forgottenPeerHistory;
+    final hidden = _forgottenPeerAddresses;
+    if (history == null || hidden == null) return;
+
+    _peerHistory = history;
+    _hiddenPeerAddresses
+      ..clear()
+      ..addAll(hidden);
+    _forgottenPeerHistory = null;
+    _forgottenPeerAddresses = null;
+    _peerUndoTimer?.cancel();
+    _peerUndoTimer = null;
+    unawaited(_savePeerHistory());
+    notifyListeners();
+  }
+
+  void _expirePeerUndo() {
+    _forgottenPeerHistory = null;
+    _forgottenPeerAddresses = null;
+    _peerUndoTimer = null;
   }
 
   Future<Collection> create(String name) => _refreshAfter(
@@ -235,6 +285,12 @@ class CollectionsController extends ChangeNotifier {
   void debugSeed(List<Collection> collections, {String? error}) {
     stop();
     _transferHistories.clear();
+    _peerUndoTimer?.cancel();
+    _peerUndoTimer = null;
+    _forgottenPeerHistory = null;
+    _forgottenPeerAddresses = null;
+    _peerHistory = const [];
+    _hiddenPeerAddresses.clear();
     _collections = List.of(collections);
     lastError = error;
     _lastSeen = null;

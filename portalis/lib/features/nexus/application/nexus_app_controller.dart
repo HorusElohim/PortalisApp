@@ -62,9 +62,11 @@ class NexusAppController extends ChangeNotifier {
   Future<NexusAccepted> send(NexusCommand command) => _repository.send(command);
 
   Future<void> stop() async {
+    final wasStarted = _starting != null || _subscription != null;
     final subscription = _subscription;
     _subscription = null;
     await subscription?.cancel();
+    if (!wasStarted) return;
     await _repository.stop();
     _starting = null;
   }

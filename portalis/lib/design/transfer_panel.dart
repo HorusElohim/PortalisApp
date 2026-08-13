@@ -118,7 +118,7 @@ class TransferPanel extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadius.pill),
               child: LinearProgressIndicator(
                 value: progress.clamp(0.0, 1.0),
-                minHeight: 4,
+                minHeight: 6,
                 backgroundColor: AppColors.borderStrong,
                 valueColor: AlwaysStoppedAnimation(color),
               ),
@@ -327,22 +327,22 @@ class _ProgressSummary extends StatelessWidget {
           Text(
             hasTotal ? formatProgressPercent(progress) : '—',
             style: displayText(
-              size: 30,
+              size: 38,
               color: color,
               weight: FontWeight.w700,
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.only(bottom: 6),
               child: Text(
                 hasTotal
                     ? '${formatBytes(downloadedBytes)} of ${formatBytes(totalBytes)}'
                     : (pendingLabel ?? 'Waiting for metadata'),
                 overflow: TextOverflow.ellipsis,
                 style: monoLabel(
-                  size: 12,
+                  size: 15,
                   color: AppColors.text,
                   weight: FontWeight.w700,
                   letterSpacing: 0.1,
@@ -366,16 +366,15 @@ class _PanelMetric extends StatelessWidget {
         children: [
           Text(
             label,
-            style: monoLabel(size: 8, color: AppColors.textGhost),
+            style: monoLabel(size: 9, color: AppColors.textGhost),
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 4),
           Text(
             value,
-            style: monoLabel(
-              size: 12,
+            style: displayText(
+              size: 19,
               color: AppColors.text,
               weight: FontWeight.w700,
-              letterSpacing: 0,
             ),
           ),
         ],

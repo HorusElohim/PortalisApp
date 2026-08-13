@@ -1,5 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../app/app_controllers.dart';
 import '../design/design.dart';
 import '../features/appearance/application/theme_controller.dart';
 import '../screens/root_shell.dart';
@@ -26,11 +30,20 @@ class MyApp extends StatelessWidget {
           home: const RootShell(),
           navigatorKey: AppNavigation.navigatorKey,
           navigatorObservers: [AppNavigation.observer],
-          builder: (context, child) => ToastScope(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-              child: child ?? const SizedBox.shrink(),
+          builder: (context, child) => CallbackShortcuts(
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.keyZ, control: true):
+                  () => unawaited(
+                      AppControllers.collections.undoForgetAllPeers()),
+              const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): () =>
+                  unawaited(AppControllers.collections.undoForgetAllPeers()),
+            },
+            child: ToastScope(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           ),
         ),

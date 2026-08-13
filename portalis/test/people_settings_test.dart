@@ -1,5 +1,6 @@
 import 'test_support.dart';
 
+import 'package:flutter/services.dart';
 import 'package:portalis/features/collections/presentation/collection_presentation.dart';
 
 void main() {
@@ -47,8 +48,37 @@ void main() {
       expect(find.textContaining('seen'), findsNothing);
       expect(find.textContaining('ago'), findsNothing);
       expect(find.text('72.6'), findsNothing);
-      expect(find.text('—'), findsWidgets);
-      expect(find.byTooltip('Forget peer'), findsOneWidget);
+      expect(find.text('Individual transfer totals are unavailable'),
+          findsOneWidget);
+      expect(find.text('LIVE'), findsOneWidget);
+      expect(find.text('Forget all remembered peers'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('forgetting all peers offers an undo action', (tester) async {
+      await pumpApp(tester, collections: [
+        buildCollection(
+          id: 'shared-with-peer',
+          torrentPeers: const ['198.51.100.7:6881'],
+        ),
+      ]);
+
+      await tester.tap(find.byKey(const Key('navTab2')));
+      await tester.pump();
+      await tester.tap(find.text('Forget all remembered peers'));
+      await tester.pump();
+
+      expect(AppControllers.collections.peerHistory, isEmpty);
+      expect(find.text('Forgot 1 torrent peer'), findsOneWidget);
+      expect(find.byKey(const Key('toastUndoAction')), findsOneWidget);
+      expect(find.text('198.51.100.7:6881'), findsNothing);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+
+      expect(find.text('198.51.100.7:6881'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -76,6 +106,9 @@ void main() {
       expect(find.textContaining(RegExp(r'Archive · 2m')), findsOneWidget);
       expect(find.textContaining('seen'), findsNothing);
       expect(find.textContaining('ago'), findsNothing);
+      expect(find.text('SEEN'), findsOneWidget);
+      expect(find.text('Individual transfer totals are unavailable'),
+          findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

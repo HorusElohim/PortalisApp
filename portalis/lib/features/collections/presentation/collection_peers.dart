@@ -13,12 +13,10 @@ class CollectionPeers extends StatelessWidget {
     super.key,
     required this.collection,
     this.peerHistory = const [],
-    this.onForgetPeer,
   });
 
   final Collection collection;
   final List<PeerObservation> peerHistory;
-  final ValueChanged<String>? onForgetPeer;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +28,10 @@ class CollectionPeers extends StatelessWidget {
       children: [
         SectionLabel('PEERS - $total'),
         const SizedBox(height: 7),
+        if (torrentPeers.isNotEmpty && collection.totalBytes > 0) ...[
+          _CollectionTransferProgress(collection: collection),
+          const SizedBox(height: 10),
+        ],
         if (total == 0)
           Text(
             collection.livePeers == 0
@@ -54,7 +56,6 @@ class CollectionPeers extends StatelessWidget {
                 _AnonymousPeer(
                   peer: peer,
                   active: collection.torrentPeers.contains(peer.address),
-                  onForget: onForgetPeer,
                 ),
             ],
           ),
@@ -93,19 +94,16 @@ class _AnonymousPeer extends StatelessWidget {
   const _AnonymousPeer({
     required this.peer,
     required this.active,
-    required this.onForget,
   });
 
   final PeerObservation peer;
   final bool active;
-  final ValueChanged<String>? onForget;
 
   @override
   Widget build(BuildContext context) => _PeerLabel(
         label: peer.address,
         detail: formatLastSeen(peer.lastSeen),
         color: active ? AppColors.ember : rememberedPeerColor(peer.address),
-        onForget: onForget == null ? null : () => onForget!(peer.address),
       );
 }
 
@@ -115,14 +113,12 @@ class _PeerLabel extends StatelessWidget {
     this.leading,
     this.detail,
     Color? color,
-    this.onForget,
   }) : color = color ?? AppColors.textDim;
 
   final String label;
   final Widget? leading;
   final String? detail;
   final Color color;
-  final VoidCallback? onForget;
 
   @override
   Widget build(BuildContext context) {
@@ -147,44 +143,97 @@ class _PeerLabel extends StatelessWidget {
                 : AppColors.border,
           ),
         ),
-        child: Row(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (leading != null) ...[leading!, const SizedBox(width: 6)],
-            Flexible(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: monoLabel(size: 10.5, color: color, letterSpacing: 0),
-              ),
-            ),
-            if (detail != null) ...[
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  detail!,
-                  overflow: TextOverflow.ellipsis,
-                  style: monoLabel(
-                    size: 9,
-                    color: AppColors.textDim,
-                    letterSpacing: 0,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (leading != null) ...[leading!, const SizedBox(width: 6)],
+                Flexible(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        monoLabel(size: 10.5, color: color, letterSpacing: 0),
                   ),
                 ),
-              ),
-            ],
-            if (onForget != null)
-              IconButton(
-                tooltip: 'Forget peer',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: const Icon(Icons.close, size: 14),
-                color: AppColors.textDim,
-                onPressed: onForget,
-              ),
+                if (detail != null) ...[
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      detail!,
+                      overflow: TextOverflow.ellipsis,
+                      style: monoLabel(
+                        size: 9,
+                        color: AppColors.textDim,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Bytes received by this device for the collection, not an invented split by
+/// peer. BitTorrent addresses identify a current connection but do not expose
+/// a durable, trustworthy contribution ledger after it leaves.
+class _CollectionTransferProgress extends StatelessWidget {
+  const _CollectionTransferProgress({required this.collection});
+
+  final Collection collection;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = collection.hue;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'COLLECTION TRANSFER',
+              style: monoLabel(
+                size: 9,
+                color: AppColors.textDim,
+                letterSpacing: 0.35,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              formatProgressPercent(collection.progress),
+              style: monoLabel(
+                size: 10,
+                color: color,
+                weight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          child: LinearProgressIndicator(
+            key: const Key('collectionPeerTransferProgress'),
+            value: collection.progress.clamp(0.0, 1.0).toDouble(),
+            minHeight: 4,
+            backgroundColor: AppColors.borderStrong,
+            valueColor: AlwaysStoppedAnimation(color),
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          '${formatBytes(collection.downloadedBytes)} of ${formatBytes(collection.totalBytes)} received on this device',
+          style: monoLabel(size: 9, color: AppColors.textDim),
+        ),
+      ],
     );
   }
 }

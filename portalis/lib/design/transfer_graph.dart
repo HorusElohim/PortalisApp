@@ -203,7 +203,7 @@ class _TransferGraphHeading extends StatelessWidget {
               Text(
                 graph.complete ? 'DOWNLOAD SESSION' : 'TRANSFER SPEED',
                 style: monoLabel(
-                  size: 9,
+                  size: 10,
                   color: AppColors.textDim,
                   weight: FontWeight.w700,
                 ),
@@ -213,11 +213,11 @@ class _TransferGraphHeading extends StatelessWidget {
                 graph.complete
                     ? 'COMPLETED IN ${graph.spanLabel}'
                     : 'LIVE · ${graph.spanLabel}',
-                style: monoLabel(size: 9, color: AppColors.textGhost),
+                style: monoLabel(size: 10, color: AppColors.textGhost),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -414,18 +414,18 @@ class _SeriesSummary extends StatelessWidget {
                 Text(
                   label,
                   style: monoLabel(
-                    size: 9,
+                    size: 10,
                     color: color,
                     weight: FontWeight.w700,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 3),
+            const SizedBox(height: 4),
             Text(
               value,
               style: monoLabel(
-                size: 9,
+                size: 13,
                 color: AppColors.text,
                 letterSpacing: 0,
               ),

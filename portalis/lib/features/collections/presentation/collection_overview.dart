@@ -27,7 +27,6 @@ class CollectionOverview extends StatelessWidget {
     required this.onAddMedia,
     required this.onFetch,
     this.peerHistory = const [],
-    this.onForgetPeer,
   });
 
   final Collection collection;
@@ -43,7 +42,6 @@ class CollectionOverview extends StatelessWidget {
   final VoidCallback onAddMedia;
   final VoidCallback onFetch;
   final List<PeerObservation> peerHistory;
-  final ValueChanged<String>? onForgetPeer;
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +158,6 @@ class CollectionOverview extends StatelessWidget {
           CollectionPeers(
             collection: collection,
             peerHistory: peerHistory,
-            onForgetPeer: onForgetPeer,
           ),
           const SizedBox(height: 14),
         ],

@@ -294,8 +294,6 @@ class _CollectionDetailState extends State<CollectionDetail> {
           onCommand: _command,
           history: AppControllers.collections.historyFor(collection.id),
           peerHistory: AppControllers.collections.peerHistoryFor(collection.id),
-          onForgetPeer: (address) =>
-              AppControllers.collections.forgetPeer(address),
           showCommands: widget.showCommands,
           level: widget.level,
           showTitle: widget.showTitle,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app/app_controllers.dart';
@@ -64,8 +66,8 @@ class PeopleScreen extends StatelessWidget {
     final people = byDevice.values.toList();
 
     // Anonymous swarm peers across every collection. An address is a
-    // connection, not a signed identity. Only its collection names and last
-    // seen time are known at this level; per-peer speed and bytes are not.
+    // connection, not a signed identity. Its collection names and last-seen
+    // time are known here; per-peer speed and bytes are not.
     final byAddress = <String,
         ({
       String address,
@@ -127,20 +129,58 @@ class PeopleScreen extends StatelessWidget {
                 ),
               ),
             )
-          : WindowBuilder(
-              builder: (context, window) => GridView.builder(
-                padding: const EdgeInsets.fromLTRB(
-                    kScreenGutter, 0, kScreenGutter, 28),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: window.columns(340),
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  mainAxisExtent: 180,
+          : Column(
+              children: [
+                if (torrentPeople.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        kScreenGutter, 0, kScreenGutter, 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlineActionButton(
+                        label: 'Forget all remembered peers',
+                        icon: Icons.delete_sweep_outlined,
+                        expand: true,
+                        tone: ActionButtonTone.neutral,
+                        onTap: () => unawaited(_forgetAllPeers(context)),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: WindowBuilder(
+                    builder: (context, window) => GridView.builder(
+                      padding: const EdgeInsets.fromLTRB(
+                          kScreenGutter, 0, kScreenGutter, 28),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: window.columns(340),
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        // Anonymous peers include a short explanation of the
+                        // metrics we do and do not know. Give their cards room
+                        // instead of clipping the final line on compact windows.
+                        mainAxisExtent: torrentPeople.isEmpty ? 180 : 208,
+                      ),
+                      itemCount: cards.length,
+                      itemBuilder: (context, i) => cards[i],
+                    ),
+                  ),
                 ),
-                itemCount: cards.length,
-                itemBuilder: (context, i) => cards[i],
-              ),
+              ],
             ),
+    );
+  }
+
+  Future<void> _forgetAllPeers(BuildContext context) async {
+    final count = await AppControllers.collections.forgetAllPeers();
+    if (count == 0 || !context.mounted) return;
+    showToast(
+      context,
+      'Forgot $count torrent peer${count == 1 ? '' : 's'}',
+      severity: ToastSeverity.info,
+      duration: const Duration(seconds: 6),
+      actionLabel: 'UNDO',
+      onAction: () =>
+          unawaited(AppControllers.collections.undoForgetAllPeers()),
     );
   }
 
@@ -155,9 +195,8 @@ class PeopleScreen extends StatelessWidget {
   }
 }
 
-/// A collaborator summary card. Named collaborators and anonymous swarm
-/// peers share the same visual language while their identity colors remain
-/// distinct.
+/// A collaborator summary card. Named collaborators and anonymous swarm peers
+/// share the same visual language while their identity colors remain distinct.
 class PersonCard extends StatelessWidget {
   PersonCard._({
     super.key,
@@ -172,6 +211,7 @@ class PersonCard extends StatelessWidget {
     this.active = false,
     Color? metricColor,
     Color? subtitleColor,
+    this.peerSummary,
     this.trailing,
   })  : statusColor = statusColor ?? AppColors.textFaint,
         metricColor = metricColor ?? AppColors.signal,
@@ -219,6 +259,7 @@ class PersonCard extends StatelessWidget {
   final bool active;
   final Color metricColor;
   final Color subtitleColor;
+  final Widget? peerSummary;
   final Widget? trailing;
 
   @override
@@ -252,7 +293,7 @@ class PersonCard extends StatelessWidget {
                             width: 6,
                             height: 6,
                             decoration: BoxDecoration(
-                              color: AppColors.signal,
+                              color: statusColor,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -275,37 +316,43 @@ class PersonCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _RateValue(
-                rateMbps: rateMbps,
-                color: rateMbps == null ? AppColors.textFaint : metricColor,
-              ),
+              if (peerSummary == null)
+                _RateValue(
+                  rateMbps: rateMbps,
+                  color: rateMbps == null ? AppColors.textFaint : metricColor,
+                ),
               if (trailing != null) trailing!,
             ],
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _Metric(
-                  value: rateMbps == null ? '—' : rateMbps!.toStringAsFixed(1),
-                  label: 'MB/S',
-                  color: rateMbps == null ? AppColors.textFaint : metricColor,
+          if (peerSummary == null)
+            Row(
+              children: [
+                Expanded(
+                  child: _Metric(
+                    value:
+                        rateMbps == null ? '—' : rateMbps!.toStringAsFixed(1),
+                    label: 'MB/S',
+                    color: rateMbps == null ? AppColors.textFaint : metricColor,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _Metric(value: '$sharedCount', label: 'SHARED'),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _Metric(
-                  value: _gigabytes(totalBytes),
-                  label: 'GB TOTAL',
-                  color: totalBytes == null ? AppColors.textFaint : metricColor,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _Metric(value: '$sharedCount', label: 'SHARED'),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _Metric(
+                    value: _gigabytes(totalBytes),
+                    label: 'GB TOTAL',
+                    color:
+                        totalBytes == null ? AppColors.textFaint : metricColor,
+                  ),
+                ),
+              ],
+            )
+          else
+            peerSummary!,
           const SizedBox(height: 11),
           Text(
             subtitle,
@@ -352,7 +399,6 @@ class TorrentPeerCard extends PersonCard {
           subtitle: '${entry.collections.join(' · ')} · '
               '${formatLastSeen(entry.lastSeen)}',
           totalBytes: null,
-          sharedCount: entry.collections.length,
           rateMbps: null,
           status: active ? 'CONNECTED' : 'NOT CONNECTED',
           statusColor:
@@ -361,14 +407,58 @@ class TorrentPeerCard extends PersonCard {
               active ? AppColors.ember : rememberedPeerColor(entry.address),
           subtitleColor:
               active ? AppColors.ember : rememberedPeerColor(entry.address),
-          trailing: IconButton(
-            tooltip: 'Forget peer',
-            icon: const Icon(Icons.close, size: 16),
-            color: AppColors.textDim,
-            onPressed: () =>
-                AppControllers.collections.forgetPeer(entry.address),
+          peerSummary: _AnonymousPeerSummary(
+            collections: entry.collections.length,
+            active: active,
+            color:
+                active ? AppColors.ember : rememberedPeerColor(entry.address),
           ),
         );
+}
+
+/// Factual address-level state. We deliberately do not divide collection
+/// bytes between peers because that figure is not in the engine projection.
+class _AnonymousPeerSummary extends StatelessWidget {
+  const _AnonymousPeerSummary({
+    required this.collections,
+    required this.active,
+    required this.color,
+  });
+
+  final int collections;
+  final bool active;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _Metric(
+                  value: '$collections',
+                  label: collections == 1 ? 'COLLECTION' : 'COLLECTIONS',
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _Metric(
+                  value: active ? 'LIVE' : 'SEEN',
+                  label: 'CONNECTION',
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Text(
+            'Individual transfer totals are unavailable',
+            style: monoLabel(size: 9, color: AppColors.textDim),
+          ),
+        ],
+      );
 }
 
 class _RateValue extends StatelessWidget {

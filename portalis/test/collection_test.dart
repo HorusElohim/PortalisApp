@@ -30,6 +30,8 @@ void main() {
       final observedAt = DateTime.now().subtract(const Duration(seconds: 12));
       final collection = buildCollection(
         kind: CollectionKind.torrent,
+        totalBytes: 1000,
+        downloadedBytes: 250,
         torrentPeers: const ['203.0.113.5:6881'],
       );
 
@@ -68,6 +70,11 @@ void main() {
       expect(find.textContaining(RegExp(r'^1[2-3]s$')), findsNWidgets(2));
       expect(find.textContaining('seen'), findsNothing);
       expect(find.textContaining('ago'), findsNothing);
+      expect(find.byKey(const Key('collectionPeerTransferProgress')),
+          findsOneWidget);
+      expect(find.text('25%'), findsOneWidget);
+      expect(
+          find.text('250 B of 1 KB received on this device'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

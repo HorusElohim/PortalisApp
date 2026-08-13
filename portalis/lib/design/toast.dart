@@ -63,6 +63,8 @@ void showToast(
   String message, {
   ToastSeverity severity = ToastSeverity.info,
   Duration? duration,
+  String? actionLabel,
+  VoidCallback? onAction,
 }) {
   final scope = ToastScope.maybeOf(context);
   // No scope means no app around us — a bare widget test, typically. Drop the
@@ -78,6 +80,8 @@ void showToast(
       duration: duration ??
           Duration(
               milliseconds: (2200 + message.length * 45).clamp(2200, 7000)),
+      actionLabel: actionLabel,
+      onAction: onAction,
     ),
   );
 }
@@ -88,11 +92,15 @@ class _ToastMessage {
     required this.text,
     required this.severity,
     required this.duration,
+    this.actionLabel,
+    this.onAction,
   });
 
   final String text;
   final ToastSeverity severity;
   final Duration duration;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 }
 
 /// Hosts the live stack of toasts. Installed once, above the navigator, via
@@ -290,6 +298,35 @@ class _BalloonState extends State<_Balloon> with TickerProviderStateMixin {
                       style: AppText.body(height: 1.35),
                     ),
                   ),
+                  if (widget.message.actionLabel != null &&
+                      widget.message.onAction != null) ...[
+                    const SizedBox(width: 10),
+                    TextButton(
+                      key: const Key('toastUndoAction'),
+                      onPressed: () {
+                        widget.message.onAction!();
+                        unawaited(_leave());
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: color,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        widget.message.actionLabel!,
+                        style: monoLabel(
+                          size: 10,
+                          color: color,
+                          weight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
