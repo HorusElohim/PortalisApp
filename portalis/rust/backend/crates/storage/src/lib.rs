@@ -12,12 +12,14 @@
 //! difference between engines is operational rather than semantic.
 //!
 //! - [`embedded`]: one file, no server, no replica set.
+//! - [`mailbox`]: what a device missed while it was asleep.
 //!
 //! The `MongoDB` engine currently lives in `apps/server` and moves here as the
 //! service is rewritten; both then answer to the same conformance suite, which
 //! is the only way "either engine" means anything.
 
 pub mod embedded;
+pub mod mailbox;
 
 use thiserror::Error;
 
@@ -30,6 +32,15 @@ pub enum StorageError {
     /// The write lost a compare-and-set, or would have overwritten history.
     #[error("that write conflicted with another")]
     Conflict,
+    /// A device's mailbox is full. Distinct from a conflict because the
+    /// answer is different: a conflict means read again and retry, and this
+    /// means the recipient has not collected anything for a long time.
+    #[error("that device's mailbox is full: {held} of {limit} {unit}")]
+    MailboxFull {
+        held: usize,
+        limit: usize,
+        unit: &'static str,
+    },
     /// A row that will not decode. Damage, or a store from another version.
     #[error("a stored row is malformed")]
     Malformed,

@@ -52,6 +52,7 @@ const MEMBERSHIP: TableDefinition<&[u8], u64> = TableDefinition::new("membership
 #[derive(Debug)]
 pub struct Embedded {
     database: Database,
+    limits: crate::mailbox::Limits,
 }
 
 impl Embedded {
@@ -61,11 +62,29 @@ impl Embedded {
     ///
     /// Returns [`StorageError::Unavailable`] when the file cannot be opened.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
+        Self::with_limits(path, crate::mailbox::Limits::default())
+    }
+
+    /// Opens the file with mailbox limits other than the defaults.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::Unavailable`] when the file cannot be opened.
+    pub fn with_limits(
+        path: impl AsRef<Path>,
+        limits: crate::mailbox::Limits,
+    ) -> Result<Self, StorageError> {
         let store = Self {
             database: Database::create(path)?,
+            limits,
         };
         store.prepare()?;
         Ok(store)
+    }
+
+    /// What this store's mailboxes may hold.
+    pub(crate) const fn limits(&self) -> crate::mailbox::Limits {
+        self.limits
     }
 
     /// Creates every table, so a reader never has to tell "no table yet" from
@@ -80,6 +99,8 @@ impl Embedded {
             write.open_table(SHARES)?;
             write.open_table(SNAPSHOTS)?;
             write.open_table(MEMBERSHIP)?;
+            write.open_table(crate::mailbox::MAILBOX)?;
+            write.open_table(crate::mailbox::MAILBOX_NEXT)?;
             Ok(())
         })
     }
@@ -323,7 +344,7 @@ impl Embedded {
     /// "either both rows or neither" the default rather than something each
     /// method has to remember. It also means the database's own failure paths
     /// exist in two places instead of forty.
-    fn transact<T>(
+    pub(crate) fn transact<T>(
         &self,
         work: impl FnOnce(&redb::WriteTransaction) -> Result<T, StorageError>,
     ) -> Result<T, StorageError> {
@@ -333,7 +354,7 @@ impl Embedded {
         Ok(outcome)
     }
 
-    fn begin_read(&self) -> Result<redb::ReadTransaction, StorageError> {
+    pub(crate) fn begin_read(&self) -> Result<redb::ReadTransaction, StorageError> {
         Ok(self.database.begin_read()?)
     }
 
@@ -374,6 +395,8 @@ impl From<StorageError> for RepositoryError {
     fn from(error: StorageError) -> Self {
         match error {
             StorageError::Conflict => Self::VersionConflict,
+            // A full mailbox is not a race, so it is not something to retry.
+            error @ StorageError::MailboxFull { .. } => Self::Unavailable(error.to_string()),
             StorageError::Malformed => Self::Unavailable("a stored row is malformed".to_owned()),
             StorageError::Unavailable(reason) => Self::Unavailable(reason),
         }
@@ -396,7 +419,7 @@ fn handle_key(normalized: &str, discriminator: &str) -> String {
 
 /// A key that groups every row of one owner together, ordered by the number
 /// that follows. Big-endian, so byte order agrees with numeric order.
-fn keyed(prefix: &[u8], number: u64) -> Vec<u8> {
+pub(crate) fn keyed(prefix: &[u8], number: u64) -> Vec<u8> {
     let mut key = prefix.to_vec();
     key.extend_from_slice(&number.to_be_bytes());
     key
@@ -410,7 +433,7 @@ fn pair(left: &[u8], right: &[u8]) -> Vec<u8> {
 }
 
 /// The half-open range covering every key under one prefix.
-fn prefix_range(prefix: &[u8]) -> (Vec<u8>, Vec<u8>) {
+pub(crate) fn prefix_range(prefix: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let mut high = prefix.to_vec();
     high.extend_from_slice(&[u8::MAX; 40]);
     (prefix.to_vec(), high)

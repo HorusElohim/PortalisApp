@@ -4100,6 +4100,7 @@ dependencies = [
  "portalis-nexus-client",
  "portalis-nexus-protocol",
  "portalis-nexus-server",
+ "portalis-nexus-storage",
  "redb",
  "tokio",
  "tracing-subscriber",
