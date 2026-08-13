@@ -25,6 +25,10 @@ pub mod records;
 pub mod schema;
 
 use std::path::Path;
+use std::sync::Arc;
+
+#[cfg(not(test))]
+use std::sync::{Mutex, OnceLock};
 
 use redb::{Database, ReadableTable, TableDefinition};
 use thiserror::Error;
@@ -44,6 +48,8 @@ pub enum StoreError {
         "this store was written by a newer version of Portalis (schema {found}, this build speaks {SCHEMA_VERSION}) — upgrade to open it"
     )]
     FromTheFuture { found: u32 },
+    #[error("the Portalis data directory could not be created: {0}")]
+    DataDir(String),
     #[error("a stored row is malformed: the store may be damaged")]
     Malformed,
     /// Boxed because redb's error is large and every `Result` in this module
@@ -81,6 +87,45 @@ impl From<Malformed> for StoreError {
 #[derive(Debug)]
 pub struct Store {
     database: Database,
+}
+
+// During the staged migration, both the new Nexus core and the legacy
+// collection adapter need tables in the same redb file. redb deliberately
+// takes an exclusive process lock, so opening it separately is not a valid
+// compatibility strategy. This is the one process-owned handle; it goes when
+// the old adapter is deleted and the core becomes its sole consumer.
+#[cfg(not(test))]
+static APP_STORE: OnceLock<Mutex<Option<Arc<Store>>>> = OnceLock::new();
+
+/// Opens the one production store handle shared by temporary migration paths.
+///
+/// # Errors
+///
+/// Returns an error when the data directory or database cannot be opened.
+#[cfg(not(test))]
+pub(crate) fn app_store() -> Result<Arc<Store>, StoreError> {
+    let slot = APP_STORE.get_or_init(|| Mutex::new(None));
+    let mut store = slot
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(store) = store.as_ref() {
+        return Ok(Arc::clone(store));
+    }
+
+    let data_dir = crate::paths::state_dir();
+    std::fs::create_dir_all(&data_dir).map_err(|error| StoreError::DataDir(error.to_string()))?;
+    let opened = Arc::new(Store::open(data_dir.join("portalis.redb"))?);
+    *store = Some(Arc::clone(&opened));
+    Ok(opened)
+}
+
+/// Test state directories are intentionally isolated per test, so they must
+/// not share the production process cache above.
+#[cfg(test)]
+pub(crate) fn app_store() -> Result<Arc<Store>, StoreError> {
+    let data_dir = crate::paths::state_dir();
+    std::fs::create_dir_all(&data_dir).map_err(|error| StoreError::DataDir(error.to_string()))?;
+    Ok(Arc::new(Store::open(data_dir.join("portalis.redb"))?))
 }
 
 impl Store {

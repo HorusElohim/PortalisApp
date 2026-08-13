@@ -20,6 +20,9 @@
 
 use std::sync::Mutex;
 
+#[cfg(not(test))]
+use std::sync::Arc;
+
 use ed25519_dalek::Signature;
 use serde::{Deserialize, Serialize};
 
@@ -132,6 +135,14 @@ pub(crate) fn collaborator_from_persisted(
 const LEGACY_COLLECTIONS: redb::TableDefinition<&[u8], &[u8]> =
     redb::TableDefinition::new("legacy_collections");
 
+#[cfg(not(test))]
+fn store() -> anyhow::Result<Arc<crate::store::Store>> {
+    Ok(crate::store::app_store()?)
+}
+
+// Unit tests redirect the state directory for every test, so they must open
+// their isolated store rather than use the production process-wide handle.
+#[cfg(test)]
 fn store() -> anyhow::Result<crate::store::Store> {
     Ok(crate::store::Store::open(
         crate::paths::state_dir().join("portalis.redb"),

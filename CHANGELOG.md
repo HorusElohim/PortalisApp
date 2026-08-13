@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Fixed the staged Nexus migration opening `portalis.redb` twice on app start.
+  The active legacy collection path and Nexus runtime now share one
+  process-owned database handle until the legacy path is removed.
+
 - Restored the headless Nexus demo's explicit device fingerprint configuration,
   so the complete Rust workspace builds and tests after the Nexus state
   projection began exposing device fingerprints.

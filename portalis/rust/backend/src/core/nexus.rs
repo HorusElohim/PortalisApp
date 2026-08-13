@@ -73,7 +73,7 @@ pub struct Nexus {
     /// `pending` field it appears in.
     next_command: AtomicU64,
     active: bool,
-    store: Store,
+    store: Arc<Store>,
     collections: Mutex<LocalCollections>,
 }
 
@@ -146,7 +146,13 @@ impl Nexus {
     pub fn open(config: &Config) -> Result<Self, OpenError> {
         std::fs::create_dir_all(&config.data_dir)
             .map_err(|error| OpenError::DataDir(error.to_string()))?;
-        let store = Store::open(config.data_dir.join("portalis.redb"))?;
+        Self::open_with_store(
+            config,
+            Arc::new(Store::open(config.data_dir.join("portalis.redb"))?),
+        )
+    }
+
+    fn open_with_store(config: &Config, store: Arc<Store>) -> Result<Self, OpenError> {
         let (collections, collection_states) = LocalCollections::hydrate(&store)?;
         let device = DeviceState {
             name: config.device_name.clone(),
@@ -178,11 +184,12 @@ impl Nexus {
     pub fn open_default() -> Result<Self, OpenError> {
         let device = crate::device::device_identity()
             .map_err(|error| OpenError::Identity(error.to_string()))?;
-        Self::open(&Config {
+        let config = Config {
             data_dir: crate::paths::state_dir(),
             device_name: device.nickname,
             fingerprint: device.device_id,
-        })
+        };
+        Self::open_with_store(&config, crate::store::app_store()?)
     }
 
     /// The latest complete projection, without making a bridge subscription.
