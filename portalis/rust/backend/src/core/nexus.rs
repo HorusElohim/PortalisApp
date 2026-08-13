@@ -51,6 +51,8 @@ pub enum OpenError {
     /// to upgrade, not that something went wrong.
     #[error(transparent)]
     Store(#[from] StoreError),
+    #[error("the device identity could not be loaded: {0}")]
+    Identity(String),
 }
 
 /// The running core.
@@ -63,6 +65,7 @@ pub struct Nexus {
     /// Names each accepted command, so the interface can match one to the
     /// `pending` field it appears in.
     next_command: AtomicU64,
+    active: bool,
     #[allow(
         dead_code,
         reason = "the workflows that write through it arrive with the bridge"
@@ -103,8 +106,40 @@ impl Nexus {
             details: watch::Sender::new(None),
             projector: Arc::new(Mutex::new(Projector::new())),
             next_command: AtomicU64::new(1),
+            active: true,
             store,
         })
+    }
+
+    /// Opens the runtime from the one platform-owned state directory.
+    pub fn open_default() -> Result<Self, OpenError> {
+        let device = crate::device::device_identity()
+            .map_err(|error| OpenError::Identity(error.to_string()))?;
+        Self::open(&Config {
+            data_dir: crate::paths::state_dir(),
+            device_name: device.nickname,
+        })
+    }
+
+    /// The latest complete projection, without making a bridge subscription.
+    #[must_use]
+    pub fn state(&self) -> PortalisState {
+        self.states.borrow().clone()
+    }
+
+    /// Starts or pauses network work while preserving the local projection.
+    pub fn set_active(&mut self, active: bool) {
+        if self.active == active {
+            return;
+        }
+        self.active = active;
+        let mut state = self.state();
+        state.connectivity = if active {
+            Connectivity::Connecting
+        } else {
+            Connectivity::LocalOnly
+        };
+        self.states.send_replace(state);
     }
 
     /// The state stream. Always holds a complete snapshot.
@@ -207,6 +242,9 @@ fn validate(command: &Command) -> Result<(), CommandError> {
         }
         Command::AddContact { handle } if !handle.contains('#') => "a handle looks like ada#7Q2XZ",
         Command::AddMedia { files, .. } if files.is_empty() => "no files were chosen",
+        Command::ImportTorrent { source } if source.trim().is_empty() => {
+            "choose a magnet URI or .torrent file"
+        }
         _ => return Ok(()),
     };
     Err(CommandError::Invalid(complaint.to_owned()))
@@ -453,6 +491,34 @@ mod tests {
         // Closing the view stops it at once.
         nexus.watch_detail(None);
         assert_eq!(*watching.borrow(), None);
+        nexus.close().await;
+    }
+
+    #[tokio::test]
+    async fn foregrounding_and_backgrounding_change_only_connectivity() {
+        let scratch = Scratch::new("activity");
+        let mut nexus = open(&scratch);
+
+        nexus.set_active(false);
+        assert_eq!(nexus.state().connectivity, Connectivity::LocalOnly);
+        nexus.set_active(true);
+        assert_eq!(nexus.state().connectivity, Connectivity::Connecting);
+
+        nexus.close().await;
+    }
+
+    #[tokio::test]
+    async fn an_empty_torrent_import_is_refused_before_it_is_queued() {
+        let scratch = Scratch::new("empty-import");
+        let nexus = open(&scratch);
+
+        assert!(matches!(
+            nexus.command(&Command::ImportTorrent {
+                source: "  ".to_owned()
+            }),
+            Err(CommandError::Invalid(message)) if message.contains("magnet URI")
+        ));
+
         nexus.close().await;
     }
 

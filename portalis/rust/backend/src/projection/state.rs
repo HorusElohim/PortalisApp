@@ -214,6 +214,16 @@ pub enum Command {
     RetryTransfer {
         collection: Handle,
     },
+    /// Resolves a magnet URI or `.torrent` file into a shareable collection.
+    /// No payload bytes are fetched until a later selection confirms them.
+    ImportTorrent {
+        source: String,
+    },
+    /// Starts only the entries selected after torrent metadata is available.
+    DownloadSelection {
+        collection: Handle,
+        entries: Vec<Handle>,
+    },
 
     ShareWith {
         collection: Handle,
@@ -333,6 +343,13 @@ mod tests {
                 entry: Handle(3),
             },
             Command::RetryTransfer { collection },
+            Command::ImportTorrent {
+                source: "magnet:?xt=urn:btih:abc".to_owned(),
+            },
+            Command::DownloadSelection {
+                collection,
+                entries: vec![Handle(3)],
+            },
             Command::ShareWith {
                 collection,
                 contact,
