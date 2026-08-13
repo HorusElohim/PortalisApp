@@ -1,4 +1,4 @@
-import '../../../bridge_generated/collections.dart' as bridge;
+import '../../../bridge_generated/collections/legacy.dart' as bridge;
 import '../../media/domain/media_item.dart';
 import '../domain/collection.dart';
 import '../domain/collection_import.dart';

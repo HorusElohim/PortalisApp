@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:portalis/bridge_generated/collections.dart' as bridge;
+import 'package:portalis/bridge_generated/collections/legacy.dart' as bridge;
 import 'package:portalis/bridge_generated/torrent.dart' as torrent_bridge;
 import 'package:portalis/design/design.dart';
 import 'package:portalis/features/collections/data/collection_mapper.dart';

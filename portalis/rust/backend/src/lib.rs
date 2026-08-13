@@ -21,6 +21,8 @@ mod linked_source_store;
 /// Native backend seam for the online Nexus share client. It is intentionally
 /// private until the app-facing collection workflow is ready.
 mod nexus;
+/// The trusted Nexus service address persisted for the app connection.
+pub mod nexus_settings;
 // Real sockets — native targets only, like librqbit.
 /// Android-only bridge used by Rust-owned MediaStore storage.
 #[cfg(target_os = "android")]

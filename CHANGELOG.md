@@ -22,6 +22,11 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Added Nexus service setup to Portalis Settings. A person can save the
+  server's public QUIC Node ID and a direct address; the native backend
+  validates both as one trusted endpoint before any future connection can use
+  them. The screen distinguishes a saved endpoint from a live connection.
+
 - The Nexus service now has a stable authenticated QUIC identity. Embedded
   deployments generate and retain a private node secret beside their data;
   container and MongoDB deployments provide the same 32-byte secret through

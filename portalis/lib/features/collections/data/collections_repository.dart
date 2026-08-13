@@ -1,4 +1,4 @@
-import '../../../bridge_generated/collections.dart' as bridge;
+import '../../../bridge_generated/collections/legacy.dart' as bridge;
 import '../../../bridge_generated/torrent.dart' as torrent_bridge;
 import '../domain/collection.dart';
 import '../domain/picked_file.dart';
@@ -60,7 +60,8 @@ class FrbCollectionsRepository implements CollectionsRepository {
       CollectionMapper.fromInfo(await bridge.createCollection(name: name));
 
   @override
-  Future<Collection> createWithMedia(String name, CollectionFiles files) async =>
+  Future<Collection> createWithMedia(
+          String name, CollectionFiles files) async =>
       CollectionMapper.fromInfo(
         await bridge.createCollectionWithMedia(
           name: name,

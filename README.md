@@ -131,7 +131,7 @@ Windows and Linux need that explicit copy: the relative path FRB uses during `fl
 
 ### Regenerating bindings
 
-Only needed when a **signature or DTO changes** in one of the five bridged Rust modules (`bridge`, `torrent`, `device`, `collections`, `settings`). Editing a function body doesn't require it.
+Only needed when a **signature or DTO changes** in one of the bridged Rust modules (`bridge`, `torrent`, `device`, `collections::legacy`, `settings`, `nexus_settings`). Editing a function body doesn't require it.
 
 ```bash
 cargo install flutter_rust_bridge_codegen   # once

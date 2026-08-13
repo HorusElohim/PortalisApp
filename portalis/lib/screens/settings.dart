@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../app/app_controllers.dart';
 import '../design/design.dart';
 import '../features/settings/domain/engine_settings.dart';
+import '../features/nexus/domain/nexus_endpoint_config.dart';
+import '../features/nexus/presentation/nexus_service_section.dart';
 import '../features/settings/domain/listen_port_range.dart';
 import '../features/settings/application/efficiency_benchmark.dart';
 import '../features/settings/presentation/efficiency_benchmark_card.dart';
@@ -39,6 +41,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _settings = AppControllers.settings;
+  final _nexus = AppControllers.nexus;
   final _scrollController = ScrollController();
   static const _benchmark = EfficiencyBenchmark();
   Timer? _storagePoll;
@@ -59,6 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     if (!_settings.loaded) _settings.load();
+    if (!_nexus.loaded) _nexus.load();
     // Storage grows as downloads finish in the background.
     _storagePoll = Timer.periodic(
       const Duration(seconds: 2),
@@ -178,6 +182,90 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _configureNexus() async {
+    final current = _nexus.config;
+    final nodeId = TextEditingController(text: current.nodeId ?? '');
+    final directAddress =
+        TextEditingController(text: current.directAddress ?? '');
+    final next = await showDialog<NexusEndpointConfig>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Nexus service'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Use the public Node ID logged by your Nexus server. The address is only a route; Portalis authenticates the Node ID before signing in.',
+                style: AppText.secondary(color: AppColors.textDim),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nodeId,
+                autofocus: true,
+                style: monoLabel(
+                    size: 13, color: AppColors.text, letterSpacing: 0),
+                decoration: const InputDecoration(
+                  labelText: 'Server Node ID',
+                  hintText: 'Public QUIC Node ID',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: directAddress,
+                style: monoLabel(
+                    size: 13, color: AppColors.text, letterSpacing: 0),
+                decoration: const InputDecoration(
+                  labelText: 'Direct address',
+                  hintText: '203.0.113.10:7443',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(
+              NexusEndpointConfig(
+                nodeId: nodeId.text.trim(),
+                directAddress: directAddress.text.trim(),
+              ),
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    nodeId.dispose();
+    directAddress.dispose();
+    if (next == null) return;
+    try {
+      await _nexus.save(next);
+    } catch (error) {
+      if (mounted) {
+        showToast(context, 'Couldn\'t save Nexus service: $error',
+            severity: ToastSeverity.error);
+      }
+    }
+  }
+
+  Future<void> _clearNexus() async {
+    try {
+      await _nexus.save(const NexusEndpointConfig());
+    } catch (error) {
+      if (mounted) {
+        showToast(context, 'Couldn\'t remove Nexus service: $error',
+            severity: ToastSeverity.error);
+      }
+    }
+  }
+
   /// Shared editor for the optional numeric/text fields. Returns the raw
   /// string, or null if cancelled; an empty result means "unset".
   Future<String?> _edit({
@@ -280,9 +368,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: _SettingsScrollSurface(
         controller: _scrollController,
         child: ListenableBuilder(
-          listenable: _settings,
+          listenable: Listenable.merge([_settings, _nexus]),
           builder: (context, _) {
             final s = _settings.settings;
+            final error = _settings.lastError ?? _nexus.lastError;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -291,11 +380,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     running: _benchmarkRunning,
                     result: _benchmarkResult,
                   ),
-                if (_settings.lastError != null)
+                if (error != null)
                   InfoBanner(
                     color: const Color(0xFFEB5757),
                     icon: Icons.error_outline,
-                    text: _settings.lastError!,
+                    text: error,
                   ),
                 if (_restartPending)
                   InfoBanner(
@@ -334,6 +423,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsSection(
         label: 'APPEARANCE',
         children: const [ThemePickerRow()],
+      ),
+      NexusServiceSection(
+        config: _nexus.config,
+        onConfigure: _configureNexus,
+        onClear: _clearNexus,
       ),
       SettingsSection(
         label: 'SPEED · APPLIES IMMEDIATELY',

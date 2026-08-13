@@ -1,4 +1,5 @@
-import '../../../bridge_generated/collections.dart' as collections_bridge;
+import '../../../bridge_generated/collections/legacy.dart'
+    as collections_bridge;
 import '../../../bridge_generated/settings.dart' as settings_bridge;
 import '../../../bridge_generated/torrent.dart' as torrent_bridge;
 import '../domain/engine_settings.dart';

@@ -3,16 +3,16 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
-import 'frb_generated.dart';
+import '../frb_generated.dart';
+import '../torrent.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'torrent.dart';
 
 // These functions are ignored because they are not marked as `pub`: `pursue_fetches`, `request_fetch_for_collection`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Every collection this device knows about, from both sources, joined.
 Future<List<CollectionInfo>> listCollections() =>
-    RustLib.instance.api.crateCollectionsListCollections();
+    RustLib.instance.api.crateCollectionsLegacyListCollections();
 
 /// Whether the BitTorrent engine has finished starting.
 ///
@@ -22,27 +22,27 @@ Future<List<CollectionInfo>> listCollections() =>
 /// the ambiguity that made a freshly-launched app look broken. Never blocks —
 /// `sync_address`/`ensure_listener` warms the session in the background.
 Future<bool> engineReady() =>
-    RustLib.instance.api.crateCollectionsEngineReady();
+    RustLib.instance.api.crateCollectionsLegacyEngineReady();
 
 /// Creates a new shared collection (empty) and persists it. This device
 /// becomes its first collaborator, as admin.
 Future<CollectionInfo> createCollection({required String name}) =>
-    RustLib.instance.api.crateCollectionsCreateCollection(name: name);
+    RustLib.instance.api.crateCollectionsLegacyCreateCollection(name: name);
 
 /// Creates a shared collection *and* seeds `files` into it as its first
 /// manifest entry — the "share something" flow, which previously produced a
 /// bare torrent with no invite code and therefore nothing to share.
 Future<CollectionInfo> createCollectionWithMedia(
         {required String name, required List<SourceFile> files}) =>
-    RustLib.instance.api
-        .crateCollectionsCreateCollectionWithMedia(name: name, files: files);
+    RustLib.instance.api.crateCollectionsLegacyCreateCollectionWithMedia(
+        name: name, files: files);
 
 /// Joins a shared collection from an invite code. Returns immediately; the
 /// first sync with the inviter runs in the background (see the note in
 /// [`native::join_collection`]).
 Future<CollectionInfo> joinCollection(
         {required String inviteCode, required String displayName}) =>
-    RustLib.instance.api.crateCollectionsJoinCollection(
+    RustLib.instance.api.crateCollectionsLegacyJoinCollection(
         inviteCode: inviteCode, displayName: displayName);
 
 /// Adds local files to a shared collection as one new signed manifest entry
@@ -51,7 +51,7 @@ Future<CollectionInfo> addMediaToCollection(
         {required String collectionId,
         required String label,
         required List<SourceFile> files}) =>
-    RustLib.instance.api.crateCollectionsAddMediaToCollection(
+    RustLib.instance.api.crateCollectionsLegacyAddMediaToCollection(
         collectionId: collectionId, label: label, files: files);
 
 /// Starts downloading every not-yet-fetched manifest entry, handing librqbit
@@ -59,7 +59,7 @@ Future<CollectionInfo> addMediaToCollection(
 /// Returns how many entries were started.
 Future<int> fetchCollectionMedia({required String collectionId}) =>
     RustLib.instance.api
-        .crateCollectionsFetchCollectionMedia(collectionId: collectionId);
+        .crateCollectionsLegacyFetchCollectionMedia(collectionId: collectionId);
 
 /// Brings the engine up: the sync listener, the reconciliation loop, and the
 /// BitTorrent session warming in the background.
@@ -69,17 +69,17 @@ Future<int> fetchCollectionMedia({required String collectionId}) =>
 /// drew, and an invite generated before that drew carried no address for
 /// anyone to reach.
 Future<void> startEngine() =>
-    RustLib.instance.api.crateCollectionsStartEngine();
+    RustLib.instance.api.crateCollectionsLegacyStartEngine();
 
 /// Tells the engine whether anyone is looking, so it can stop reaching for
 /// the network when nobody is. Called from the app's lifecycle observer.
 Future<void> setActive({required bool active}) =>
-    RustLib.instance.api.crateCollectionsSetActive(active: active);
+    RustLib.instance.api.crateCollectionsLegacySetActive(active: active);
 
 /// One full manifest sync with a peer, for a shared collection.
 Future<CollectionInfo> syncCollection(
         {required String collectionId, required String peerAddr}) =>
-    RustLib.instance.api.crateCollectionsSyncCollection(
+    RustLib.instance.api.crateCollectionsLegacySyncCollection(
         collectionId: collectionId, peerAddr: peerAddr);
 
 /// Forgets a collection on this device. For a `Shared` one that means
@@ -89,37 +89,37 @@ Future<CollectionInfo> syncCollection(
 /// left on disk either way.
 Future<void> deleteCollection({required String collectionId}) =>
     RustLib.instance.api
-        .crateCollectionsDeleteCollection(collectionId: collectionId);
+        .crateCollectionsLegacyDeleteCollection(collectionId: collectionId);
 
 /// Pauses every torrent currently belonging to a collection.
 Future<void> pauseCollection({required String collectionId}) =>
     RustLib.instance.api
-        .crateCollectionsPauseCollection(collectionId: collectionId);
+        .crateCollectionsLegacyPauseCollection(collectionId: collectionId);
 
 /// Resumes a paused collection, or re-adds its torrents when they were stopped.
 Future<void> restartCollection({required String collectionId}) =>
     RustLib.instance.api
-        .crateCollectionsRestartCollection(collectionId: collectionId);
+        .crateCollectionsLegacyRestartCollection(collectionId: collectionId);
 
 /// Stops transfer activity while retaining the collection and torrent.
 Future<void> stopCollection({required String collectionId}) =>
     RustLib.instance.api
-        .crateCollectionsStopCollection(collectionId: collectionId);
+        .crateCollectionsLegacyStopCollection(collectionId: collectionId);
 
 /// Deletes the downloaded files belonging to a collection and keeps its record.
-Future<void> deleteCollectionFiles({required String collectionId}) =>
-    RustLib.instance.api
-        .crateCollectionsDeleteCollectionFiles(collectionId: collectionId);
+Future<void> deleteCollectionFiles({required String collectionId}) => RustLib
+    .instance.api
+    .crateCollectionsLegacyDeleteCollectionFiles(collectionId: collectionId);
 
 /// This device's manifest-sync endpoints (LAN, plus public IP when
 /// discoverable), comma-separated. Starts the sync listener as a side
 /// effect, so calling it makes this device reachable.
 Future<String> syncAddress() =>
-    RustLib.instance.api.crateCollectionsSyncAddress();
+    RustLib.instance.api.crateCollectionsLegacySyncAddress();
 
 /// What's on disk, resolved back to the collections the app knows about.
 Future<List<StorageEntry>> storageBreakdown() =>
-    RustLib.instance.api.crateCollectionsStorageBreakdown();
+    RustLib.instance.api.crateCollectionsLegacyStorageBreakdown();
 
 class CollaboratorInfo {
   final String deviceId;

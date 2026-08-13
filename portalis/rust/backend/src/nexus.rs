@@ -70,6 +70,19 @@ pub(crate) async fn connect(endpoint: EndpointAddr) -> Result<NexusClient, Trans
     NexusClient::connect(endpoint).await
 }
 
+/// Opens the configured Nexus service when the person has set one up.
+///
+/// An absent configuration is normal on a first run and is not treated as a
+/// failed network connection. The app lifecycle will own the returned client
+/// when online collection workflows begin.
+#[allow(dead_code)]
+pub(crate) async fn connect_configured() -> anyhow::Result<Option<NexusClient>> {
+    let Some(endpoint) = crate::nexus_settings::nexus_endpoint_config()?.endpoint_addr()? else {
+        return Ok(None);
+    };
+    Ok(Some(connect(endpoint).await?))
+}
+
 #[cfg(test)]
 mod tests {
     use ed25519_dalek::{Signature, Verifier, VerifyingKey};

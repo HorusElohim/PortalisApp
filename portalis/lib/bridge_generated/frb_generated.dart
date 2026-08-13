@@ -4,13 +4,14 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'bridge.dart';
-import 'collections.dart';
+import 'collections/legacy.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'device.dart';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
+import 'nexus_settings.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'settings.dart';
 import 'torrent.dart';
@@ -72,7 +73,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -64431026;
+  int get rustContentHash => -243424258;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -84,7 +85,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
-  Future<CollectionInfo> crateCollectionsAddMediaToCollection(
+  Future<CollectionInfo> crateCollectionsLegacyAddMediaToCollection(
       {required String collectionId,
       required String label,
       required List<SourceFile> files});
@@ -95,67 +96,77 @@ abstract class RustLibApi extends BaseApi {
   Future<TorrentInfo> crateTorrentAddTorrentFromMagnet(
       {required String magnetOrHash});
 
-  Future<CollectionInfo> crateCollectionsCreateCollection(
+  Future<CollectionInfo> crateCollectionsLegacyCreateCollection(
       {required String name});
 
   Future<TorrentInfo> crateTorrentCreateCollection(
       {required String name, required List<SourceFile> files});
 
-  Future<CollectionInfo> crateCollectionsCreateCollectionWithMedia(
+  Future<CollectionInfo> crateCollectionsLegacyCreateCollectionWithMedia(
       {required String name, required List<SourceFile> files});
 
   Future<EngineSettings> crateSettingsDefaultEngineSettings();
 
-  Future<void> crateCollectionsDeleteCollection({required String collectionId});
+  Future<void> crateCollectionsLegacyDeleteCollection(
+      {required String collectionId});
 
-  Future<void> crateCollectionsDeleteCollectionFiles(
+  Future<void> crateCollectionsLegacyDeleteCollectionFiles(
       {required String collectionId});
 
   Future<DeviceIdentityInfo> crateDeviceDeviceIdentity();
 
-  Future<bool> crateCollectionsEngineReady();
+  Future<bool> crateCollectionsLegacyEngineReady();
 
   Future<EngineSettings> crateSettingsEngineSettings();
 
   Future<EngineSettings> crateSettingsEngineSettingsDefault();
 
-  Future<int> crateCollectionsFetchCollectionMedia(
+  Future<int> crateCollectionsLegacyFetchCollectionMedia(
       {required String collectionId});
 
   String crateBridgeGetVersion();
 
-  Future<CollectionInfo> crateCollectionsJoinCollection(
+  Future<CollectionInfo> crateCollectionsLegacyJoinCollection(
       {required String inviteCode, required String displayName});
 
-  Future<List<CollectionInfo>> crateCollectionsListCollections();
+  Future<List<CollectionInfo>> crateCollectionsLegacyListCollections();
 
   Future<List<TorrentInfo>> crateTorrentListTorrents();
 
+  Future<NexusEndpointConfig> crateNexusSettingsNexusEndpointConfig();
+
+  Future<NexusEndpointConfig> crateNexusSettingsNexusEndpointConfigDefault();
+
   Future<String> crateTorrentOutputDir();
 
-  Future<void> crateCollectionsPauseCollection({required String collectionId});
-
-  Future<void> crateCollectionsRestartCollection(
+  Future<void> crateCollectionsLegacyPauseCollection(
       {required String collectionId});
 
-  Future<void> crateCollectionsSetActive({required bool active});
+  Future<void> crateCollectionsLegacyRestartCollection(
+      {required String collectionId});
+
+  Future<void> crateCollectionsLegacySetActive({required bool active});
 
   Future<bool> crateSettingsSetEngineSettings(
       {required EngineSettings settings});
 
+  Future<void> crateNexusSettingsSetNexusEndpointConfig(
+      {required NexusEndpointConfig config});
+
   Future<DeviceIdentityInfo> crateDeviceSetNickname({required String nickname});
 
-  Future<void> crateCollectionsStartEngine();
+  Future<void> crateCollectionsLegacyStartEngine();
 
-  Future<void> crateCollectionsStopCollection({required String collectionId});
+  Future<void> crateCollectionsLegacyStopCollection(
+      {required String collectionId});
 
-  Future<List<StorageEntry>> crateCollectionsStorageBreakdown();
+  Future<List<StorageEntry>> crateCollectionsLegacyStorageBreakdown();
 
   Future<BigInt> crateTorrentStorageUsageBytes();
 
-  Future<String> crateCollectionsSyncAddress();
+  Future<String> crateCollectionsLegacySyncAddress();
 
-  Future<CollectionInfo> crateCollectionsSyncCollection(
+  Future<CollectionInfo> crateCollectionsLegacySyncCollection(
       {required String collectionId, required String peerAddr});
 }
 
@@ -168,7 +179,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  Future<CollectionInfo> crateCollectionsAddMediaToCollection(
+  Future<CollectionInfo> crateCollectionsLegacyAddMediaToCollection(
       {required String collectionId,
       required String label,
       required List<SourceFile> files}) {
@@ -185,13 +196,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeSuccessData: sse_decode_collection_info,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsAddMediaToCollectionConstMeta,
+      constMeta: kCrateCollectionsLegacyAddMediaToCollectionConstMeta,
       argValues: [collectionId, label, files],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsAddMediaToCollectionConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyAddMediaToCollectionConstMeta =>
       const TaskConstMeta(
         debugName: "add_media_to_collection",
         argNames: ["collectionId", "label", "files"],
@@ -250,7 +261,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<CollectionInfo> crateCollectionsCreateCollection(
+  Future<CollectionInfo> crateCollectionsLegacyCreateCollection(
       {required String name}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
@@ -263,13 +274,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeSuccessData: sse_decode_collection_info,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsCreateCollectionConstMeta,
+      constMeta: kCrateCollectionsLegacyCreateCollectionConstMeta,
       argValues: [name],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsCreateCollectionConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyCreateCollectionConstMeta =>
       const TaskConstMeta(
         debugName: "create_collection",
         argNames: ["name"],
@@ -303,7 +314,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<CollectionInfo> crateCollectionsCreateCollectionWithMedia(
+  Future<CollectionInfo> crateCollectionsLegacyCreateCollectionWithMedia(
       {required String name, required List<SourceFile> files}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
@@ -317,13 +328,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeSuccessData: sse_decode_collection_info,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsCreateCollectionWithMediaConstMeta,
+      constMeta: kCrateCollectionsLegacyCreateCollectionWithMediaConstMeta,
       argValues: [name, files],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsCreateCollectionWithMediaConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyCreateCollectionWithMediaConstMeta =>
       const TaskConstMeta(
         debugName: "create_collection_with_media",
         argNames: ["name", "files"],
@@ -354,7 +365,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<void> crateCollectionsDeleteCollection(
+  Future<void> crateCollectionsLegacyDeleteCollection(
       {required String collectionId}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
@@ -367,20 +378,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeSuccessData: sse_decode_unit,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsDeleteCollectionConstMeta,
+      constMeta: kCrateCollectionsLegacyDeleteCollectionConstMeta,
       argValues: [collectionId],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsDeleteCollectionConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyDeleteCollectionConstMeta =>
       const TaskConstMeta(
         debugName: "delete_collection",
         argNames: ["collectionId"],
       );
 
   @override
-  Future<void> crateCollectionsDeleteCollectionFiles(
+  Future<void> crateCollectionsLegacyDeleteCollectionFiles(
       {required String collectionId}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
@@ -393,13 +404,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeSuccessData: sse_decode_unit,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsDeleteCollectionFilesConstMeta,
+      constMeta: kCrateCollectionsLegacyDeleteCollectionFilesConstMeta,
       argValues: [collectionId],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsDeleteCollectionFilesConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyDeleteCollectionFilesConstMeta =>
       const TaskConstMeta(
         debugName: "delete_collection_files",
         argNames: ["collectionId"],
@@ -429,7 +440,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<bool> crateCollectionsEngineReady() {
+  Future<bool> crateCollectionsLegacyEngineReady() {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -440,13 +451,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeSuccessData: sse_decode_bool,
         decodeErrorData: null,
       ),
-      constMeta: kCrateCollectionsEngineReadyConstMeta,
+      constMeta: kCrateCollectionsLegacyEngineReadyConstMeta,
       argValues: [],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsEngineReadyConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyEngineReadyConstMeta =>
       const TaskConstMeta(
         debugName: "engine_ready",
         argNames: [],
@@ -501,7 +512,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<int> crateCollectionsFetchCollectionMedia(
+  Future<int> crateCollectionsLegacyFetchCollectionMedia(
       {required String collectionId}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
@@ -514,13 +525,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeSuccessData: sse_decode_u_32,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsFetchCollectionMediaConstMeta,
+      constMeta: kCrateCollectionsLegacyFetchCollectionMediaConstMeta,
       argValues: [collectionId],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsFetchCollectionMediaConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyFetchCollectionMediaConstMeta =>
       const TaskConstMeta(
         debugName: "fetch_collection_media",
         argNames: ["collectionId"],
@@ -549,7 +560,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<CollectionInfo> crateCollectionsJoinCollection(
+  Future<CollectionInfo> crateCollectionsLegacyJoinCollection(
       {required String inviteCode, required String displayName}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
@@ -563,20 +574,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeSuccessData: sse_decode_collection_info,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsJoinCollectionConstMeta,
+      constMeta: kCrateCollectionsLegacyJoinCollectionConstMeta,
       argValues: [inviteCode, displayName],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsJoinCollectionConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyJoinCollectionConstMeta =>
       const TaskConstMeta(
         debugName: "join_collection",
         argNames: ["inviteCode", "displayName"],
       );
 
   @override
-  Future<List<CollectionInfo>> crateCollectionsListCollections() {
+  Future<List<CollectionInfo>> crateCollectionsLegacyListCollections() {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -587,13 +598,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeSuccessData: sse_decode_list_collection_info,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsListCollectionsConstMeta,
+      constMeta: kCrateCollectionsLegacyListCollectionsConstMeta,
       argValues: [],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsListCollectionsConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyListCollectionsConstMeta =>
       const TaskConstMeta(
         debugName: "list_collections",
         argNames: [],
@@ -623,12 +634,60 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<String> crateTorrentOutputDir() {
+  Future<NexusEndpointConfig> crateNexusSettingsNexusEndpointConfig() {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 19, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_nexus_endpoint_config,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateNexusSettingsNexusEndpointConfigConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateNexusSettingsNexusEndpointConfigConstMeta =>
+      const TaskConstMeta(
+        debugName: "nexus_endpoint_config",
+        argNames: [],
+      );
+
+  @override
+  Future<NexusEndpointConfig> crateNexusSettingsNexusEndpointConfigDefault() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 20, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_nexus_endpoint_config,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateNexusSettingsNexusEndpointConfigDefaultConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateNexusSettingsNexusEndpointConfigDefaultConstMeta =>
+      const TaskConstMeta(
+        debugName: "nexus_endpoint_config_default",
+        argNames: [],
+      );
+
+  @override
+  Future<String> crateTorrentOutputDir() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 21, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -646,76 +705,78 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<void> crateCollectionsPauseCollection({required String collectionId}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_String(collectionId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 20, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_AnyhowException,
-      ),
-      constMeta: kCrateCollectionsPauseCollectionConstMeta,
-      argValues: [collectionId],
-      apiImpl: this,
-    ));
-  }
-
-  TaskConstMeta get kCrateCollectionsPauseCollectionConstMeta =>
-      const TaskConstMeta(
-        debugName: "pause_collection",
-        argNames: ["collectionId"],
-      );
-
-  @override
-  Future<void> crateCollectionsRestartCollection(
+  Future<void> crateCollectionsLegacyPauseCollection(
       {required String collectionId}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(collectionId, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 21, port: port_);
+            funcId: 22, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsRestartCollectionConstMeta,
+      constMeta: kCrateCollectionsLegacyPauseCollectionConstMeta,
       argValues: [collectionId],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsRestartCollectionConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyPauseCollectionConstMeta =>
+      const TaskConstMeta(
+        debugName: "pause_collection",
+        argNames: ["collectionId"],
+      );
+
+  @override
+  Future<void> crateCollectionsLegacyRestartCollection(
+      {required String collectionId}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(collectionId, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 23, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateCollectionsLegacyRestartCollectionConstMeta,
+      argValues: [collectionId],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateCollectionsLegacyRestartCollectionConstMeta =>
       const TaskConstMeta(
         debugName: "restart_collection",
         argNames: ["collectionId"],
       );
 
   @override
-  Future<void> crateCollectionsSetActive({required bool active}) {
+  Future<void> crateCollectionsLegacySetActive({required bool active}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_bool(active, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 22, port: port_);
+            funcId: 24, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
         decodeErrorData: null,
       ),
-      constMeta: kCrateCollectionsSetActiveConstMeta,
+      constMeta: kCrateCollectionsLegacySetActiveConstMeta,
       argValues: [active],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsSetActiveConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateCollectionsLegacySetActiveConstMeta =>
+      const TaskConstMeta(
         debugName: "set_active",
         argNames: ["active"],
       );
@@ -728,7 +789,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_engine_settings(settings, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 23, port: port_);
+            funcId: 25, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -747,6 +808,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateNexusSettingsSetNexusEndpointConfig(
+      {required NexusEndpointConfig config}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_box_autoadd_nexus_endpoint_config(config, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 26, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateNexusSettingsSetNexusEndpointConfigConstMeta,
+      argValues: [config],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateNexusSettingsSetNexusEndpointConfigConstMeta =>
+      const TaskConstMeta(
+        debugName: "set_nexus_endpoint_config",
+        argNames: ["config"],
+      );
+
+  @override
   Future<DeviceIdentityInfo> crateDeviceSetNickname(
       {required String nickname}) {
     return handler.executeNormal(NormalTask(
@@ -754,7 +841,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(nickname, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 24, port: port_);
+            funcId: 27, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_device_identity_info,
@@ -772,73 +859,74 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<void> crateCollectionsStartEngine() {
+  Future<void> crateCollectionsLegacyStartEngine() {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 25, port: port_);
+            funcId: 28, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsStartEngineConstMeta,
+      constMeta: kCrateCollectionsLegacyStartEngineConstMeta,
       argValues: [],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsStartEngineConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyStartEngineConstMeta =>
       const TaskConstMeta(
         debugName: "start_engine",
         argNames: [],
       );
 
   @override
-  Future<void> crateCollectionsStopCollection({required String collectionId}) {
+  Future<void> crateCollectionsLegacyStopCollection(
+      {required String collectionId}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(collectionId, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 26, port: port_);
+            funcId: 29, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsStopCollectionConstMeta,
+      constMeta: kCrateCollectionsLegacyStopCollectionConstMeta,
       argValues: [collectionId],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsStopCollectionConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyStopCollectionConstMeta =>
       const TaskConstMeta(
         debugName: "stop_collection",
         argNames: ["collectionId"],
       );
 
   @override
-  Future<List<StorageEntry>> crateCollectionsStorageBreakdown() {
+  Future<List<StorageEntry>> crateCollectionsLegacyStorageBreakdown() {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 27, port: port_);
+            funcId: 30, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_storage_entry,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsStorageBreakdownConstMeta,
+      constMeta: kCrateCollectionsLegacyStorageBreakdownConstMeta,
       argValues: [],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsStorageBreakdownConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacyStorageBreakdownConstMeta =>
       const TaskConstMeta(
         debugName: "storage_breakdown",
         argNames: [],
@@ -850,7 +938,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 28, port: port_);
+            funcId: 31, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_u_64,
@@ -869,31 +957,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<String> crateCollectionsSyncAddress() {
+  Future<String> crateCollectionsLegacySyncAddress() {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 29, port: port_);
+            funcId: 32, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsSyncAddressConstMeta,
+      constMeta: kCrateCollectionsLegacySyncAddressConstMeta,
       argValues: [],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsSyncAddressConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacySyncAddressConstMeta =>
       const TaskConstMeta(
         debugName: "sync_address",
         argNames: [],
       );
 
   @override
-  Future<CollectionInfo> crateCollectionsSyncCollection(
+  Future<CollectionInfo> crateCollectionsLegacySyncCollection(
       {required String collectionId, required String peerAddr}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
@@ -901,19 +989,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(collectionId, serializer);
         sse_encode_String(peerAddr, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 30, port: port_);
+            funcId: 33, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_collection_info,
         decodeErrorData: sse_decode_AnyhowException,
       ),
-      constMeta: kCrateCollectionsSyncCollectionConstMeta,
+      constMeta: kCrateCollectionsLegacySyncCollectionConstMeta,
       argValues: [collectionId, peerAddr],
       apiImpl: this,
     ));
   }
 
-  TaskConstMeta get kCrateCollectionsSyncCollectionConstMeta =>
+  TaskConstMeta get kCrateCollectionsLegacySyncCollectionConstMeta =>
       const TaskConstMeta(
         debugName: "sync_collection",
         argNames: ["collectionId", "peerAddr"],
@@ -947,6 +1035,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ImportInfo dco_decode_box_autoadd_import_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_import_info(raw);
+  }
+
+  @protected
+  NexusEndpointConfig dco_decode_box_autoadd_nexus_endpoint_config(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_nexus_endpoint_config(raw);
   }
 
   @protected
@@ -1158,6 +1253,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NexusEndpointConfig dco_decode_nexus_endpoint_config(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return NexusEndpointConfig(
+      nodeId: dco_decode_opt_String(arr[0]),
+      directAddress: dco_decode_opt_String(arr[1]),
+    );
+  }
+
+  @protected
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
@@ -1329,6 +1436,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ImportInfo sse_decode_box_autoadd_import_info(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_import_info(deserializer));
+  }
+
+  @protected
+  NexusEndpointConfig sse_decode_box_autoadd_nexus_endpoint_config(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_nexus_endpoint_config(deserializer));
   }
 
   @protected
@@ -1635,6 +1749,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NexusEndpointConfig sse_decode_nexus_endpoint_config(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_nodeId = sse_decode_opt_String(deserializer);
+    var var_directAddress = sse_decode_opt_String(deserializer);
+    return NexusEndpointConfig(
+        nodeId: var_nodeId, directAddress: var_directAddress);
+  }
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1835,6 +1959,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       ImportInfo self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_import_info(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_nexus_endpoint_config(
+      NexusEndpointConfig self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_nexus_endpoint_config(self, serializer);
   }
 
   @protected
@@ -2055,6 +2186,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_piece_run(self.pieceRuns, serializer);
     sse_encode_bool(self.fetched, serializer);
     sse_encode_opt_String(self.addedBy, serializer);
+  }
+
+  @protected
+  void sse_encode_nexus_endpoint_config(
+      NexusEndpointConfig self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_opt_String(self.nodeId, serializer);
+    sse_encode_opt_String(self.directAddress, serializer);
   }
 
   @protected
