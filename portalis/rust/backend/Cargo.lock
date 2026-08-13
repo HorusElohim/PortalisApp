@@ -4151,6 +4151,19 @@ version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
  "portalis-nexus-protocol",
+ "serde",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
+name = "portalis-nexus-storage"
+version = "0.1.0"
+dependencies = [
+ "portalis-nexus-server-core",
+ "redb",
+ "serde",
+ "serde_json",
  "thiserror 2.0.20",
  "tokio",
 ]

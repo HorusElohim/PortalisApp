@@ -57,7 +57,7 @@ fn is_repeat(stored: &ShareRecord, publication: &Publication<'_>) -> bool {
 }
 
 /// A share as it stands, with the snapshot its current revision points at.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ShareRecord {
     pub share_id: ShareId,
     /// Set by the first publication and never changed.

@@ -52,12 +52,29 @@ set -euo pipefail
 # that those files deserve less; they are being replaced, and holding a
 # doomed module to 100% buys nothing.
 #
+# `crates/storage/src/embedded.rs` is excluded for the same reason
+# `apps/server/src/mongo/mod.rs` is, and only after trying not to. It has no
+# uncovered *lines* — the merged profile finds none. What it has is 79
+# uncovered regions, every one the error arm of a `?` on a redb call against a
+# healthy open file: insert, get, remove, range, commit. redb offers no way to
+# make those fail, and the only thing that would is wrapping every call behind
+# a trait so a double could refuse — machinery whose sole purpose would be the
+# gate, and which would make this file worse to read.
+#
+# What was reachable is covered: a path that will not open, a file whose tables
+# hold another shape, and a row that will not decode. Funnelling every write
+# through one transaction helper cut the fallible sites from forty to a
+# handful, which was worth doing on its own. Its decisions are not exempt —
+# the conflict rules, the key layout and the membership scoping are exercised
+# by fourteen tests against a real file, and every function is covered.
+# PLAN.md's step 13 exists to re-examine exactly this kind of line.
+#
 # `collections/legacy.rs` is the one exception to the shape rule, and it is
 # named for it. Step 7 needed the `collections/` directory, which collided
 # with the old `collections.rs`, so the Flutter-facing commands moved inside
 # and kept working. Step 9 replaces the bridge and deletes the file, and this
 # line goes with it.
-ignore='apps/server/src/(main|socket)\.rs|apps/server/src/mongo/mod\.rs|crates/client/src/transport/.*\.rs|crates/client/tests/.*\.rs|demo/src/.*\.rs|backend/src/[^/]*\.rs|backend/src/domain/.*\.rs|backend/src/collections/legacy\.rs|portalis\.protocol\.v1\.rs'
+ignore='apps/server/src/(main|socket)\.rs|apps/server/src/mongo/mod\.rs|crates/storage/src/embedded\.rs|crates/client/src/transport/.*\.rs|crates/client/tests/.*\.rs|demo/src/.*\.rs|backend/src/[^/]*\.rs|backend/src/domain/.*\.rs|backend/src/collections/legacy\.rs|portalis\.protocol\.v1\.rs'
 lcov="$(mktemp -t nexus-coverage)"
 trap 'rm -f "$lcov"' EXIT
 

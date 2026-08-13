@@ -1,18 +1,20 @@
 [package]
-name = "portalis-nexus-server-core"
+name = "portalis-nexus-storage"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+publish = false
 
 [dependencies]
+portalis-nexus-server-core.workspace = true
+redb.workspace = true
 serde = { workspace = true, features = ["derive"] }
-portalis-nexus-protocol.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-ed25519-dalek.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true

@@ -5,6 +5,7 @@
 //! Futures are spelled out as `impl Future + Send` rather than `async fn` so
 //! implementations stay usable from a spawned task.
 
+use serde::{Deserialize, Serialize};
 use std::future::Future;
 
 use portalis_nexus_protocol::{
@@ -52,7 +53,7 @@ pub enum RepositoryError {
 }
 
 /// A durable user record.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserRecord {
     pub user_id: UserId,
     /// Display casing, as its owner typed it.
@@ -64,7 +65,7 @@ pub struct UserRecord {
 }
 
 /// A durable record of one device authorized to act for a user.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeviceRecord {
     pub device_id: DeviceId,
     pub user_id: UserId,
@@ -186,7 +187,7 @@ pub trait FriendRepository: Send + Sync {
 ///
 /// Nexus stores and relays this opaquely: `ciphertext` is meaningless
 /// without the recipient device's private key, which Nexus never holds.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeyEnvelopeRecord {
     pub share_id: ShareId,
     pub recipient_device_id: DeviceId,
@@ -196,7 +197,7 @@ pub struct KeyEnvelopeRecord {
 }
 
 /// One deterministic page of envelopes for a recipient device.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeyEnvelopePage {
     pub envelopes: Vec<KeyEnvelopeRecord>,
     /// The exclusive cursor for the next page, if another page exists.
@@ -205,7 +206,7 @@ pub struct KeyEnvelopePage {
 
 /// One immutable encrypted snapshot. The mutable share record only points at
 /// the latest one; keeping revisions separately makes history append-only.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShareSnapshotRecord {
     pub share_id: ShareId,
     pub revision: u64,
@@ -217,7 +218,7 @@ pub struct ShareSnapshotRecord {
 
 /// A private share edge. Ownership remains on [`ShareRecord`]; this only
 /// records additional users who may discover and fetch it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShareMembershipRecord {
     pub share_id: ShareId,
     pub user_id: UserId,

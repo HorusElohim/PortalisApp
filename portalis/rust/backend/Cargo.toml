@@ -11,6 +11,7 @@ members = [
     "crates/client",
     "crates/protocol",
     "crates/server-core",
+    "crates/storage",
 ]
 
 [workspace.package]
@@ -50,6 +51,7 @@ portalis-nexus-client = { path = "crates/client" }
 portalis-nexus-server = { path = "apps/server" }
 portalis-nexus-protocol = { path = "crates/protocol" }
 portalis-nexus-server-core = { path = "crates/server-core" }
+portalis-nexus-storage = { path = "crates/storage" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
