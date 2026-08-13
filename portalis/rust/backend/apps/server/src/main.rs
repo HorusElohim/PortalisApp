@@ -7,6 +7,7 @@ use portalis_nexus_server::{
     load_node_secret,
 };
 use portalis_nexus_storage::embedded::Embedded;
+use tokio::sync::watch;
 use tokio::time::timeout;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
@@ -52,6 +53,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Ready only once the store is reachable and its indexes exist.
     state.mark_ready();
 
+    // QUIC uses UDP while the orchestration endpoints use TCP, so the service
+    // can deliberately publish one address and port without making a second
+    // control-plane setting part of every deployment.
+    let health_listener = tokio::net::TcpListener::bind(config.listen_addr).await?;
+
     info!(
         listen_addr = %config.listen_addr,
         node_id = %endpoint.node_id(),
@@ -59,11 +65,45 @@ async fn main() -> Result<(), Box<dyn Error>> {
         store = state.store().kind(),
         "Portalis Nexus is ready"
     );
+
+    let (shutdown, _) = watch::channel(false);
+    let health_state = state.clone();
+    let mut health = tokio::spawn(serve_health(
+        health_listener,
+        health_state,
+        shutdown.subscribe(),
+    ));
+    let mut quic = tokio::spawn(serve_quic(
+        endpoint.clone(),
+        state.clone(),
+        shutdown.subscribe(),
+    ));
+
     tokio::select! {
         () = shutdown_signal() => {}
-        () = serve_quic(&endpoint, state.clone()) => {
+        result = &mut health => {
+            match result {
+                Ok(Ok(())) => warn!("Nexus health listener stopped"),
+                Ok(Err(error)) => warn!(%error, "Nexus health listener failed"),
+                Err(error) => warn!(%error, "Nexus health task failed"),
+            }
+        }
+        result = &mut quic => {
+            if let Err(error) = result {
+                warn!(%error, "Nexus QUIC task failed");
+            }
             warn!("Nexus QUIC endpoint stopped accepting connections");
         }
+    }
+
+    // Tell the HTTP listener to finish its in-flight responses and the QUIC
+    // accept loop to stop admitting work before draining the live sessions.
+    let _ = shutdown.send(true);
+    if timeout(GRACEFUL_DRAIN_TIMEOUT, &mut health).await.is_err() {
+        health.abort();
+    }
+    if timeout(GRACEFUL_DRAIN_TIMEOUT, &mut quic).await.is_err() {
+        quic.abort();
     }
 
     // Upgraded sockets outlive the HTTP serve loop, so drain them explicitly.
@@ -84,18 +124,43 @@ async fn main() -> Result<(), Box<dyn Error>> {
 /// Accepts authenticated QUIC connections until process shutdown. Each
 /// connection owns its service task, matching the concurrency the old HTTP
 /// server provided without putting transport state in application handlers.
-async fn serve_quic(endpoint: &Endpoint, state: AppState) {
-    while let Some(incoming) = endpoint.accept().await {
-        let state = state.clone();
-        let endpoint = endpoint.clone();
-        tokio::spawn(async move {
-            let Ok(connection) = incoming.await else {
-                return;
-            };
-            let observed_ip = portalis_nexus_server::quic::direct_peer_ip(&endpoint, &connection);
-            portalis_nexus_server::quic::serve(connection, state, observed_ip).await;
-        });
+async fn serve_quic(endpoint: Endpoint, state: AppState, mut shutdown: watch::Receiver<bool>) {
+    loop {
+        tokio::select! {
+            changed = shutdown.changed() => {
+                if changed.is_err() || *shutdown.borrow() {
+                    return;
+                }
+            }
+            incoming = endpoint.accept() => {
+                let Some(incoming) = incoming else { return };
+                let state = state.clone();
+                let endpoint = endpoint.clone();
+                tokio::spawn(async move {
+                    let Ok(connection) = incoming.await else {
+                        return;
+                    };
+                    let observed_ip = portalis_nexus_server::quic::direct_peer_ip(&endpoint, &connection);
+                    portalis_nexus_server::quic::serve(connection, state, observed_ip).await;
+                });
+            }
+        }
     }
+}
+
+/// Serves orchestration probes until the process begins its graceful drain.
+async fn serve_health(
+    listener: tokio::net::TcpListener,
+    state: AppState,
+    mut shutdown: watch::Receiver<bool>,
+) -> std::io::Result<()> {
+    axum::serve(listener, portalis_nexus_server::app(&state))
+        .with_graceful_shutdown(async move {
+            if !*shutdown.borrow() {
+                let _ = shutdown.changed().await;
+            }
+        })
+        .await
 }
 
 /// Waits for the first shutdown signal this platform can deliver.

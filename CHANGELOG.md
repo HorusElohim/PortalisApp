@@ -22,6 +22,12 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Nexus is now ready to operate as Portalis's control-plane service: it serves
+  authenticated QUIC on UDP and liveness/readiness probes on TCP at the same
+  configured address and port. The service logs the stable Node ID users put
+  into Portalis, drains both listeners on shutdown, and ships with a durable
+  embedded-storage deployment guide.
+
 - Added Nexus service setup to Portalis Settings. A person can save the
   server's public QUIC Node ID and a direct address; the native backend
   validates both as one trusted endpoint before any future connection can use
