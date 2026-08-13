@@ -22,6 +22,12 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Added the first app-facing Nexus bridge. It starts and stops one local
+  runtime, streams complete state and on-demand collection detail, and accepts
+  validated collection, people, lifecycle, and torrent-import commands. The
+  new generated API uses its own stable DTOs while the old path remains
+  temporarily available for the staged screen migration.
+
 - Nexus is now ready to operate as Portalis's control-plane service: it serves
   authenticated QUIC on UDP and liveness/readiness probes on TCP at the same
   configured address and port. The service logs the stable Node ID users put

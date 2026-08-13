@@ -31,6 +31,8 @@ pub mod bridge;
 mod collab_sync;
 /// Canonical storage locations; never cache-path fallbacks.
 mod content_location;
+/// The single app-facing Nexus lifecycle, streams, and command boundary.
+pub mod portalis_api;
 /// Reconciles collection state with known peers while the app is active.
 #[path = "converge.rs"]
 mod reconciliation;

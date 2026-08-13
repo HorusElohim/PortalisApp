@@ -12,6 +12,7 @@ import 'device.dart';
 import 'frb_generated.dart';
 import 'nexus_settings.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
+import 'portalis_api.dart';
 import 'settings.dart';
 import 'torrent.dart';
 
@@ -27,10 +28,63 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException dco_decode_AnyhowException(dynamic raw);
 
   @protected
+  RustStreamSink<AppSnapshot> dco_decode_StreamSink_app_snapshot_Sse(
+      dynamic raw);
+
+  @protected
+  RustStreamSink<AppDetail?>
+      dco_decode_StreamSink_opt_box_autoadd_app_detail_Sse(dynamic raw);
+
+  @protected
   String dco_decode_String(dynamic raw);
 
   @protected
+  AppAccepted dco_decode_app_accepted(dynamic raw);
+
+  @protected
+  AppCollection dco_decode_app_collection(dynamic raw);
+
+  @protected
+  AppCommand dco_decode_app_command(dynamic raw);
+
+  @protected
+  AppContact dco_decode_app_contact(dynamic raw);
+
+  @protected
+  AppDetail dco_decode_app_detail(dynamic raw);
+
+  @protected
+  AppDevice dco_decode_app_device(dynamic raw);
+
+  @protected
+  AppEntry dco_decode_app_entry(dynamic raw);
+
+  @protected
+  AppPending dco_decode_app_pending(dynamic raw);
+
+  @protected
+  AppSnapshot dco_decode_app_snapshot(dynamic raw);
+
+  @protected
+  AppTransfer dco_decode_app_transfer(dynamic raw);
+
+  @protected
   bool dco_decode_bool(dynamic raw);
+
+  @protected
+  AppCommand dco_decode_box_autoadd_app_command(dynamic raw);
+
+  @protected
+  AppDetail dco_decode_box_autoadd_app_detail(dynamic raw);
+
+  @protected
+  AppPending dco_decode_box_autoadd_app_pending(dynamic raw);
+
+  @protected
+  AppTransfer dco_decode_box_autoadd_app_transfer(dynamic raw);
+
+  @protected
+  bool dco_decode_box_autoadd_bool(dynamic raw);
 
   @protected
   EngineSettings dco_decode_box_autoadd_engine_settings(dynamic raw);
@@ -63,6 +117,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   EngineSettings dco_decode_engine_settings(dynamic raw);
 
   @protected
+  double dco_decode_f_32(dynamic raw);
+
+  @protected
   double dco_decode_f_64(dynamic raw);
 
   @protected
@@ -75,6 +132,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<AppCollection> dco_decode_list_app_collection(dynamic raw);
+
+  @protected
+  List<AppContact> dco_decode_list_app_contact(dynamic raw);
+
+  @protected
+  List<AppEntry> dco_decode_list_app_entry(dynamic raw);
+
+  @protected
   List<CollaboratorInfo> dco_decode_list_collaborator_info(dynamic raw);
 
   @protected
@@ -85,6 +151,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<PieceRun> dco_decode_list_piece_run(dynamic raw);
+
+  @protected
+  Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
@@ -109,6 +178,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  AppDetail? dco_decode_opt_box_autoadd_app_detail(dynamic raw);
+
+  @protected
+  AppPending? dco_decode_opt_box_autoadd_app_pending(dynamic raw);
+
+  @protected
+  AppTransfer? dco_decode_opt_box_autoadd_app_transfer(dynamic raw);
+
+  @protected
+  bool? dco_decode_opt_box_autoadd_bool(dynamic raw);
 
   @protected
   ImportInfo? dco_decode_opt_box_autoadd_import_info(dynamic raw);
@@ -156,10 +237,64 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
+  RustStreamSink<AppSnapshot> sse_decode_StreamSink_app_snapshot_Sse(
+      SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<AppDetail?>
+      sse_decode_StreamSink_opt_box_autoadd_app_detail_Sse(
+          SseDeserializer deserializer);
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  AppAccepted sse_decode_app_accepted(SseDeserializer deserializer);
+
+  @protected
+  AppCollection sse_decode_app_collection(SseDeserializer deserializer);
+
+  @protected
+  AppCommand sse_decode_app_command(SseDeserializer deserializer);
+
+  @protected
+  AppContact sse_decode_app_contact(SseDeserializer deserializer);
+
+  @protected
+  AppDetail sse_decode_app_detail(SseDeserializer deserializer);
+
+  @protected
+  AppDevice sse_decode_app_device(SseDeserializer deserializer);
+
+  @protected
+  AppEntry sse_decode_app_entry(SseDeserializer deserializer);
+
+  @protected
+  AppPending sse_decode_app_pending(SseDeserializer deserializer);
+
+  @protected
+  AppSnapshot sse_decode_app_snapshot(SseDeserializer deserializer);
+
+  @protected
+  AppTransfer sse_decode_app_transfer(SseDeserializer deserializer);
+
+  @protected
   bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  AppCommand sse_decode_box_autoadd_app_command(SseDeserializer deserializer);
+
+  @protected
+  AppDetail sse_decode_box_autoadd_app_detail(SseDeserializer deserializer);
+
+  @protected
+  AppPending sse_decode_box_autoadd_app_pending(SseDeserializer deserializer);
+
+  @protected
+  AppTransfer sse_decode_box_autoadd_app_transfer(SseDeserializer deserializer);
+
+  @protected
+  bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
 
   @protected
   EngineSettings sse_decode_box_autoadd_engine_settings(
@@ -195,6 +330,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   EngineSettings sse_decode_engine_settings(SseDeserializer deserializer);
 
   @protected
+  double sse_decode_f_32(SseDeserializer deserializer);
+
+  @protected
   double sse_decode_f_64(SseDeserializer deserializer);
 
   @protected
@@ -205,6 +343,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<AppCollection> sse_decode_list_app_collection(
+      SseDeserializer deserializer);
+
+  @protected
+  List<AppContact> sse_decode_list_app_contact(SseDeserializer deserializer);
+
+  @protected
+  List<AppEntry> sse_decode_list_app_entry(SseDeserializer deserializer);
 
   @protected
   List<CollaboratorInfo> sse_decode_list_collaborator_info(
@@ -219,6 +367,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<PieceRun> sse_decode_list_piece_run(SseDeserializer deserializer);
+
+  @protected
+  Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -245,6 +396,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  AppDetail? sse_decode_opt_box_autoadd_app_detail(
+      SseDeserializer deserializer);
+
+  @protected
+  AppPending? sse_decode_opt_box_autoadd_app_pending(
+      SseDeserializer deserializer);
+
+  @protected
+  AppTransfer? sse_decode_opt_box_autoadd_app_transfer(
+      SseDeserializer deserializer);
+
+  @protected
+  bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
 
   @protected
   ImportInfo? sse_decode_opt_box_autoadd_import_info(
@@ -294,10 +460,67 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       AnyhowException self, SseSerializer serializer);
 
   @protected
+  void sse_encode_StreamSink_app_snapshot_Sse(
+      RustStreamSink<AppSnapshot> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_StreamSink_opt_box_autoadd_app_detail_Sse(
+      RustStreamSink<AppDetail?> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_app_accepted(AppAccepted self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_collection(AppCollection self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_command(AppCommand self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_contact(AppContact self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_detail(AppDetail self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_device(AppDevice self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_entry(AppEntry self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_pending(AppPending self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_snapshot(AppSnapshot self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_transfer(AppTransfer self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_app_command(
+      AppCommand self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_app_detail(
+      AppDetail self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_app_pending(
+      AppPending self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_app_transfer(
+      AppTransfer self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_engine_settings(
@@ -338,6 +561,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       EngineSettings self, SseSerializer serializer);
 
   @protected
+  void sse_encode_f_32(double self, SseSerializer serializer);
+
+  @protected
   void sse_encode_f_64(double self, SseSerializer serializer);
 
   @protected
@@ -348,6 +574,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_app_collection(
+      List<AppCollection> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_app_contact(
+      List<AppContact> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_app_entry(List<AppEntry> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_collaborator_info(
@@ -363,6 +600,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_piece_run(List<PieceRun> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_prim_u_32_strict(
+      Uint32List self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_prim_u_8_strict(
@@ -393,6 +634,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_app_detail(
+      AppDetail? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_app_pending(
+      AppPending? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_app_transfer(
+      AppTransfer? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_import_info(
