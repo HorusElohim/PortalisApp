@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app/app_controllers.dart';
@@ -44,6 +46,8 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     AppControllers.collections.setPaused(state != AppLifecycleState.resumed);
+    unawaited(
+        AppControllers.nexusApp.setActive(state == AppLifecycleState.resumed));
   }
 
   void _onTabChanged() {
@@ -72,7 +76,8 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     if (collection == null) return;
     if (!inline) {
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => CollectionScreen(collection: collection)),
+        MaterialPageRoute(
+            builder: (_) => CollectionScreen(collection: collection)),
       );
       return;
     }
@@ -145,6 +150,7 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     AppNavigation.tab.removeListener(_onTabChanged);
     WidgetsBinding.instance.removeObserver(this);
     AppControllers.collections.stop();
+    unawaited(AppControllers.nexusApp.stop());
     super.dispose();
   }
 

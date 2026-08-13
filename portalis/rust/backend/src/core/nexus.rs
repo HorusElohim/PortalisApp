@@ -56,6 +56,8 @@ pub enum OpenError {
     /// to upgrade, not that something went wrong.
     #[error(transparent)]
     Store(#[from] StoreError),
+    #[error("the Portalis data directory could not be created: {0}")]
+    DataDir(String),
     #[error("the device identity could not be loaded: {0}")]
     Identity(String),
 }
@@ -142,6 +144,8 @@ impl Nexus {
     ///
     /// Returns [`OpenError`] when the store cannot be opened.
     pub fn open(config: &Config) -> Result<Self, OpenError> {
+        std::fs::create_dir_all(&config.data_dir)
+            .map_err(|error| OpenError::DataDir(error.to_string()))?;
         let store = Store::open(config.data_dir.join("portalis.redb"))?;
         let (collections, collection_states) = LocalCollections::hydrate(&store)?;
         let device = DeviceState {

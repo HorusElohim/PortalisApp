@@ -1,6 +1,7 @@
 import '../features/appearance/application/theme_controller.dart';
 import '../features/collections/application/collections_controller.dart';
 import '../features/identity/application/identity_controller.dart';
+import '../features/nexus/application/nexus_app_controller.dart';
 import '../features/nexus/application/nexus_settings_controller.dart';
 import '../features/settings/application/settings_controller.dart';
 
@@ -12,6 +13,7 @@ abstract final class AppControllers {
   static final collections = CollectionsController.production();
   static final identity = IdentityController.production();
   static final nexus = NexusSettingsController.production();
+  static final nexusApp = NexusAppController.production();
   static final settings = SettingsController.production();
   static final theme = ThemeController.instance;
 }

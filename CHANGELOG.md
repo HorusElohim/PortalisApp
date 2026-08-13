@@ -22,6 +22,11 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Portalis now starts one app-owned Nexus runtime and state subscription after
+  verifying native/frontend compatibility. Backgrounding pauses its network
+  work and shutdown drains it; generated bridge imports for this path are
+  contained in one Dart adapter.
+
 - Nexus collections now have a durable local starting point: creating,
   renaming, and deleting one updates the streamed app state immediately and
   persists in `portalis.redb` across restarts. The initial Nexus state now

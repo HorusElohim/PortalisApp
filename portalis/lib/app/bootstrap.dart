@@ -5,6 +5,7 @@ import '../bridge_generated/bridge.dart';
 import '../bridge_generated/frb_generated.dart';
 import '../features/appearance/application/theme_controller.dart';
 import '../version.dart';
+import 'app_controllers.dart';
 import 'portalis_app.dart';
 
 /// Starts the native backend before Flutter renders any screen.
@@ -27,6 +28,7 @@ Future<void> runPortalisApp() async {
         'Regenerate the bridge and rebuild the native backend together.',
       );
     }
+    await AppControllers.nexusApp.start();
     // Awaited so the first frame already paints the persisted theme — a
     // load kicked off after runApp would flash Nature before a stored
     // Future preference lands.
