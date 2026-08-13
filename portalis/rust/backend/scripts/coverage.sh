@@ -4,7 +4,7 @@ set -euo pipefail
 # Excluded as platform adapters, per SPEC.md section 18:
 #   apps/server/src/main.rs      process bootstrap
 #   apps/server/src/socket.rs    WebSocket plumbing driven by covered decisions
-#   apps/server/src/mongo/mod.rs MongoDB driver plumbing (see below)
+#   crates/storage/src/mongo/mod.rs MongoDB driver plumbing (see below)
 #   crates/client/src/transport  socket actor driven by covered decisions
 #   demo/                        runnable examples, exercised by running them
 #   generated protobuf code and integration tests
@@ -15,8 +15,8 @@ set -euo pipefail
 # connection strings. What remains uncovered is driver-internal error
 # propagation that cannot be triggered deterministically: a transaction that
 # fails to start rather than to commit, and a cursor that dies between opening
-# and collecting. Its decisions live in mongo/documents.rs and store.rs, which
-# stay measured at 100%.
+# and collecting. Its decisions live in mongo/documents.rs and apps/server's
+# store.rs, which stay measured at 100%.
 # Each crate is compiled twice, with and without cfg(test), and both builds are
 # measured. A path reached only by unit tests or only by integration tests is
 # therefore uncovered in the other build, so both layers exercise the same code.
@@ -53,7 +53,7 @@ set -euo pipefail
 # doomed module to 100% buys nothing.
 #
 # `crates/storage/src/embedded.rs` is excluded for the same reason
-# `apps/server/src/mongo/mod.rs` is, and only after trying not to. It has no
+# `crates/storage/src/mongo` is, and only after trying not to. It has no
 # uncovered *lines* — the merged profile finds none. What it has is 79
 # uncovered regions, every one the error arm of a `?` on a redb call against a
 # healthy open file: insert, get, remove, range, commit. redb offers no way to
@@ -74,7 +74,7 @@ set -euo pipefail
 # with the old `collections.rs`, so the Flutter-facing commands moved inside
 # and kept working. Step 9 replaces the bridge and deletes the file, and this
 # line goes with it.
-ignore='apps/server/src/(main|socket)\.rs|apps/server/src/mongo/mod\.rs|crates/storage/src/embedded\.rs|crates/client/src/transport/.*\.rs|crates/client/tests/.*\.rs|demo/src/.*\.rs|backend/src/[^/]*\.rs|backend/src/domain/.*\.rs|backend/src/collections/legacy\.rs|portalis\.protocol\.v1\.rs'
+ignore='apps/server/src/(main|socket)\.rs|crates/storage/src/mongo/mod\.rs|crates/storage/src/embedded\.rs|crates/client/src/transport/.*\.rs|crates/client/tests/.*\.rs|demo/src/.*\.rs|backend/src/[^/]*\.rs|backend/src/domain/.*\.rs|backend/src/collections/legacy\.rs|portalis\.protocol\.v1\.rs'
 lcov="$(mktemp -t nexus-coverage)"
 trap 'rm -f "$lcov"' EXIT
 

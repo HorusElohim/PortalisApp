@@ -11,7 +11,7 @@ use portalis_nexus_server_core::{
     UserDirectory, UserId, UserRecord,
 };
 
-use crate::mongo::MongoStore;
+use portalis_nexus_storage::mongo::MongoStore;
 
 /// Where durable identity and friend state lives.
 #[derive(Debug)]

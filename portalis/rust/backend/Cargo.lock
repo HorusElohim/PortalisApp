@@ -4136,6 +4136,7 @@ dependencies = [
  "mongodb",
  "portalis-nexus-protocol",
  "portalis-nexus-server-core",
+ "portalis-nexus-storage",
  "serde",
  "serde_json",
  "testcontainers-modules",
@@ -4161,13 +4162,18 @@ dependencies = [
 name = "portalis-nexus-storage"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
+ "mongodb",
  "portalis-nexus-client",
+ "portalis-nexus-protocol",
  "portalis-nexus-server-core",
  "redb",
  "serde",
  "serde_json",
+ "testcontainers-modules",
  "thiserror 2.0.20",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

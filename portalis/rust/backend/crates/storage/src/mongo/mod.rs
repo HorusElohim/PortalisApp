@@ -73,8 +73,15 @@ impl MongoStore {
     /// hold a `MongoStore` at all: every operation on it gives up quickly and
     /// reports an outage. Tests that need real storage use the replica set in
     /// `tests/mongo.rs` instead.
-    #[cfg(test)]
-    pub(crate) fn disconnected() -> Self {
+    /// Public now that the engine lives in its own crate: the server's tests
+    /// use it too, and `cfg(test)` does not cross a crate boundary.
+    ///
+    /// # Panics
+    ///
+    /// If the unreachable address it is built with will not parse, which would
+    /// mean the constant below had been edited into something invalid.
+    #[must_use]
+    pub fn disconnected() -> Self {
         let options = ClientOptions::builder()
             .hosts(vec![mongodb::options::ServerAddress::Tcp {
                 // Port 1 is reserved, so nothing can be listening on it.

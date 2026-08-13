@@ -13,17 +13,18 @@
 //!
 //! - [`embedded`]: one file, no server, no replica set.
 //! - [`directory`]: device logs, stored and served.
+//! - [`mongo`]: the engine an operator already running `MongoDB` wants.
 //! - [`repositories`]: the engine wearing the service's own vocabulary.
 //! - [`service`]: answering a peer that happens to be a service.
 //! - [`mailbox`]: what a device missed while it was asleep.
 //!
-//! The `MongoDB` engine currently lives in `apps/server` and moves here as the
-//! service is rewritten; both then answer to the same conformance suite, which
-//! is the only way "either engine" means anything.
+//! Both answer to one conformance suite, which is the only way "either engine"
+//! means anything: two implementations nobody compares are two behaviours.
 
 pub mod directory;
 pub mod embedded;
 pub mod mailbox;
+pub mod mongo;
 mod repositories;
 pub mod service;
 
