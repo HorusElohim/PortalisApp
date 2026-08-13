@@ -284,8 +284,8 @@ pub struct Accepted {
 
 /// Why a command was not accepted.
 ///
-/// Returned immediately, before anything is attempted. Anything that can only
-/// be discovered by trying arrives later, through the state.
+/// Returned after local acceptance. Anything that needs peers or a transfer
+/// arrives later through the state.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum CommandError {
     #[error("{0}")]
@@ -297,6 +297,9 @@ pub enum CommandError {
     /// Needs connectivity and cannot be queued.
     #[error("this needs a connection, and cannot wait for one")]
     Unavailable,
+    /// The local acceptance transaction could not be made durable.
+    #[error("Portalis could not durably save this command: {0}")]
+    Persistence(String),
 }
 
 #[cfg(test)]

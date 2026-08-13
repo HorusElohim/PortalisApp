@@ -22,6 +22,11 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Nexus collections now have a durable local starting point: creating,
+  renaming, and deleting one updates the streamed app state immediately and
+  persists in `portalis.redb` across restarts. The initial Nexus state now
+  includes this device's fingerprint for later contact verification.
+
 - Added the first app-facing Nexus bridge. It starts and stops one local
   runtime, streams complete state and on-demand collection detail, and accepts
   validated collection, people, lifecycle, and torrent-import commands. The

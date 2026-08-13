@@ -21,6 +21,7 @@
 //! **`watch_detail` is the only way to pay for the expensive tier.** No
 //! subscription, no piece maps.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -30,8 +31,10 @@ use tokio::sync::watch;
 use super::supervisor::Supervisor;
 use crate::projection::emit::Projector;
 use crate::projection::state::{
-    Accepted, Command, CommandError, Connectivity, Detail, DeviceState, Handle, PortalisState,
+    Accepted, CollectionState, Command, CommandError, Connectivity, Detail, DeviceState, Handle,
+    PortalisState, Role, Status,
 };
+use crate::store::records::{Role as StoredRole, StoredCollection};
 use crate::store::{Store, StoreError};
 
 /// Where the core keeps its file, and who it is.
@@ -41,6 +44,8 @@ pub struct Config {
     pub data_dir: std::path::PathBuf,
     /// What to call this device until the person renames it.
     pub device_name: String,
+    /// The public signing key people compare when verifying this device.
+    pub fingerprint: String,
 }
 
 /// Why the core did not start.
@@ -66,11 +71,63 @@ pub struct Nexus {
     /// `pending` field it appears in.
     next_command: AtomicU64,
     active: bool,
-    #[allow(
-        dead_code,
-        reason = "the workflows that write through it arrive with the bridge"
-    )]
     store: Store,
+    collections: Mutex<LocalCollections>,
+}
+
+/// The process-local handles for durable collection records.
+///
+/// Store keys survive a restart; handles deliberately do not. Keeping their
+/// mapping beside the projection prevents either identifier becoming the
+/// other's accidental public API.
+#[derive(Debug, Default)]
+struct LocalCollections {
+    keys: HashMap<Handle, Vec<u8>>,
+    next_handle: u32,
+}
+
+impl LocalCollections {
+    fn hydrate(store: &Store) -> Result<(Self, Vec<CollectionState>), StoreError> {
+        let mut local = Self::default();
+        let mut projected = Vec::new();
+        for (key, stored) in store.collections()? {
+            let handle = local.assign(key.clone());
+            let revision = store
+                .current_revision(&key)?
+                .map_or(0, |(number, _)| number);
+            projected.push(CollectionState {
+                id: handle,
+                name: stored.name,
+                role: match stored.role {
+                    StoredRole::Owner => Role::Owner,
+                    StoredRole::Member => Role::Member,
+                },
+                revision,
+                status: Status::Available,
+                members: Vec::new(),
+                entries: 0,
+                total_bytes: 0,
+                transfer: None,
+                pending: None,
+            });
+        }
+        Ok((local, projected))
+    }
+
+    fn assign(&mut self, key: Vec<u8>) -> Handle {
+        self.next_handle += 1;
+        let handle = Handle(self.next_handle);
+        self.keys.insert(handle, key);
+        handle
+    }
+
+    fn key(&self, handle: Handle) -> Option<&[u8]> {
+        self.keys.get(&handle).map(Vec::as_slice)
+    }
+
+    fn forget(&mut self, handle: Handle) {
+        self.keys.remove(&handle);
+    }
 }
 
 impl Nexus {
@@ -86,17 +143,18 @@ impl Nexus {
     /// Returns [`OpenError`] when the store cannot be opened.
     pub fn open(config: &Config) -> Result<Self, OpenError> {
         let store = Store::open(config.data_dir.join("portalis.redb"))?;
+        let (collections, collection_states) = LocalCollections::hydrate(&store)?;
         let device = DeviceState {
             name: config.device_name.clone(),
             handle: None,
-            fingerprint: String::new(),
+            fingerprint: config.fingerprint.clone(),
             devices: 1,
         };
         let first = PortalisState {
             device,
             connectivity: Connectivity::LocalOnly,
             contacts: Vec::new(),
-            collections: Vec::new(),
+            collections: collection_states,
             alerts: Vec::new(),
         };
 
@@ -108,6 +166,7 @@ impl Nexus {
             next_command: AtomicU64::new(1),
             active: true,
             store,
+            collections: Mutex::new(collections),
         })
     }
 
@@ -118,6 +177,7 @@ impl Nexus {
         Self::open(&Config {
             data_dir: crate::paths::state_dir(),
             device_name: device.nickname,
+            fingerprint: device.device_id,
         })
     }
 
@@ -171,10 +231,9 @@ impl Nexus {
 
     /// Accepts a command, or says why not.
     ///
-    /// Returns before anything is attempted. What becomes of it arrives
-    /// through [`Self::watch`], on the object it affects, which is what lets
-    /// the interface show an operation that was in flight when the app was
-    /// last closed.
+    /// Does not wait for a network. Changes whose complete local effect is
+    /// known are durably recorded first; publication and downloads remain
+    /// queued and are reported through [`Self::watch`].
     ///
     /// # Errors
     ///
@@ -182,6 +241,11 @@ impl Nexus {
     /// this device may do, or needs a connection it cannot wait for.
     pub fn command(&self, command: &Command) -> Result<Accepted, CommandError> {
         validate(command)?;
+
+        // A collection the person has just created, renamed, or removed must
+        // survive a crash before it can be published. The database write is
+        // the acceptance boundary; network work still happens later.
+        self.apply_local(command)?;
 
         // Deferrable commands are queued rather than refused, which is what
         // lets the interface accept one instantly with the network down.
@@ -193,6 +257,103 @@ impl Nexus {
             id: self.next_command.fetch_add(1, Ordering::Relaxed),
             queued,
         })
+    }
+
+    fn apply_local(&self, command: &Command) -> Result<(), CommandError> {
+        match command {
+            Command::CreateCollection { name, .. } => self.create_collection(name),
+            Command::RenameCollection { collection, name } => {
+                self.rename_collection(*collection, name)
+            }
+            Command::DeleteCollection { collection, .. } => self.delete_collection(*collection),
+            _ => Ok(()),
+        }
+    }
+
+    fn create_collection(&self, name: &str) -> Result<(), CommandError> {
+        let id = crate::collections::model::CollectionId::generate();
+        let stored = StoredCollection {
+            name: name.to_owned(),
+            role: StoredRole::Owner,
+            content_key: portalis_nexus_client::generate_content_key(),
+            media_path: String::new(),
+        };
+        self.store
+            .put_collection(id.as_bytes(), &stored)
+            .map_err(persistence)?;
+
+        let handle = self
+            .collections
+            .lock()
+            .map_err(|_| CommandError::Persistence("the collection index was poisoned".to_owned()))?
+            .assign(id.as_bytes().to_vec());
+        let mut state = self.state();
+        state.collections.push(CollectionState {
+            id: handle,
+            name: stored.name,
+            role: Role::Owner,
+            revision: 0,
+            status: Status::Available,
+            members: Vec::new(),
+            entries: 0,
+            total_bytes: 0,
+            transfer: None,
+            pending: None,
+        });
+        self.states.send_replace(state);
+        Ok(())
+    }
+
+    fn rename_collection(&self, handle: Handle, name: &str) -> Result<(), CommandError> {
+        let key = self.collection_key(handle)?;
+        let mut stored = self
+            .store
+            .collection(&key)
+            .map_err(persistence)?
+            .ok_or_else(|| missing_collection(handle))?;
+        stored.name = name.to_owned();
+        self.store
+            .put_collection(&key, &stored)
+            .map_err(persistence)?;
+
+        let mut state = self.state();
+        let projected = state
+            .collections
+            .iter_mut()
+            .find(|collection| collection.id == handle)
+            .ok_or_else(|| missing_collection(handle))?;
+        projected.name = stored.name;
+        self.states.send_replace(state);
+        Ok(())
+    }
+
+    fn delete_collection(&self, handle: Handle) -> Result<(), CommandError> {
+        let key = self.collection_key(handle)?;
+        self.store.forget_collection(&key).map_err(persistence)?;
+        self.collections
+            .lock()
+            .map_err(|_| CommandError::Persistence("the collection index was poisoned".to_owned()))?
+            .forget(handle);
+
+        let mut state = self.state();
+        let before = state.collections.len();
+        state
+            .collections
+            .retain(|collection| collection.id != handle);
+        if state.collections.len() == before {
+            return Err(missing_collection(handle));
+        }
+        self.states.send_replace(state);
+        Ok(())
+    }
+
+    fn collection_key(&self, handle: Handle) -> Result<Vec<u8>, CommandError> {
+        self.collections
+            .lock()
+            .map_err(|_| CommandError::Persistence("the collection index was poisoned".to_owned()))?
+            .key(handle)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| missing_collection(handle))
     }
 
     /// Publishes a new snapshot, if it differs from the last one sent.
@@ -224,6 +385,14 @@ impl Nexus {
     pub async fn close(self) {
         self.supervisor.shutdown().await;
     }
+}
+
+fn persistence(error: StoreError) -> CommandError {
+    CommandError::Persistence(error.to_string())
+}
+
+fn missing_collection(handle: Handle) -> CommandError {
+    CommandError::Invalid(format!("collection {} is no longer available", handle.0))
 }
 
 /// What can be decided about a command without touching anything.
@@ -283,6 +452,7 @@ mod tests {
         Nexus::open(&Config {
             data_dir: scratch.0.clone(),
             device_name: "Ada's laptop".to_owned(),
+            fingerprint: "ada-fingerprint".to_owned(),
         })
         .expect("opens")
     }
@@ -402,6 +572,53 @@ mod tests {
         assert!(first.queued, "it will publish when there is a network");
         assert_ne!(first.id, second.id, "each is named separately");
         nexus.close().await;
+    }
+
+    /// Local collection changes cross the one durable boundary before they
+    /// appear in the state stream. A restarted core therefore reconstructs
+    /// the same collection rather than relying on a bridge-side cache.
+    #[tokio::test]
+    async fn collection_edits_are_visible_immediately_and_survive_a_restart() {
+        let scratch = Scratch::new("durable-collections");
+        let nexus = open(&scratch);
+
+        nexus
+            .command(&Command::CreateCollection {
+                name: "Iceland".to_owned(),
+                files: Vec::new(),
+            })
+            .expect("creates locally");
+        let handle = nexus.state().collections[0].id;
+        assert_eq!(nexus.state().collections[0].name, "Iceland");
+
+        nexus
+            .command(&Command::RenameCollection {
+                collection: handle,
+                name: "Iceland, 2019".to_owned(),
+            })
+            .expect("renames locally");
+        nexus.close().await;
+
+        let reopened = open(&scratch);
+        assert_eq!(reopened.state().collections.len(), 1);
+        assert_eq!(reopened.state().collections[0].name, "Iceland, 2019");
+        assert_eq!(
+            reopened.state().device.fingerprint,
+            "ada-fingerprint",
+            "the state has a trustworthy local fingerprint from the start"
+        );
+
+        reopened
+            .command(&Command::DeleteCollection {
+                collection: reopened.state().collections[0].id,
+                delete_files: false,
+            })
+            .expect("removes locally");
+        reopened.close().await;
+
+        let empty = open(&scratch);
+        assert!(empty.state().collections.is_empty());
+        empty.close().await;
     }
 
     /// Every refusal a command can earn without touching state.
@@ -545,6 +762,7 @@ mod tests {
         let refused = Nexus::open(&Config {
             data_dir: scratch.0.clone(),
             device_name: "Ada's laptop".to_owned(),
+            fingerprint: "ada-fingerprint".to_owned(),
         })
         .expect_err("must refuse");
 
