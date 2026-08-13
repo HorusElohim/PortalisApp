@@ -115,6 +115,22 @@ impl KnownPeers {
     }
 }
 
+/// What the transport can currently do, said the safe way round.
+///
+/// Only a confirmed direct path is reported as direct. `Mixed` means some of
+/// it is relayed and reporting the better half would overstate what is true;
+/// `Unavailable` means no path is confirmed yet, and directness is a claim to
+/// be earned rather than assumed. Both therefore read as relayed, which is the
+/// answer that leads a caller to be more careful rather than less.
+const fn path_from(path: ConnectionPath) -> Path {
+    match path {
+        ConnectionPath::Direct => Path::Direct,
+        ConnectionPath::Relay | ConnectionPath::Mixed | ConnectionPath::Unavailable => {
+            Path::Relayed
+        }
+    }
+}
+
 /// Turns any transport failure into one this crate's callers understand.
 fn connection_error(error: impl std::fmt::Display) -> SessionError {
     SessionError::Connection(error.to_string())
@@ -185,12 +201,7 @@ impl Session {
         Ok(Self {
             connection,
             security: Security {
-                path: match endpoint.path_to(remote_id) {
-                    ConnectionPath::Direct => Path::Direct,
-                    // Mixed means some of it is relayed, and reporting the
-                    // better half would overstate what is true.
-                    _ => Path::Relayed,
-                },
+                path: path_from(endpoint.path_to(remote_id)),
                 peer,
             },
             remote,
@@ -410,12 +421,8 @@ mod tests {
         let address = server.addr_when_ready().await;
         let will_answer = KnownPeers::new().verified(key_of(&client));
         let vanishing = tokio::spawn(async move {
-            let Some(incoming) = server.accept().await else {
-                return;
-            };
-            let Ok(connection) = incoming.await else {
-                return;
-            };
+            let incoming = server.accept().await.expect("an incoming connection");
+            let connection = incoming.await.expect("the handshake completes");
             let session = Session::accept(&server, connection, &will_answer).expect("known");
             let (_, responder) = session.next_request().await.expect("a request");
             // Closed underneath the responder, so answering fails on write.
@@ -440,6 +447,20 @@ mod tests {
         vanishing.await.expect("the vanishing peer");
     }
 
+    /// The report is what a caller acts on, so nothing but a confirmed direct
+    /// path may be called direct.
+    #[test]
+    fn only_a_confirmed_direct_path_is_reported_as_one() {
+        assert_eq!(path_from(ConnectionPath::Direct), Path::Direct);
+        for relayed in [
+            ConnectionPath::Relay,
+            ConnectionPath::Mixed,
+            ConnectionPath::Unavailable,
+        ] {
+            assert_eq!(path_from(relayed), Path::Relayed, "{relayed:?}");
+        }
+    }
+
     #[tokio::test]
     async fn a_known_peer_is_served_and_an_unknown_one_is_refused() {
         let server = bound(11).await;
@@ -450,15 +471,23 @@ mod tests {
         let server_key = key_of(&server);
         let answers_to = KnownPeers::new().verified(key_of(&client));
         let (oversized_tx, mut oversized_rx) = tokio::sync::mpsc::channel(1);
-        // Runs until aborted. Ending it after one answer would drop the
-        // connection while the client is still reading from it.
+        let (refused_tx, mut refused_rx) = tokio::sync::mpsc::channel(1);
+        // Three callers arrive: the client, and a stranger twice. Serving
+        // exactly those and then finishing lets the test await the listener
+        // rather than abort it, so a panic inside it is reported instead of
+        // discarded. The count has to be right in both directions: ending
+        // after the first answer would drop the connection while the client is
+        // still reading it, and ending early leaves a later dial with nobody
+        // to accept it, which is not a refusal but a thirty-second timeout.
+        let mut expected = 3_u32;
         let listening = tokio::spawn(async move {
-            while let Some(incoming) = server.accept().await {
-                let Ok(connection) = incoming.await else {
-                    continue;
-                };
+            while expected > 0 {
+                let incoming = server.accept().await.expect("an incoming connection");
+                expected -= 1;
+                let connection = incoming.await.expect("the handshake completes");
                 let Ok(session) = Session::accept(&server, connection, &answers_to) else {
                     // Unknown: never becomes a session, so never answers.
+                    let _ = refused_tx.try_send(());
                     continue;
                 };
                 let mut answered = 0_u32;

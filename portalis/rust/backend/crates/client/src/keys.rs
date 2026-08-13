@@ -634,16 +634,14 @@ mod tests {
             ),
             Err(KeyError::Seal(_))
         ));
+        let readdressed = open_content_key(
+            &laptop.secret_bytes(),
+            COLLECTION,
+            phone.device_id(),
+            &mine.envelope,
+        );
         assert!(
-            matches!(
-                open_content_key(
-                    &laptop.secret_bytes(),
-                    COLLECTION,
-                    phone.device_id(),
-                    &mine.envelope,
-                ),
-                Err(KeyError::Seal(_))
-            ),
+            matches!(readdressed, Err(KeyError::Seal(_))),
             "the device id is authenticated, so an envelope cannot be re-addressed"
         );
     }

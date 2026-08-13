@@ -519,6 +519,18 @@ mod tests {
             Some(device())
         );
         assert_eq!(store.list_devices(ADA).await.expect("reads").len(), 1);
+        // A second device joins an account that already exists, which is the
+        // one arm registration cannot reach: the first device arrives with the
+        // user, so linking is only ever the second one onward.
+        store
+            .link_device(DeviceRecord {
+                device_id: [11; 32],
+                public_key: [11; 32],
+                ..device()
+            })
+            .await
+            .expect("links");
+        assert_eq!(store.list_devices(ADA).await.expect("reads").len(), 2);
         store
             .touch_device(device().device_id, 5)
             .await

@@ -52,14 +52,22 @@ set -euo pipefail
 # that those files deserve less; they are being replaced, and holding a
 # doomed module to 100% buys nothing.
 #
-# The embedded engine's four endpoint modules are excluded for the same reason
-# `crates/storage/src/mongo` is, and only after trying not to. It has no
-# uncovered *lines* — the merged profile finds none. What they have is the
-# error arm of every `?` on a redb call against a healthy open file: insert,
-# get, remove, range, commit. redb offers no way to make those fail, and the
-# only thing that would is wrapping every call behind a trait so a double could
-# refuse — machinery whose sole purpose would be the gate, and which would make
-# these files worse to read.
+# The embedded engine's endpoint modules are excluded for the same reason
+# `crates/storage/src/mongo` is, and only after trying not to. What they mostly
+# have is the error arm of every `?` on a redb call against a healthy open
+# file: insert, get, remove, range, commit. redb offers no way to make those
+# fail, and the only thing that would is wrapping every call behind a trait so
+# a double could refuse — machinery whose sole purpose would be the gate, and
+# which would make these files worse to read.
+#
+# Measured rather than assumed, the whole of what these files do not cover is
+# four lines: envelopes.rs's insert error arm, and three arms that only a
+# damaged store reaches — a membership key shorter than the user id it must end
+# with (collections.rs), and an index row naming an object the table does not
+# hold (collections.rs, identity.rs). Reaching those means writing rows the
+# endpoints themselves cannot write. An earlier version of this comment claimed
+# these files had no uncovered lines at all; that was measured with the broken
+# report described below, and it was wrong.
 #
 # What was reachable is covered: a path that will not open, a directory that
 # cannot be made, a file whose tables hold another shape, and a row that will
@@ -83,25 +91,33 @@ trap 'rm -f "$lcov"' EXIT
 # and process startup, and it measures none of the code under the policy. Skip
 # it by name rather than dropping `--all-features`, so every other
 # feature-gated path stays measured.
-# One invocation measures and gates. A second `cargo llvm-cov report` reading
-# the same profile prints an empty table, so the numbers come from the run
-# that gated them or not at all — a coverage table that disagrees with the
-# gate is worse than no table.
-#
 # `clean` first, so a run answers only for the tests it just executed. Without
 # it a file can keep the coverage of a test that has since been removed.
 cargo llvm-cov clean --workspace
+
+# One invocation runs the tests, applies both thresholds, and writes the LCOV
+# the per-line check below reads. One, and not two, because `cargo llvm-cov
+# report` has no workspace selection: it answers for the current package alone,
+# whatever it is passed. Reading the profile a second time that way produced an
+# LCOV covering thirteen files out of seventy-one, so the per-line gate was
+# examining the root package and silently passing everything else. A gate that
+# looks at a fifth of the code and says nothing about the rest is worse than no
+# gate, because it is believed.
 cargo llvm-cov \
   --workspace \
   --all-features \
   --ignore-filename-regex "$ignore" \
-  --summary-only \
   --fail-under-functions 100 \
   --fail-under-regions 99 \
+  --lcov --output-path "$lcov" \
   -- --skip two_instances_sync
 
-# The per-line truth the percentages above cannot show, from the same profile.
-cargo llvm-cov report --ignore-filename-regex "$ignore" --lcov --output-path "$lcov"
+# The numbers, from the profile that was just gated rather than a second
+# reading of it.
+awk -F'[:,]' '
+  /^DA:/ { total++; if ($3 > 0) hit++ }
+  END { printf "\n%d of %d lines covered (%.2f%%)\n", hit, total, 100 * hit / total }
+' "$lcov"
 
 if grep -q '^DA:[0-9]*,0$' "$lcov"; then
   echo >&2
