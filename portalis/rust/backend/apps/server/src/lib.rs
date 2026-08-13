@@ -32,10 +32,7 @@ mod shutdown;
 mod state;
 mod store;
 
-pub use config::{
-    DEFAULT_DATABASE, DEFAULT_LISTEN_ADDR, DEFAULT_SERVER_AUTHORITY, MissingStorage, ServerConfig,
-    Storage,
-};
+pub use config::{DEFAULT_DATABASE, DEFAULT_LISTEN_ADDR, MissingStorage, ServerConfig, Storage};
 pub use connections::Connections;
 pub use environment::{OsRandom, SystemClock, now_unix_ns};
 pub use handlers::{departed, dispatch};

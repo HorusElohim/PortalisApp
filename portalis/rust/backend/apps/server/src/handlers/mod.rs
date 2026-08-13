@@ -26,13 +26,13 @@ pub async fn dispatch(
     request: &Envelope,
     now_unix_ns: u64,
 ) -> Envelope {
-    let authority = state.server_authority();
+    let identity = state.server_identity();
     match &request.payload {
         Some(Payload::RegisterUser(register)) => {
             let reply = identity::claim(
                 session,
                 state.identities(),
-                authority,
+                identity,
                 request,
                 register,
                 now_unix_ns,
@@ -45,7 +45,7 @@ pub async fn dispatch(
             let reply = identity::prove(
                 session,
                 state.identities(),
-                authority,
+                identity,
                 request,
                 authenticate,
                 now_unix_ns,
@@ -58,7 +58,7 @@ pub async fn dispatch(
             identity::link(
                 session,
                 state.identities(),
-                authority,
+                identity,
                 request,
                 link_device,
                 now_unix_ns,

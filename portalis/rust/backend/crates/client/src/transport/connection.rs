@@ -23,7 +23,7 @@ pub(crate) struct Shared {
     pub(crate) protocol: ClientProtocol,
     pub(crate) request_timeout: Duration,
     pub(crate) shutdown: watch::Sender<bool>,
-    pub(crate) server_authority: String,
+    pub(crate) server_identity: String,
     live: Mutex<Option<Live>>,
 }
 
@@ -37,7 +37,7 @@ impl Shared {
     pub(crate) fn new(
         events: mpsc::Sender<Envelope>,
         request_timeout: Duration,
-        server_authority: String,
+        server_identity: String,
     ) -> Self {
         Self {
             pending: PendingRequests::default(),
@@ -45,7 +45,7 @@ impl Shared {
             protocol: ClientProtocol::default(),
             request_timeout,
             shutdown: watch::Sender::new(false),
-            server_authority,
+            server_identity,
             live: Mutex::new(None),
         }
     }
@@ -91,7 +91,7 @@ pub(crate) fn start_connection(
     let (outbound, inbox) = mpsc::channel(MAX_OUTBOUND_QUEUE);
     debug!(
         connection_id = %format_id(&hello.connection_id),
-        authority = %shared.server_authority,
+        server_identity = %shared.server_identity,
         "Nexus connection established"
     );
     shared.set_live(Live {
@@ -132,7 +132,7 @@ pub(crate) async fn supervise(
             match attempt {
                 Ok(connection) => start_connection(&shared, connection),
                 Err(error) => {
-                    warn!(authority = %shared.server_authority, %error, "Nexus client stopped reconnecting");
+                    warn!(server_identity = %shared.server_identity, %error, "Nexus client stopped reconnecting");
                     return;
                 }
             }
@@ -141,7 +141,7 @@ pub(crate) async fn supervise(
         if *shutdown.borrow() {
             return;
         }
-        debug!(authority = %shared.server_authority, "Nexus connection ended; reconnecting");
+        debug!(server_identity = %shared.server_identity, "Nexus connection ended; reconnecting");
     }
 }
 

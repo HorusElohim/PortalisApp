@@ -86,10 +86,9 @@ pub async fn reserve_address() -> SocketAddr {
 
 /// Starts the real Nexus server, ready to serve.
 ///
-/// The authority is bound to the address the test dials, because signatures
-/// only verify when both sides name the same server.
+/// Signatures bind to the Node ID the test service exposes, not its address.
 pub async fn start_server(address: SocketAddr) -> (AppState, JoinHandle<()>) {
-    let state = AppState::default().with_server_authority(&address.to_string());
+    let state = AppState::default().with_server_identity(&endpoint(address).node_id.to_string());
     state.mark_ready();
     let SocketAddr::V4(address) = address else {
         panic!("tests bind IPv4 addresses")

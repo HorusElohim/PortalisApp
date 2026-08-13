@@ -103,10 +103,10 @@ impl Session {
 
     /// The facts a signature on this connection is bound to.
     #[must_use]
-    pub fn binding<'a>(&'a self, server_authority: &'a str) -> SessionBinding<'a> {
+    pub fn binding<'a>(&'a self, server_identity: &'a str) -> SessionBinding<'a> {
         SessionBinding {
             protocol_version: CURRENT_PROTOCOL_VERSION,
-            server_authority,
+            server_identity,
             connection_id: self.challenge.connection_id(),
             challenge: self.challenge.challenge(),
             server_time_unix_ns: self.challenge.issued_at_unix_ns(),
@@ -160,12 +160,12 @@ mod tests {
         assert_eq!(binding.challenge, hello.challenge.as_slice());
         assert_eq!(binding.server_time_unix_ns, NOW);
         assert_eq!(binding.protocol_version, CURRENT_PROTOCOL_VERSION);
-        assert_eq!(binding.server_authority, "nexus.portalis.test");
+        assert_eq!(binding.server_identity, "nexus.portalis.test");
         assert_eq!(
             session.binding("nexus.portalis.test"),
             SessionBinding {
                 protocol_version: CURRENT_PROTOCOL_VERSION,
-                server_authority: "nexus.portalis.test",
+                server_identity: "nexus.portalis.test",
                 connection_id: &hello.connection_id,
                 challenge: &hello.challenge,
                 server_time_unix_ns: NOW,

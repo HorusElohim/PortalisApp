@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- Nexus signatures now bind to the authenticated QUIC Node ID rather than a
+  configurable host and port. `PORTALIS_NEXUS_SERVER_AUTHORITY` has been
+  removed: direct addresses, relays, and DNS names are routing hints, while
+  the stable Node ID is the server identity.
+
 - Removed the obsolete Nexus WebSocket endpoint and client dependencies. The
   service now has one authenticated QUIC transport, while its HTTP surface is
   limited to liveness and readiness checks.
@@ -198,14 +203,6 @@
   killed the process with exit 137, severing live sockets instead of draining
   them. It now stops on either signal, and a signal handler that cannot be
   installed waits rather than reporting an immediate shutdown.
-
-- Fixed the Nexus server refusing every signature anywhere but local
-  development. The authority a signature is bound to was a compile-time
-  constant of `127.0.0.1:8080` that the server process never applied, so any
-  deployment reached by another name — including the bundled Docker compose,
-  where clients dial `localhost` — answered `Unauthenticated`. It is now
-  `PORTALIS_NEXUS_SERVER_AUTHORITY`, defaulting to the listen address, set in
-  compose, and logged at startup so a mismatch is diagnosable.
 
 - Fixed every Nexus WebSocket upgrade failing with HTTP 500 in the demo.
   Swarm discovery binds a peer lease to the address the socket observed, which

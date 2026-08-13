@@ -868,12 +868,12 @@ async fn a_write_that_loses_its_server_is_reported_as_an_outage() {
 }
 
 /// The server identity used when signing, which a signature is bound to.
-const AUTHORITY: &str = "nexus.test";
+const IDENTITY: &str = "test-nexus-node";
 
 fn binding(challenge: &[u8; 32]) -> SessionBinding<'_> {
     SessionBinding {
         protocol_version: CURRENT_PROTOCOL_VERSION,
-        server_authority: AUTHORITY,
+        server_identity: IDENTITY,
         connection_id: &[4; 16],
         challenge,
         server_time_unix_ns: NOW,
@@ -1025,13 +1025,13 @@ async fn a_linked_device_outlives_the_process_that_linked_it() {
     let candidate = SigningKey::from_bytes(&[10; 32]);
     let candidate_public = candidate.verifying_key().to_bytes();
     let candidate_encryption_key = [11; 32];
-    let payload = link_device_payload(AUTHORITY, &candidate_public, &candidate_encryption_key);
+    let payload = link_device_payload(IDENTITY, &candidate_public, &candidate_encryption_key);
     let approval = approver.sign(&payload).to_bytes();
 
     let linked = service(running.restart().await)
         .link_device(
             derive_device_id(&approver_public),
-            AUTHORITY,
+            IDENTITY,
             LinkDeviceRequest {
                 candidate_signing_public_key: &candidate_public,
                 candidate_encryption_public_key: &candidate_encryption_key,

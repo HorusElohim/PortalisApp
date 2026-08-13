@@ -80,14 +80,14 @@ impl ClientProtocol {
     #[must_use]
     pub fn link_device<S: DeviceSigner + ?Sized>(
         &self,
-        server_authority: &str,
+        server_identity: &str,
         candidate_signing_public_key: &[u8],
         candidate_encryption_public_key: &[u8],
         approver: &S,
         timestamp_unix_ns: u64,
     ) -> Envelope {
         let payload = link_device_payload(
-            server_authority,
+            server_identity,
             candidate_signing_public_key,
             candidate_encryption_public_key,
         );
@@ -933,7 +933,7 @@ mod tests {
     fn binding<'a>(challenge: &'a [u8], connection_id: &'a [u8]) -> SessionBinding<'a> {
         SessionBinding {
             protocol_version: CURRENT_PROTOCOL_VERSION,
-            server_authority: "nexus.portalis.test",
+            server_identity: "test-nexus-node",
             connection_id,
             challenge,
             server_time_unix_ns: 1,

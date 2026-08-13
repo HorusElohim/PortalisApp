@@ -1,8 +1,8 @@
 //! The service's stable QUIC identity.
 //!
 //! A node ID is public and derived from this private key. It is not a server
-//! name: clients authenticate the node ID in the QUIC handshake, while
-//! signatures remain scoped to the configured server authority.
+//! name: clients authenticate the node ID in the QUIC handshake, and
+//! signatures are scoped to that same identity.
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;

@@ -56,7 +56,6 @@ across restarts:
 
 ```sh
 PORTALIS_NEXUS_MONGODB_URI='mongodb://localhost:27017/?directConnection=true' \
-PORTALIS_NEXUS_SERVER_AUTHORITY=localhost:8080 \
   cargo run -p portalis-nexus-server
 ```
 
@@ -74,17 +73,14 @@ in one transaction. `docker/compose.yaml` starts one.
   spends that connection's challenge either way.
 - `src/main.rs` — the same calls, with a server embedded in the process.
 
-## Authority
+## Server identity
 
-A signature is bound to the server it was meant for. The client derives that
-authority from the endpoint it dials, and the server carries its configured
-one; they must agree or every signature is refused. The walkthrough binds the
-server to its ephemeral address for exactly this reason.
+A signature is bound to the Nexus server's authenticated QUIC Node ID. The
+client takes that ID from the `EndpointAddr` it dials; Iroh verifies the peer
+owns the corresponding private key during the handshake. The address is only
+a routing hint and never enters a signed payload.
 
-For a separately started server, `PORTALIS_NEXUS_SERVER_AUTHORITY` is that
-name, and it defaults to the listen address. Bound and dialled are the same
-thing only in local development: a container binds `0.0.0.0` and is reached as
-something else, so set it explicitly anywhere real. Dialling
-`ws://127.0.0.1:8080` a server that calls itself `localhost:8080` fails with
-`Unauthenticated: signature does not match the signed payload`, which is the
-binding working rather than a bug.
+For a separately started server, keep `PORTALIS_NEXUS_NODE_SECRET` stable and
+use the public Node ID it logs at startup when constructing the client's
+`EndpointAddr`. The same identity works through a direct address, relay, DNS
+name, or container network change without invalidating device signatures.

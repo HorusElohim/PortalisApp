@@ -56,7 +56,7 @@ pub use session::{
     Session, SessionError,
 };
 pub use signer::DeviceSigner;
-pub use transport::{NexusClient, TransportError, authority_of};
+pub use transport::{NexusClient, TransportError, identity_of};
 pub use verify::{
     Accepted, ChainError, ChainState, ChainStore, ChainStoreError, Continuity, MemoryChainStore,
     verify as verify_revision,

@@ -17,7 +17,7 @@ use crate::session::Session;
 pub(crate) async fn claim(
     session: &mut Session,
     identities: &NexusIdentities<DefaultStore>,
-    server_authority: &str,
+    server_identity: &str,
     request: &Envelope,
     register: &RegisterUser,
     now_unix_ns: u64,
@@ -27,7 +27,7 @@ pub(crate) async fn claim(
     }
     let outcome = identities
         .register(RegistrationRequest {
-            binding: session.binding(server_authority),
+            binding: session.binding(server_identity),
             requested_username: &register.requested_username,
             device_public_key: &register.device_public_key,
             encryption_public_key: &register.encryption_public_key,
@@ -41,7 +41,7 @@ pub(crate) async fn claim(
 pub(crate) async fn prove(
     session: &mut Session,
     identities: &NexusIdentities<DefaultStore>,
-    server_authority: &str,
+    server_identity: &str,
     request: &Envelope,
     authenticate: &AuthenticateDevice,
     now_unix_ns: u64,
@@ -51,7 +51,7 @@ pub(crate) async fn prove(
     }
     let outcome = identities
         .authenticate(AuthenticationRequest {
-            binding: session.binding(server_authority),
+            binding: session.binding(server_identity),
             device_public_key: &authenticate.device_public_key,
             signature: &authenticate.signature,
         })
@@ -68,7 +68,7 @@ pub(crate) async fn prove(
 pub(crate) async fn link(
     session: &Session,
     identities: &NexusIdentities<DefaultStore>,
-    server_authority: &str,
+    server_identity: &str,
     request: &Envelope,
     link_device: &LinkDevice,
     now_unix_ns: u64,
@@ -79,7 +79,7 @@ pub(crate) async fn link(
     let outcome = identities
         .link_device(
             approver.device.device_id,
-            server_authority,
+            server_identity,
             LinkDeviceRequest {
                 candidate_signing_public_key: &link_device.candidate_signing_public_key,
                 candidate_encryption_public_key: &link_device.candidate_encryption_public_key,
@@ -181,12 +181,12 @@ mod tests {
     use crate::state::AppState;
 
     const NOW: u64 = 1_700_000_000_000_000_000;
-    const AUTHORITY: &str = "nexus.portalis.test";
+    const IDENTITY: &str = "test-nexus-node";
     const ENCRYPTION_KEY: [u8; 32] = [6; 32];
 
-    /// A server bound to the authority these tests sign against.
+    /// A server bound to the Node ID these tests sign against.
     fn server() -> AppState {
-        AppState::default().with_server_authority(AUTHORITY)
+        AppState::default().with_server_identity(IDENTITY)
     }
 
     /// The message a reply carries, or `None` when it is not a refusal.
@@ -210,7 +210,7 @@ mod tests {
     fn binding_for(hello: &ServerHello) -> SessionBinding<'_> {
         SessionBinding {
             protocol_version: CURRENT_PROTOCOL_VERSION,
-            server_authority: AUTHORITY,
+            server_identity: IDENTITY,
             connection_id: &hello.connection_id,
             challenge: &hello.challenge,
             server_time_unix_ns: NOW,
@@ -260,8 +260,7 @@ mod tests {
     ) -> Envelope {
         use ed25519_dalek::Signer as _;
         let candidate_signing_public_key = candidate.verifying_key().to_bytes();
-        let payload =
-            link_device_payload(AUTHORITY, &candidate_signing_public_key, &ENCRYPTION_KEY);
+        let payload = link_device_payload(IDENTITY, &candidate_signing_public_key, &ENCRYPTION_KEY);
         Envelope {
             message_id: new_message_id(),
             correlation_id: Vec::new(),
@@ -474,10 +473,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_signature_for_another_server_is_refused() {
-        // The client signs for AUTHORITY; this server answers for a different
-        // host, so the signature cannot verify against it.
-        let state = AppState::default().with_server_authority("nexus.attacker.test");
+    async fn a_signature_for_another_node_is_refused() {
+        // The client signs for one Node ID; another node cannot verify it.
+        let state = AppState::default().with_server_identity("attacker-node");
         let hello = greeting();
         let mut session = Session::new(&hello);
 

@@ -45,16 +45,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     .alpns(vec![NEXUS_ALPN.to_vec()])
     .bind()
     .await?;
-    // Clients sign against the name they dialled, so a deployment reached by
-    // any other name refuses every signature. Logged for exactly that reason.
-    let state = AppState::with_store(store).with_server_authority(&config.server_authority);
+    // Iroh authenticates this Node ID during every handshake; it is therefore
+    // the stable authority device signatures bind to, not an address hint.
+    let server_identity = endpoint.node_id().to_string();
+    let state = AppState::with_store(store).with_server_identity(&server_identity);
     // Ready only once the store is reachable and its indexes exist.
     state.mark_ready();
 
     info!(
         listen_addr = %config.listen_addr,
         node_id = %endpoint.node_id(),
-        server_authority = %config.server_authority,
+        server_identity = %server_identity,
         store = state.store().kind(),
         "Portalis Nexus is ready"
     );

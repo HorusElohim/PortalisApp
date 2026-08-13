@@ -10,7 +10,7 @@ use portalis_nexus_protocol::{
     CURRENT_PROTOCOL_VERSION, MAX_FRAME_BYTES, SessionBinding, decode_frame, encode_frame,
     new_message_id, registration_payload, v1,
 };
-use portalis_nexus_server::{AppState, DEFAULT_SERVER_AUTHORITY};
+use portalis_nexus_server::AppState;
 
 /// The same ALPN the client crate dials, kept here as a literal so the test
 /// would notice a change to it rather than follow one.
@@ -70,7 +70,7 @@ async fn connected() -> (Client, tokio::task::JoinHandle<()>, AppState) {
         .expect("binds");
     let address = service.node_addr().initialized().await;
 
-    let state = AppState::default();
+    let state = AppState::default().with_server_identity(&service.node_id().to_string());
     state.mark_ready();
     let serving_state = state.clone();
     let serving = tokio::spawn(async move {
@@ -120,9 +120,14 @@ async fn a_device_registers_over_quic_through_the_same_handlers() {
     // A real signature over the real payload, verified by the real handler.
     let signer = SigningKey::from_bytes(&[7; 32]);
     let public_key = signer.verifying_key().to_bytes();
+    let server_identity = client
+        .connection
+        .remote_node_id()
+        .expect("the server authenticates itself")
+        .to_string();
     let binding = SessionBinding {
         protocol_version: CURRENT_PROTOCOL_VERSION,
-        server_authority: DEFAULT_SERVER_AUTHORITY,
+        server_identity: &server_identity,
         connection_id: &hello.connection_id,
         challenge: &hello.challenge,
         server_time_unix_ns: hello.server_time_unix_ns,

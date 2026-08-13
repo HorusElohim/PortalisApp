@@ -194,7 +194,7 @@ where
     pub async fn link_device(
         &self,
         approver_device_id: [u8; 32],
-        server_authority: &str,
+        server_identity: &str,
         request: LinkDeviceRequest<'_>,
     ) -> Result<Identity, IdentityError> {
         let approver = self
@@ -207,7 +207,7 @@ where
         }
 
         let payload = link_device_payload(
-            server_authority,
+            server_identity,
             request.candidate_signing_public_key,
             request.candidate_encryption_public_key,
         );
@@ -348,7 +348,7 @@ mod tests {
     use crate::ports::UserDirectory;
 
     const NOW: u64 = 1_700_000_000_000_000_000;
-    const AUTHORITY: &str = "nexus.portalis.test";
+    const SERVER_IDENTITY: &str = "test-nexus-node";
 
     /// One service type across every test. `IdentityService` is generic, so a
     /// second instantiation would be measured as its own set of coverage
@@ -550,7 +550,7 @@ mod tests {
     fn binding(challenge: &[u8; 32]) -> SessionBinding<'_> {
         SessionBinding {
             protocol_version: CURRENT_PROTOCOL_VERSION,
-            server_authority: AUTHORITY,
+            server_identity: SERVER_IDENTITY,
             connection_id: &[4; 16],
             challenge,
             server_time_unix_ns: NOW,
@@ -607,7 +607,7 @@ mod tests {
     ) -> LinkDeviceRequest<'a> {
         *signing_public_key = candidate.verifying_key().to_bytes();
         let payload = link_device_payload(
-            AUTHORITY,
+            SERVER_IDENTITY,
             signing_public_key,
             candidate_encryption_public_key,
         );
@@ -845,7 +845,7 @@ mod tests {
         let linked = service
             .link_device(
                 derive_device_id(&approver.verifying_key().to_bytes()),
-                AUTHORITY,
+                SERVER_IDENTITY,
                 link_device_request(
                     &approver,
                     &candidate,
@@ -892,7 +892,7 @@ mod tests {
             service
                 .link_device(
                     derive_device_id(&approver.verifying_key().to_bytes()),
-                    AUTHORITY,
+                    SERVER_IDENTITY,
                     link_device_request(
                         &approver,
                         &candidate,
@@ -922,7 +922,7 @@ mod tests {
             service
                 .link_device(
                     approver_device_id,
-                    AUTHORITY,
+                    SERVER_IDENTITY,
                     link_device_request(
                         &approver,
                         &candidate,
@@ -948,7 +948,7 @@ mod tests {
             service
                 .link_device(
                     derive_device_id(&approver.verifying_key().to_bytes()),
-                    AUTHORITY,
+                    SERVER_IDENTITY,
                     // Signed by a key the server never enrolled as this user's.
                     link_device_request(
                         &impostor,
@@ -986,7 +986,7 @@ mod tests {
             service
                 .link_device(
                     derive_device_id(&approver.verifying_key().to_bytes()),
-                    AUTHORITY,
+                    SERVER_IDENTITY,
                     LinkDeviceRequest {
                         candidate_signing_public_key: &other_candidate,
                         candidate_encryption_public_key: &ENCRYPTION_KEY,
@@ -1012,7 +1012,7 @@ mod tests {
             service
                 .link_device(
                     derive_device_id(&approver.verifying_key().to_bytes()),
-                    AUTHORITY,
+                    SERVER_IDENTITY,
                     LinkDeviceRequest {
                         candidate_signing_public_key: &candidate_public,
                         candidate_encryption_public_key: &ENCRYPTION_KEY,
@@ -1031,14 +1031,15 @@ mod tests {
         let candidate = key(8);
         let candidate_public = candidate.verifying_key().to_bytes();
         let short_encryption_key = [7_u8; 10];
-        let payload = link_device_payload(AUTHORITY, &candidate_public, &short_encryption_key);
+        let payload =
+            link_device_payload(SERVER_IDENTITY, &candidate_public, &short_encryption_key);
         let approval = approver.sign(&payload).to_bytes();
 
         assert_eq!(
             service
                 .link_device(
                     derive_device_id(&approver.verifying_key().to_bytes()),
-                    AUTHORITY,
+                    SERVER_IDENTITY,
                     LinkDeviceRequest {
                         candidate_signing_public_key: &candidate_public,
                         candidate_encryption_public_key: &short_encryption_key,
@@ -1057,14 +1058,14 @@ mod tests {
         let approver = key(7);
         let service = with_enrolled_identity(Fault::None, &approver);
         let short_signing_key = [7_u8; 10];
-        let payload = link_device_payload(AUTHORITY, &short_signing_key, &ENCRYPTION_KEY);
+        let payload = link_device_payload(SERVER_IDENTITY, &short_signing_key, &ENCRYPTION_KEY);
         let approval = approver.sign(&payload).to_bytes();
 
         assert_eq!(
             service
                 .link_device(
                     derive_device_id(&approver.verifying_key().to_bytes()),
-                    AUTHORITY,
+                    SERVER_IDENTITY,
                     LinkDeviceRequest {
                         candidate_signing_public_key: &short_signing_key,
                         candidate_encryption_public_key: &ENCRYPTION_KEY,
@@ -1101,7 +1102,7 @@ mod tests {
             service
                 .link_device(
                     derive_device_id(&approver.verifying_key().to_bytes()),
-                    AUTHORITY,
+                    SERVER_IDENTITY,
                     link_device_request(
                         &approver,
                         &candidate,
@@ -1133,7 +1134,7 @@ mod tests {
                 service
                     .link_device(
                         derive_device_id(&approver.verifying_key().to_bytes()),
-                        AUTHORITY,
+                        SERVER_IDENTITY,
                         link_device_request(
                             &approver,
                             &candidate,
@@ -1160,7 +1161,7 @@ mod tests {
             service
                 .link_device(
                     derive_device_id(&approver.verifying_key().to_bytes()),
-                    AUTHORITY,
+                    SERVER_IDENTITY,
                     link_device_request(
                         &approver,
                         &candidate,

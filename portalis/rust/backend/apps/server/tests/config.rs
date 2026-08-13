@@ -20,7 +20,6 @@ fn a_server_told_nothing_about_storage_reports_it_and_names_both_options() {
 fn either_engine_can_be_the_one_configured() {
     let mongo = ServerConfig {
         listen_addr: DEFAULT_LISTEN_ADDR.parse().expect("the default is valid"),
-        server_authority: "nexus.example:443".to_owned(),
         mongodb_uri: Some("mongodb://nexus.example/".to_owned()),
         data_dir: None,
         node_secret: None,
@@ -45,5 +44,4 @@ fn either_engine_can_be_the_one_configured() {
             data_dir: std::path::PathBuf::from("/var/lib/portalis"),
         })
     );
-    assert_eq!(mongo.server_authority, "nexus.example:443");
 }

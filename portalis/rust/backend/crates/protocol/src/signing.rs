@@ -25,9 +25,9 @@ pub const LINK_DEVICE_CONTEXT: &str = "portalis.protocol.v1/link-device";
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SessionBinding<'a> {
     pub protocol_version: u32,
-    /// The host the client believes it is talking to, so a signature captured
-    /// by one deployment cannot be replayed against another.
-    pub server_authority: &'a str,
+    /// The authenticated Nexus Node ID, so a signature captured by one
+    /// deployment cannot be replayed against another.
+    pub server_identity: &'a str,
     pub connection_id: &'a [u8],
     pub challenge: &'a [u8],
     pub server_time_unix_ns: u64,
@@ -85,13 +85,13 @@ pub fn authentication_payload(binding: &SessionBinding<'_>, device_public_key: &
 /// by the candidate device whenever it next connects.
 #[must_use]
 pub fn link_device_payload(
-    server_authority: &str,
+    server_identity: &str,
     candidate_signing_public_key: &[u8],
     candidate_encryption_public_key: &[u8],
 ) -> Vec<u8> {
     let mut payload = Vec::new();
     push_field(&mut payload, LINK_DEVICE_CONTEXT.as_bytes());
-    push_field(&mut payload, server_authority.as_bytes());
+    push_field(&mut payload, server_identity.as_bytes());
     push_field(&mut payload, candidate_signing_public_key);
     push_field(&mut payload, candidate_encryption_public_key);
     payload
@@ -131,7 +131,7 @@ impl SessionBinding<'_> {
         let mut payload = Vec::new();
         push_field(&mut payload, context.as_bytes());
         push_field(&mut payload, &self.protocol_version.to_be_bytes());
-        push_field(&mut payload, self.server_authority.as_bytes());
+        push_field(&mut payload, self.server_identity.as_bytes());
         push_field(&mut payload, self.connection_id);
         push_field(&mut payload, self.challenge);
         push_field(&mut payload, &self.server_time_unix_ns.to_be_bytes());
@@ -159,7 +159,7 @@ mod tests {
     fn binding<'a>(challenge: &'a [u8], connection_id: &'a [u8]) -> SessionBinding<'a> {
         SessionBinding {
             protocol_version: 1,
-            server_authority: "nexus.portalis.test",
+            server_identity: "test-nexus-node",
             connection_id,
             challenge,
             server_time_unix_ns: 1_700_000_000_000_000_000,
@@ -211,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn binds_a_signature_to_one_challenge_connection_server_and_time() {
+    fn binds_a_signature_to_one_challenge_connection_node_and_time() {
         let key = signing_key(7);
         let public = key.verifying_key().to_bytes();
         let session = binding(&[1; 32], &[2; 16]);
@@ -230,8 +230,8 @@ mod tests {
             &ENCRYPTION_KEY,
         );
         let mut elsewhere = session;
-        elsewhere.server_authority = "nexus.attacker.test";
-        let other_server = registration_payload(&elsewhere, "ada", &public, &ENCRYPTION_KEY);
+        elsewhere.server_identity = "attacker-node";
+        let other_node = registration_payload(&elsewhere, "ada", &public, &ENCRYPTION_KEY);
         let mut later = session;
         later.server_time_unix_ns += 1;
         let other_time = registration_payload(&later, "ada", &public, &ENCRYPTION_KEY);
@@ -244,7 +244,7 @@ mod tests {
         for changed in [
             other_challenge,
             other_connection,
-            other_server,
+            other_node,
             other_time,
             other_version,
             other_encryption_key,

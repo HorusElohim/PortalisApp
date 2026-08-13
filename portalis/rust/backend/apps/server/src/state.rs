@@ -6,7 +6,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use portalis_nexus_protocol::CURRENT_PROTOCOL_VERSION;
 use portalis_nexus_server_core::{PresenceRegistry, ProtocolPolicy, SwarmRegistry};
 
-use crate::config::DEFAULT_SERVER_AUTHORITY;
 use crate::connections::Connections;
 use crate::identity::{
     DefaultStore, NexusEnvelopes, NexusFriends, NexusIdentities, NexusShares, envelopes, friends,
@@ -28,10 +27,8 @@ pub struct AppState {
     presence: Arc<PresenceRegistry>,
     swarm: Arc<SwarmRegistry>,
     connections: Arc<Connections>,
-    /// The host clients believe they are talking to. Signatures are bound to
-    /// it, so a signature captured by one deployment cannot be replayed
-    /// against another.
-    server_authority: Arc<str>,
+    /// The Iroh Node ID clients authenticated before sending commands.
+    server_identity: Arc<str>,
 }
 
 /// Reports configuration only; the identity service holds no printable state.
@@ -40,7 +37,7 @@ impl std::fmt::Debug for AppState {
         formatter
             .debug_struct("AppState")
             .field("ready", &self.is_ready())
-            .field("server_authority", &self.server_authority)
+            .field("server_identity", &self.server_identity)
             .finish_non_exhaustive()
     }
 }
@@ -66,7 +63,7 @@ impl Default for AppState {
             presence: Arc::new(PresenceRegistry::default()),
             swarm: Arc::new(SwarmRegistry::default()),
             connections: Arc::new(Connections::default()),
-            server_authority: Arc::from(DEFAULT_SERVER_AUTHORITY),
+            server_identity: Arc::from("test-nexus-node"),
         }
     }
 }
@@ -86,16 +83,16 @@ impl AppState {
         }
     }
 
-    /// Binds this server to the authority clients sign against.
+    /// Binds this server to the Iroh Node ID clients authenticate.
     #[must_use]
-    pub fn with_server_authority(mut self, authority: &str) -> Self {
-        self.server_authority = Arc::from(authority);
+    pub fn with_server_identity(mut self, identity: &str) -> Self {
+        self.server_identity = Arc::from(identity);
         self
     }
 
     #[must_use]
-    pub fn server_authority(&self) -> &str {
-        &self.server_authority
+    pub fn server_identity(&self) -> &str {
+        &self.server_identity
     }
 
     #[must_use]
@@ -199,13 +196,13 @@ mod tests {
     }
 
     #[test]
-    fn carries_the_authority_signatures_are_bound_to() {
+    fn carries_the_node_identity_signatures_are_bound_to() {
         let state = AppState::default();
-        assert_eq!(state.server_authority(), DEFAULT_SERVER_AUTHORITY);
+        assert_eq!(state.server_identity(), "test-nexus-node");
 
-        let bound = state.with_server_authority("nexus.example");
+        let bound = state.with_server_identity("node-identity");
 
-        assert_eq!(bound.server_authority(), "nexus.example");
-        assert!(format!("{bound:?}").contains("nexus.example"));
+        assert_eq!(bound.server_identity(), "node-identity");
+        assert!(format!("{bound:?}").contains("node-identity"));
     }
 }

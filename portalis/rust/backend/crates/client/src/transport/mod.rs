@@ -104,7 +104,7 @@ impl NexusClient {
         let shared = Arc::new(Shared::new(
             events,
             config.request_timeout,
-            authority_of(&endpoint),
+            identity_of(&endpoint),
         ));
         // Subscribed here, not inside the task: a caller may shut down before
         // the supervisor has run for the first time.
@@ -227,7 +227,7 @@ impl NexusClient {
     ) -> Result<Authenticated, TransportError> {
         let hello = self.hello().ok_or(TransportError::Disconnected)?;
         let request = self.shared.protocol.register(
-            &binding(&hello, self.authority()),
+            &binding(&hello, self.server_identity()),
             username,
             signer,
             now_unix_ns(),
@@ -248,7 +248,7 @@ impl NexusClient {
     ) -> Result<Authenticated, TransportError> {
         let hello = self.hello().ok_or(TransportError::Disconnected)?;
         let request = self.shared.protocol.authenticate(
-            &binding(&hello, self.authority()),
+            &binding(&hello, self.server_identity()),
             signer,
             now_unix_ns(),
         );
@@ -259,7 +259,7 @@ impl NexusClient {
     /// Approves a new device's keys, signed by this already-enrolled one.
     ///
     /// Needs no [`crate::ReconnectPolicy`]-tracked handshake state beyond the
-    /// authority to sign against: the approval itself is not bound to this
+    /// Node ID to sign against: the approval itself is not bound to this
     /// connection, so it remains valid however the candidate device submits
     /// it.
     ///
@@ -274,7 +274,7 @@ impl NexusClient {
         approver: &S,
     ) -> Result<DeviceLinked, TransportError> {
         let request = self.shared.protocol.link_device(
-            self.authority(),
+            self.server_identity(),
             candidate_signing_public_key,
             candidate_encryption_public_key,
             approver,
@@ -464,10 +464,10 @@ impl NexusClient {
         Ok(validate_peer_withdrawn(&request, &response)?)
     }
 
-    /// The authority signatures are bound to, taken from the endpoint dialled.
+    /// The Iroh Node ID signatures are bound to.
     #[must_use]
-    pub fn authority(&self) -> &str {
-        &self.shared.server_authority
+    pub fn server_identity(&self) -> &str {
+        &self.shared.server_identity
     }
 
     /// Finds the user behind a handle.
@@ -527,12 +527,18 @@ impl NexusClient {
 
     /// Stops supervising, closes the live socket, and waits for it to finish.
     pub async fn shutdown(mut self) {
-        debug!(authority = self.authority(), "Nexus client shutting down");
+        debug!(
+            server_identity = self.server_identity(),
+            "Nexus client shutting down"
+        );
         self.shared.shutdown.send_replace(true);
         if let Some(supervisor) = self.supervisor.take() {
             let _ = supervisor.await;
         }
-        debug!(authority = self.authority(), "Nexus client stopped");
+        debug!(
+            server_identity = self.server_identity(),
+            "Nexus client stopped"
+        );
     }
 }
 
@@ -568,27 +574,21 @@ fn now_unix_ns() -> u64 {
 }
 
 /// Builds the session binding a signature is scoped to, from the hello the
-/// server sent and the authority this client dialled.
-fn binding<'a>(hello: &'a ServerHello, server_authority: &'a str) -> SessionBinding<'a> {
+/// server sent and the Node ID Iroh authenticated.
+fn binding<'a>(hello: &'a ServerHello, server_identity: &'a str) -> SessionBinding<'a> {
     SessionBinding {
         protocol_version: CURRENT_PROTOCOL_VERSION,
-        server_authority,
+        server_identity,
         connection_id: &hello.connection_id,
         challenge: &hello.challenge,
         server_time_unix_ns: hello.server_time_unix_ns,
     }
 }
 
-/// The first direct address advertised by a Nexus endpoint.
-///
-/// Signatures are bound to it, so what the client signs is the server it meant
-/// to reach rather than whatever a relay claims to be.
+/// The Iroh Node ID the client asked QUIC to authenticate.
 #[must_use]
-pub fn authority_of(endpoint: &EndpointAddr) -> String {
-    endpoint
-        .direct_addresses()
-        .next()
-        .map_or_else(String::new, ToString::to_string)
+pub fn identity_of(endpoint: &EndpointAddr) -> String {
+    endpoint.node_id.to_string()
 }
 
 pub(super) async fn bind_endpoint() -> Result<NexusEndpoint, TransportError> {
@@ -598,4 +598,19 @@ pub(super) async fn bind_endpoint() -> Result<NexusEndpoint, TransportError> {
     NexusEndpoint::bind(secret, Vec::new(), RelayMode::Default)
         .await
         .map_err(TransportError::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use iroh::SecretKey;
+
+    use super::*;
+
+    #[test]
+    fn identity_of_uses_the_authenticated_node_id() {
+        let node_id = SecretKey::from_bytes(&[7; 32]).public();
+        let endpoint = EndpointAddr::new(node_id);
+
+        assert_eq!(identity_of(&endpoint), node_id.to_string());
+    }
 }
