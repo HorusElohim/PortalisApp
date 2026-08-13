@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Restored the headless Nexus demo's explicit device fingerprint configuration,
+  so the complete Rust workspace builds and tests after the Nexus state
+  projection began exposing device fingerprints.
+
 - Nexus signatures now bind to the authenticated QUIC Node ID rather than a
   configurable host and port. `PORTALIS_NEXUS_SERVER_AUTHORITY` has been
   removed: direct addresses, relays, and DNS names are routing hints, while

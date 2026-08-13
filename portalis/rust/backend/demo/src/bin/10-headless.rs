@@ -35,6 +35,7 @@ async fn main() -> anyhow::Result<()> {
     let nexus = Nexus::open(&Config {
         data_dir: directory.clone(),
         device_name: "Ada's laptop".to_owned(),
+        fingerprint: "ada-fingerprint".to_owned(),
     })?;
     println!("  the store opened in {:?}", started.elapsed());
     println!("  Nothing else is awaited: the first frame needs the store and");
