@@ -14,6 +14,7 @@
 //! - [`endpoint`]: authenticated direct-or-relayed QUIC connections.
 //! - [`transport`]: the socket actor those rules drive.
 //! - [`keys`]: sealing a content key to the devices a verified log allows.
+//! - [`session`]: talking to a peer directly, with no service in the path.
 //! - [`verify`]: whether a revision belongs after the one already held.
 
 mod candidates;
@@ -24,6 +25,7 @@ mod keys;
 mod pending;
 mod protocol;
 mod reconnect;
+mod session;
 mod signer;
 mod transport;
 mod verify;
@@ -49,6 +51,10 @@ pub use protocol::{
     validate_share_list, validate_share_published,
 };
 pub use reconnect::{ReconnectPolicy, ReconnectPolicyError};
+pub use session::{
+    KnownPeers, MAX_OBJECT_BYTES, Path as SecurityPath, PeerTrust, Request, Responder, Security,
+    Session, SessionError,
+};
 pub use signer::DeviceSigner;
 pub use transport::{NexusClient, TransportError, authority_of};
 pub use verify::{

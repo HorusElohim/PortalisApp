@@ -72,6 +72,17 @@ impl NexusEndpoint {
         self.inner.node_addr().get().unwrap_or(unaddressed)
     }
 
+    /// The addressing to publish, once there is any.
+    ///
+    /// [`Self::addr`] answers immediately and may answer with nothing: binding
+    /// a socket and discovering which addresses reach it are different events,
+    /// and a caller that hands out the first answer gives a peer nowhere to
+    /// send packets. Anything sharing its address with another device wants
+    /// this one.
+    pub async fn addr_when_ready(&self) -> EndpointAddr {
+        self.inner.node_addr().initialized().await
+    }
+
     /// Connects to a known application peer and returns its raw QUIC connection.
     ///
     /// # Errors

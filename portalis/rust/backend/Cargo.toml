@@ -8,7 +8,6 @@ resolver = "3"
 members = [
     "apps/server",
     "demo",
-    "demo-m6",
     "crates/client",
     "crates/protocol",
     "crates/server-core",

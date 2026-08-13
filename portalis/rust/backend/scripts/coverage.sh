@@ -57,7 +57,7 @@ set -euo pipefail
 # with the old `collections.rs`, so the Flutter-facing commands moved inside
 # and kept working. Step 9 replaces the bridge and deletes the file, and this
 # line goes with it.
-ignore='apps/server/src/(main|socket)\.rs|apps/server/src/mongo/mod\.rs|crates/client/src/transport/.*\.rs|crates/client/tests/.*\.rs|demo/src/.*\.rs|demo-m6/src/.*\.rs|backend/src/[^/]*\.rs|backend/src/domain/.*\.rs|backend/src/collections/legacy\.rs|portalis\.protocol\.v1\.rs'
+ignore='apps/server/src/(main|socket)\.rs|apps/server/src/mongo/mod\.rs|crates/client/src/transport/.*\.rs|crates/client/tests/.*\.rs|demo/src/.*\.rs|backend/src/[^/]*\.rs|backend/src/domain/.*\.rs|backend/src/collections/legacy\.rs|portalis\.protocol\.v1\.rs'
 lcov="$(mktemp -t nexus-coverage)"
 trap 'rm -f "$lcov"' EXIT
 
