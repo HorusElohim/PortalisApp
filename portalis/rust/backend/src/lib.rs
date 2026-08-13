@@ -5,6 +5,7 @@ mod domain;
 mod log;
 /// Where persisted state lives — one place, so tests can move it.
 mod paths;
+pub mod projection;
 pub mod store;
 /// What moves the bytes — see docs/future-engine.md.
 mod substrate;
