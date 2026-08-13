@@ -39,15 +39,17 @@ Future<AppAccepted> send({required AppCommand command}) =>
 /// The local acceptance result returned before a command performs I/O.
 class AppAccepted {
   final BigInt id;
+  final int? collection;
   final bool queued;
 
   const AppAccepted({
     required this.id,
+    this.collection,
     required this.queued,
   });
 
   @override
-  int get hashCode => id.hashCode ^ queued.hashCode;
+  int get hashCode => id.hashCode ^ collection.hashCode ^ queued.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -55,6 +57,7 @@ class AppAccepted {
       other is AppAccepted &&
           runtimeType == other.runtimeType &&
           id == other.id &&
+          collection == other.collection &&
           queued == other.queued;
 }
 

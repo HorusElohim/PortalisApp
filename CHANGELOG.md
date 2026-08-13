@@ -30,6 +30,11 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Dropping or choosing a local `.torrent` now enters Nexus directly and opens
+  its preparation screen. The file list is streamed from the resolved
+  descriptor, can be narrowed before confirmation, and requests no payload
+  bytes while the Nexus torrent substrate is still being connected.
+
 - Imported `.torrent` files now retain their per-file selection in Nexus.
   Every file starts selected; confirming a narrower selection persists it
   across restart, while an empty selection is rejected before any download.

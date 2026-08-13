@@ -3,7 +3,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
-import '../../../app/app_controllers.dart';
 import '../../../theme.dart';
 import '../../../design/toast.dart';
 import '../domain/paste.dart';
@@ -26,6 +25,7 @@ class PortalisCommandBar extends StatefulWidget {
     super.key,
     required this.onSearch,
     required this.onInvite,
+    required this.onImportTorrent,
     this.autofocus = false,
   });
 
@@ -37,6 +37,7 @@ class PortalisCommandBar extends StatefulWidget {
   /// from here — joining names you to strangers, so it keeps its confirmation
   /// step.
   final ValueChanged<String> onInvite;
+  final Future<void> Function(String source) onImportTorrent;
   final bool autofocus;
 
   @override
@@ -85,10 +86,10 @@ class _CommandBarState extends State<PortalisCommandBar> {
           _error = null;
         });
         try {
-          await AppControllers.collections.addFromMagnet(text);
+          await widget.onImportTorrent(text);
           if (!mounted) return;
           _clear();
-          showToast(context, 'Added — joining swarm',
+          showToast(context, 'Torrent source saved — resolving metadata next',
               severity: ToastSeverity.success);
         } catch (e) {
           // Next to the field rather than as a toast: the text that failed is
@@ -127,9 +128,9 @@ class _CommandBarState extends State<PortalisCommandBar> {
       _error = null;
     });
     try {
-      await AppControllers.collections.addFromFilePath(path);
+      await widget.onImportTorrent(path);
       if (!mounted) return;
-      showToast(context, 'Torrent added — joining swarm',
+      showToast(context, 'Torrent prepared — choose files next',
           severity: ToastSeverity.success);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');

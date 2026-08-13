@@ -171,8 +171,13 @@ class NexusCommand {
 }
 
 class NexusAccepted {
-  const NexusAccepted({required this.id, required this.queued});
+  const NexusAccepted({
+    required this.id,
+    required this.collection,
+    required this.queued,
+  });
 
   final BigInt id;
+  final int? collection;
   final bool queued;
 }

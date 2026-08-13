@@ -264,7 +264,7 @@ impl Nexus {
         // A collection the person has just created, renamed, or removed must
         // survive a crash before it can be published. The database write is
         // the acceptance boundary; network work still happens later.
-        self.apply_local(command)?;
+        let collection = self.apply_local(command)?;
 
         // Deferrable commands are queued rather than refused, which is what
         // lets the interface accept one instantly with the network down.
@@ -274,27 +274,32 @@ impl Nexus {
         }
         Ok(Accepted {
             id: self.next_command.fetch_add(1, Ordering::Relaxed),
+            collection,
             queued,
         })
     }
 
-    fn apply_local(&self, command: &Command) -> Result<(), CommandError> {
+    fn apply_local(&self, command: &Command) -> Result<Option<Handle>, CommandError> {
         match command {
-            Command::CreateCollection { name, .. } => self.create_collection(name),
+            Command::CreateCollection { name, .. } => self.create_collection(name).map(Some),
             Command::RenameCollection { collection, name } => {
-                self.rename_collection(*collection, name)
+                self.rename_collection(*collection, name).map(|()| None)
             }
-            Command::DeleteCollection { collection, .. } => self.delete_collection(*collection),
-            Command::ImportTorrent { source } => self.import_torrent(source),
+            Command::DeleteCollection { collection, .. } => {
+                self.delete_collection(*collection).map(|()| None)
+            }
+            Command::ImportTorrent { source } => self.import_torrent(source).map(Some),
             Command::DownloadSelection {
                 collection,
                 entries,
-            } => self.confirm_torrent_selection(*collection, entries),
-            _ => Ok(()),
+            } => self
+                .confirm_torrent_selection(*collection, entries)
+                .map(|()| None),
+            _ => Ok(None),
         }
     }
 
-    fn create_collection(&self, name: &str) -> Result<(), CommandError> {
+    fn create_collection(&self, name: &str) -> Result<Handle, CommandError> {
         let id = crate::collections::model::CollectionId::generate();
         let stored = StoredCollection {
             name: name.to_owned(),
@@ -325,10 +330,10 @@ impl Nexus {
             pending: None,
         });
         self.states.send_replace(state);
-        Ok(())
+        Ok(handle)
     }
 
-    fn import_torrent(&self, source: &str) -> Result<(), CommandError> {
+    fn import_torrent(&self, source: &str) -> Result<Handle, CommandError> {
         let id = crate::collections::model::CollectionId::generate();
         let metadata = is_torrent_path(source)
             .then(|| crate::torrent::metadata_from_torrent_path(source))
@@ -400,7 +405,7 @@ impl Nexus {
             pending: None,
         });
         self.states.send_replace(state);
-        Ok(())
+        Ok(handle)
     }
 
     fn rename_collection(&self, handle: Handle, name: &str) -> Result<(), CommandError> {
@@ -773,6 +778,8 @@ mod tests {
             .expect("accepted");
 
         assert!(first.queued, "it will publish when there is a network");
+        assert_eq!(first.collection, Some(Handle(1)));
+        assert_eq!(second.collection, None);
         assert_ne!(first.id, second.id, "each is named separately");
         nexus.close().await;
     }
@@ -975,12 +982,13 @@ mod tests {
         .expect("writes descriptor");
         let nexus = open(&scratch);
 
-        nexus
+        let accepted = nexus
             .command(&Command::ImportTorrent {
                 source: source.display().to_string(),
             })
             .expect("imports metadata only");
         let imported = nexus.state().collections[0].clone();
+        assert_eq!(accepted.collection, Some(imported.id));
         assert_eq!(imported.name, "Bundle");
         assert_eq!(imported.status, Status::Preparing);
         assert_eq!(imported.entries, 2);

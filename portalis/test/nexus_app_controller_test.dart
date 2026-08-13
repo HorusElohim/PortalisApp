@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/features/nexus/application/nexus_app_controller.dart';
 import 'package:portalis/features/nexus/data/nexus_app_repository.dart';
 import 'package:portalis/features/nexus/domain/nexus_app_state.dart';
+import 'package:portalis/features/nexus/presentation/nexus_torrent_preparation.dart';
 
 void main() {
   test('owns one state subscription and forwards lifecycle changes', () async {
@@ -53,6 +55,53 @@ void main() {
     expect((await seen)?.entries.single.selected, isFalse);
     expect(repository.detailCollections, [9]);
   });
+
+  testWidgets('a torrent preparation edits and confirms only selected files',
+      (tester) async {
+    final repository = _Repository();
+    final controller = NexusAppController(repository: repository);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NexusTorrentPreparation(collection: 9, controller: controller),
+      ),
+    );
+    repository.details.add(
+      NexusDetail(
+        id: 9,
+        entries: [
+          NexusEntry(
+            id: 1,
+            label: 'trailer.mp4',
+            bytes: BigInt.from(5),
+            selected: true,
+            available: false,
+          ),
+          NexusEntry(
+            id: 2,
+            label: 'feature.mp4',
+            bytes: BigInt.from(34),
+            selected: true,
+            available: false,
+          ),
+        ],
+        pieces: const [],
+        samples: const [],
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('trailer.mp4'), findsOneWidget);
+    expect(find.text('feature.mp4'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('nexusTorrentEntry:1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('nexusConfirmSelection')));
+    await tester.pump();
+
+    expect(repository.commands, hasLength(1));
+    expect(repository.commands.single.kind, 'downloadSelection');
+    expect(repository.commands.single.collection, 9);
+    expect(repository.commands.single.entries, [2]);
+  });
 }
 
 NexusAppState _state(String name) => NexusAppState(
@@ -73,12 +122,15 @@ class _Repository implements NexusAppRepository {
   final details = StreamController<NexusDetail?>.broadcast();
   final active = <bool>[];
   final detailCollections = <int?>[];
+  final commands = <NexusCommand>[];
   var starts = 0;
   var stops = 0;
 
   @override
-  Future<NexusAccepted> send(NexusCommand command) async =>
-      NexusAccepted(id: BigInt.zero, queued: false);
+  Future<NexusAccepted> send(NexusCommand command) async {
+    commands.add(command);
+    return NexusAccepted(id: BigInt.zero, collection: null, queued: false);
+  }
 
   @override
   Future<void> setActive(bool value) async => active.add(value);

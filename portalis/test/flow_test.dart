@@ -13,6 +13,7 @@ void main() {
             body: PortalisCommandBar(
               onSearch: (_) {},
               onInvite: (_) {},
+              onImportTorrent: (_) async {},
             ),
           ),
         ),

@@ -39,7 +39,11 @@ class FrbNexusAppRepository implements NexusAppRepository {
   @override
   Future<NexusAccepted> send(NexusCommand command) async {
     final accepted = await bridge.send(command: _commandToBridge(command));
-    return NexusAccepted(id: accepted.id, queued: accepted.queued);
+    return NexusAccepted(
+      id: accepted.id,
+      collection: accepted.collection,
+      queued: accepted.queued,
+    );
   }
 
   static NexusAppState _stateFromBridge(bridge.AppSnapshot state) =>

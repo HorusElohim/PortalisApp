@@ -1199,11 +1199,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppAccepted dco_decode_app_accepted(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return AppAccepted(
       id: dco_decode_u_64(arr[0]),
-      queued: dco_decode_bool(arr[1]),
+      collection: dco_decode_opt_box_autoadd_u_32(arr[1]),
+      queued: dco_decode_bool(arr[2]),
     );
   }
 
@@ -1856,8 +1857,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppAccepted sse_decode_app_accepted(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_u_64(deserializer);
+    var var_collection = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_queued = sse_decode_bool(deserializer);
-    return AppAccepted(id: var_id, queued: var_queued);
+    return AppAccepted(
+        id: var_id, collection: var_collection, queued: var_queued);
   }
 
   @protected
@@ -2704,6 +2707,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_app_accepted(AppAccepted self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_64(self.id, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.collection, serializer);
     sse_encode_bool(self.queued, serializer);
   }
 

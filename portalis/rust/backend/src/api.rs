@@ -1501,9 +1501,11 @@ impl SseDecode for crate::portalis_api::AppAccepted {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_id = <u64>::sse_decode(deserializer);
+        let mut var_collection = <Option<u32>>::sse_decode(deserializer);
         let mut var_queued = <bool>::sse_decode(deserializer);
         return crate::portalis_api::AppAccepted {
             id: var_id,
+            collection: var_collection,
             queued: var_queued,
         };
     }
@@ -2483,6 +2485,7 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppAccepted {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.id.into_into_dart().into_dart(),
+            self.collection.into_into_dart().into_dart(),
             self.queued.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -3093,6 +3096,7 @@ impl SseEncode for crate::portalis_api::AppAccepted {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <u64>::sse_encode(self.id, serializer);
+        <Option<u32>>::sse_encode(self.collection, serializer);
         <bool>::sse_encode(self.queued, serializer);
     }
 }

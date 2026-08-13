@@ -14,6 +14,7 @@ class HomeLibraryToolbar extends StatelessWidget {
     required this.onSearch,
     required this.onFilterChanged,
     required this.onJoin,
+    required this.onImportTorrent,
   });
 
   final bool wide;
@@ -22,12 +23,14 @@ class HomeLibraryToolbar extends StatelessWidget {
   final ValueChanged<String> onSearch;
   final ValueChanged<CollectionFilter> onFilterChanged;
   final ValueChanged<String> onJoin;
+  final Future<void> Function(String source) onImportTorrent;
 
   @override
   Widget build(BuildContext context) {
     final commandBar = PortalisCommandBar(
       onSearch: onSearch,
       onInvite: onJoin,
+      onImportTorrent: onImportTorrent,
     );
     if (wide) {
       return commandBar;
@@ -46,5 +49,4 @@ class HomeLibraryToolbar extends StatelessWidget {
       ],
     );
   }
-
 }

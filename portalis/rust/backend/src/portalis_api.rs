@@ -118,6 +118,7 @@ pub struct AppCommand {
 #[derive(Clone, Debug)]
 pub struct AppAccepted {
     pub id: u64,
+    pub collection: Option<u32>,
     pub queued: bool,
 }
 
@@ -212,6 +213,7 @@ pub fn send(command: AppCommand) -> Result<AppAccepted, String> {
         .map_err(|error| error.to_string())?;
     Ok(AppAccepted {
         id: accepted.id,
+        collection: accepted.collection.map(|handle| handle.0),
         queued: accepted.queued,
     })
 }

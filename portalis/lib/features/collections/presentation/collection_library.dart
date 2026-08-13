@@ -36,6 +36,7 @@ class CollectionLibrary extends StatelessWidget {
     required this.onFilterChanged,
     required this.onShare,
     required this.onJoin,
+    required this.onImportTorrent,
     required this.onCommand,
     required this.welcomeCycle,
   });
@@ -55,6 +56,7 @@ class CollectionLibrary extends StatelessWidget {
   final ValueChanged<CollectionFilter> onFilterChanged;
   final VoidCallback onShare;
   final ValueChanged<String> onJoin;
+  final Future<void> Function(String source) onImportTorrent;
   final ValueChanged<(Collection, CollectionCommand)> onCommand;
   final int welcomeCycle;
 
@@ -69,6 +71,7 @@ class CollectionLibrary extends StatelessWidget {
         onSearch: onSearch,
         onFilterChanged: onFilterChanged,
         onJoin: onJoin,
+        onImportTorrent: onImportTorrent,
       );
 
   Widget _wide() => AppScreen(

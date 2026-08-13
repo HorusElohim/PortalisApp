@@ -280,6 +280,10 @@ pub struct Accepted {
     /// Names this command in the `pending` field of whatever it affects, so
     /// the interface can show it after a restart mid-operation.
     pub id: u64,
+    /// The collection created by this command, when there is one. This lets
+    /// the interface open a newly imported torrent without guessing from a
+    /// concurrently changing list.
+    pub collection: Option<Handle>,
     /// Accepted but waiting for connectivity.
     pub queued: bool,
 }

@@ -14,6 +14,8 @@ import '../features/collections/presentation/collection_join.dart';
 import '../features/collections/presentation/collection_library.dart';
 import '../features/collections/presentation/collection_share.dart';
 import '../features/collections/presentation/collection_removal.dart';
+import '../features/nexus/domain/nexus_app_state.dart';
+import '../features/nexus/presentation/nexus_torrent_preparation.dart';
 import '../services/navigation.dart';
 
 /// App-shell adapter for the Collections library. Presentation lives in the
@@ -156,11 +158,11 @@ class _HomeState extends State<Home> {
         files.single.name.toLowerCase().endsWith('.torrent')) {
       setState(() => _dropBusy = true);
       try {
-        await AppControllers.collections.addFromFilePath(files.single.path);
+        await _importTorrent(files.single.path);
         if (mounted) {
           showToast(
             context,
-            'Torrent added — joining swarm',
+            'Torrent prepared — choose files next',
             severity: ToastSeverity.success,
           );
         }
@@ -185,6 +187,25 @@ class _HomeState extends State<Home> {
     if (mounted) _openShare(picked);
   }
 
+  Future<void> _importTorrent(String source) async {
+    final accepted = await AppControllers.nexusApp.send(
+      NexusCommand.importTorrent(source),
+    );
+    final collection = accepted.collection;
+    if (collection == null) {
+      throw StateError('Nexus did not identify the imported torrent');
+    }
+    // Magnet metadata is not resolved by the current substrate yet, so there
+    // is no real file selection to present. Local .torrent imports resolve
+    // their descriptor immediately and can enter the preparation flow.
+    if (!source.toLowerCase().endsWith('.torrent')) return;
+    if (!mounted) return;
+    _push(NexusTorrentPreparation(
+      collection: collection,
+      controller: AppControllers.nexusApp,
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -206,6 +227,7 @@ class _HomeState extends State<Home> {
           onFilterChanged: (filter) => setState(() => _filter = filter),
           onShare: () => _openShare(),
           onJoin: _openJoin,
+          onImportTorrent: _importTorrent,
           onCommand: _handleCommand,
           welcomeCycle: _welcomeCycle,
         );
