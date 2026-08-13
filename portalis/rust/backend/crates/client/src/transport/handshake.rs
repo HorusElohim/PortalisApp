@@ -2,15 +2,9 @@
 
 use std::time::Duration;
 
-use futures_util::StreamExt;
 use portalis_nexus_protocol::v1::{Envelope, ServerHello};
-use portalis_nexus_protocol::{MAX_FRAME_BYTES, WEBSOCKET_SUBPROTOCOL, decode_frame};
+use portalis_nexus_protocol::{LENGTH_PREFIX_BYTES, decode_frame, frame_length};
 use tokio::time::{sleep, timeout};
-use tokio_tungstenite::connect_async_with_config;
-use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::tungstenite::http::header::{HeaderValue, SEC_WEBSOCKET_PROTOCOL};
-use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tracing::debug;
 use uuid::Uuid;
 
@@ -18,48 +12,45 @@ use crate::protocol::validate_hello;
 use crate::reconnect::ReconnectPolicy;
 use crate::transport::Socket;
 use crate::transport::error::TransportError;
+use crate::{EndpointAddr, NexusEndpoint, NEXUS_ALPN};
 
 /// Connects once and validates the server's hello, within `limit`.
 ///
 /// The bound matters: a peer that accepts the TCP connection but never finishes
 /// the upgrade would otherwise stall the caller, or the supervisor, forever.
 pub(crate) async fn handshake(
-    endpoint: &str,
+    local: &NexusEndpoint,
+    endpoint: EndpointAddr,
     limit: Duration,
 ) -> Result<(Socket, ServerHello), TransportError> {
-    timeout(limit, connect_and_greet(endpoint))
+    timeout(limit, connect_and_greet(local, endpoint))
         .await
         .map_err(|_| TransportError::HandshakeTimeout(limit))?
 }
 
-/// Requesting `Sec-WebSocket-Protocol` makes the handshake itself enforce
-/// negotiation: tungstenite fails the connection when a server answers with a
-/// different subprotocol or none at all, so no separate check is needed here.
-async fn connect_and_greet(endpoint: &str) -> Result<(Socket, ServerHello), TransportError> {
-    let mut request = endpoint.into_client_request()?;
-    request.headers_mut().insert(
-        SEC_WEBSOCKET_PROTOCOL,
-        HeaderValue::from_static(WEBSOCKET_SUBPROTOCOL),
-    );
-    let config = WebSocketConfig::default()
-        .max_message_size(Some(MAX_FRAME_BYTES))
-        .max_frame_size(Some(MAX_FRAME_BYTES));
-    let (mut socket, _response) = connect_async_with_config(request, Some(config), false).await?;
-    let hello = validate_hello(receive_envelope(&mut socket).await?)?;
+/// ALPN is negotiated with QUIC before the service opens its greeting stream.
+async fn connect_and_greet(
+    local: &NexusEndpoint,
+    endpoint: EndpointAddr,
+) -> Result<(Socket, ServerHello), TransportError> {
+    let connection = local.connect(endpoint, NEXUS_ALPN).await?;
+    let (send, mut receive) = connection.accept_bi().await?;
+    let hello = validate_hello(receive_envelope(&mut receive).await?)?;
 
-    Ok((socket, hello))
+    Ok((Socket { send, receive }, hello))
 }
 
 /// Connects under a bounded exponential retry policy.
 pub(crate) async fn handshake_with_retry(
-    endpoint: &str,
+    local: &NexusEndpoint,
+    endpoint: EndpointAddr,
     policy: &ReconnectPolicy,
     limit: Duration,
 ) -> Result<(Socket, ServerHello), TransportError> {
     let mut attempts = 0;
     loop {
         attempts += 1;
-        match handshake(endpoint, limit).await {
+        match handshake(local, endpoint.clone(), limit).await {
             Ok(connection) => {
                 debug!(attempts, "Nexus handshake succeeded");
                 return Ok(connection);
@@ -79,15 +70,21 @@ pub(crate) async fn handshake_with_retry(
     }
 }
 
-async fn receive_envelope(socket: &mut Socket) -> Result<Envelope, TransportError> {
-    let Some(message) = socket.next().await else {
-        return Err(TransportError::ConnectionClosed);
-    };
-    match message? {
-        Message::Binary(frame) => Ok(decode_frame(&frame)?),
-        Message::Close(_) => Err(TransportError::ConnectionClosed),
-        _ => Err(TransportError::UnexpectedWebSocketMessage),
-    }
+async fn receive_envelope(
+    receive: &mut iroh::endpoint::RecvStream,
+) -> Result<Envelope, TransportError> {
+    let mut prefix = [0_u8; LENGTH_PREFIX_BYTES];
+    receive
+        .read_exact(&mut prefix)
+        .await
+        .map_err(|_| TransportError::ConnectionClosed)?;
+    let length = frame_length(prefix)?;
+    let mut frame = vec![0_u8; length];
+    receive
+        .read_exact(&mut frame)
+        .await
+        .map_err(|_| TransportError::ConnectionClosed)?;
+    Ok(decode_frame(&frame)?)
 }
 
 /// Draws jitter entropy without adding a random-number dependency.

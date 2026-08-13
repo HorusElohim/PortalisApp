@@ -4,22 +4,23 @@ use std::time::Duration;
 
 use portalis_nexus_protocol::MAX_OUTBOUND_QUEUE;
 use thiserror::Error;
-use tokio_tungstenite::tungstenite::Error as WebSocketError;
 
 use crate::error::ClientError;
 
 #[derive(Debug, Error)]
 pub enum TransportError {
     #[error(transparent)]
-    WebSocket(#[from] WebSocketError),
+    IrohConnect(#[from] iroh::endpoint::ConnectError),
+    #[error(transparent)]
+    IrohConnection(#[from] iroh::endpoint::ConnectionError),
+    #[error(transparent)]
+    IrohBind(#[from] iroh::endpoint::BindError),
     #[error(transparent)]
     Frame(#[from] portalis_nexus_protocol::FrameError),
     #[error(transparent)]
     Client(#[from] ClientError),
     #[error("connection closed before a response arrived")]
     ConnectionClosed,
-    #[error("expected a binary protobuf response")]
-    UnexpectedWebSocketMessage,
     #[error("failed to connect after {attempts} attempts")]
     ReconnectExhausted {
         attempts: u32,

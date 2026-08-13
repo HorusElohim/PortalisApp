@@ -3,10 +3,10 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-use futures_util::stream::{SplitSink, SplitStream};
-use futures_util::{SinkExt, StreamExt};
 use portalis_nexus_protocol::v1::{Envelope, ServerHello};
-use portalis_nexus_protocol::{MAX_OUTBOUND_QUEUE, decode_frame, format_id};
+use portalis_nexus_protocol::{
+    LENGTH_PREFIX_BYTES, MAX_OUTBOUND_QUEUE, decode_frame, format_id, frame_length, length_prefix,
+};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
@@ -34,11 +34,9 @@ pub(crate) struct Shared {
 
 /// The currently connected socket's send side and negotiated hello.
 struct Live {
-    outbound: mpsc::Sender<Message>,
+    outbound: mpsc::Sender<Vec<u8>>,
     hello: ServerHello,
 }
-
-type Message = tokio_tungstenite::tungstenite::Message;
 
 impl Shared {
     pub(crate) fn new(
@@ -57,7 +55,7 @@ impl Shared {
         }
     }
 
-    pub(crate) fn outbound(&self) -> Option<mpsc::Sender<Message>> {
+    pub(crate) fn outbound(&self) -> Option<mpsc::Sender<Vec<u8>>> {
         self.live().as_ref().map(|live| live.outbound.clone())
     }
 
@@ -85,7 +83,7 @@ impl Shared {
 pub(crate) struct Tasks {
     reader: JoinHandle<()>,
     writer: JoinHandle<()>,
-    outbound: mpsc::Sender<Message>,
+    outbound: mpsc::Sender<Vec<u8>>,
 }
 
 /// Publishes a connection and starts its reader and writer tasks.
@@ -93,7 +91,6 @@ pub(crate) fn start_connection(
     shared: &Arc<Shared>,
     (socket, hello): (Socket, ServerHello),
 ) -> Tasks {
-    let (sink, stream) = socket.split();
     let (outbound, inbox) = mpsc::channel(MAX_OUTBOUND_QUEUE);
     debug!(
         connection_id = %format_id(&hello.connection_id),
@@ -106,8 +103,8 @@ pub(crate) fn start_connection(
     });
 
     Tasks {
-        writer: tokio::spawn(write_socket(sink, inbox)),
-        reader: tokio::spawn(read_socket(Arc::clone(shared), stream)),
+        writer: tokio::spawn(write_socket(socket.send, inbox)),
+        reader: tokio::spawn(read_socket(Arc::clone(shared), socket.receive)),
         outbound,
     }
 }
@@ -119,7 +116,8 @@ pub(crate) fn start_connection(
 /// created in here would miss a shutdown requested before the task first ran.
 pub(crate) async fn supervise(
     shared: Arc<Shared>,
-    endpoint: String,
+    endpoint: crate::EndpointAddr,
+    local: crate::NexusEndpoint,
     policy: ReconnectPolicy,
     first: Tasks,
     mut shutdown: watch::Receiver<bool>,
@@ -131,7 +129,7 @@ pub(crate) async fn supervise(
         } else {
             let attempt = tokio::select! {
                 _ = shutdown.changed() => return,
-                attempt = handshake_with_retry(&endpoint, &policy, shared.request_timeout) => attempt,
+                attempt = handshake_with_retry(&local, endpoint.clone(), &policy, shared.request_timeout) => attempt,
             };
             match attempt {
                 Ok(connection) => start_connection(&shared, connection),
@@ -164,9 +162,8 @@ async fn run_connection(shared: &Arc<Shared>, tasks: Tasks, shutdown: &mut watch
         _ = shutdown.changed() => false,
     };
 
-    // Dropping every queue sender lets the writer send its close frame. The
-    // reader has to stay alive to answer the peer's close reply: WebSocket
-    // closing is a handshake, and flushing it stalls when nothing is reading.
+    // Dropping every queue sender lets the writer finish its QUIC stream. The
+    // reader remains alive long enough to observe the service finishing too.
     drop(outbound);
     shared.clear_live();
     let closed = timeout(CLOSE_TIMEOUT, async {
@@ -185,46 +182,48 @@ async fn run_connection(shared: &Arc<Shared>, tasks: Tasks, shutdown: &mut watch
 }
 
 /// Routes inbound envelopes to their waiting request, or to the event stream.
-async fn read_socket(shared: Arc<Shared>, mut stream: SplitStream<Socket>) {
-    while let Some(message) = stream.next().await {
-        let message = match message {
-            Ok(message) => message,
+async fn read_socket(shared: Arc<Shared>, mut receive: iroh::endpoint::RecvStream) {
+    loop {
+        let mut prefix = [0_u8; LENGTH_PREFIX_BYTES];
+        if receive.read_exact(&mut prefix).await.is_err() {
+            return;
+        }
+        let length = match frame_length(prefix) {
+            Ok(length) => length,
             Err(error) => {
-                warn!(%error, "Nexus socket read failed");
+                warn!(%error, "Nexus server announced an invalid frame");
                 return;
             }
         };
-        match message {
-            Message::Binary(frame) => {
-                let envelope = match decode_frame(&frame) {
-                    Ok(envelope) => envelope,
-                    Err(error) => {
-                        warn!(%error, "Nexus server sent an invalid frame");
-                        return;
-                    }
-                };
-                if let Some(event) = shared.pending.route(envelope) {
-                    if shared.events.try_send(event).is_err() {
-                        warn!("Nexus event stream is full or closed");
-                        return;
-                    }
-                }
+        let mut frame = vec![0_u8; length];
+        if receive.read_exact(&mut frame).await.is_err() {
+            return;
+        }
+        let envelope = match decode_frame(&frame) {
+            Ok(envelope) => envelope,
+            Err(error) => {
+                warn!(%error, "Nexus server sent an invalid frame");
+                return;
             }
-            Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {}
-            Message::Text(_) | Message::Close(_) => return,
+        };
+        if let Some(event) = shared.pending.route(envelope) {
+            if shared.events.try_send(event).is_err() {
+                warn!("Nexus event stream is full or closed");
+                return;
+            }
         }
     }
 }
 
-/// Writes queued messages, then closes the socket once the queue is dropped.
-async fn write_socket(mut sink: SplitSink<Socket, Message>, mut inbox: mpsc::Receiver<Message>) {
-    while let Some(message) = inbox.recv().await {
-        if let Err(error) = sink.send(message).await {
-            warn!(%error, "Nexus socket write failed");
+/// Writes queued frames, then finishes the stream once the queue is dropped.
+async fn write_socket(mut send: iroh::endpoint::SendStream, mut inbox: mpsc::Receiver<Vec<u8>>) {
+    while let Some(frame) = inbox.recv().await {
+        if send.write_all(&length_prefix(&frame)).await.is_err()
+            || send.write_all(&frame).await.is_err()
+        {
+            warn!("Nexus stream write failed");
             return;
         }
     }
-    if let Err(error) = sink.send(Message::Close(None)).await {
-        debug!(%error, "Nexus socket close frame could not be sent");
-    }
+    let _ = send.finish();
 }

@@ -11,12 +11,9 @@ use portalis_nexus_protocol::v1::{
 use portalis_nexus_protocol::{
     CURRENT_PROTOCOL_VERSION, SessionBinding, encode_frame, format_id, payload_name,
 };
-use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
-use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use tracing::{debug, warn};
 
 use crate::config::ClientConfig;
@@ -30,6 +27,7 @@ use crate::protocol::{
 use crate::signer::DeviceSigner;
 use crate::transport::connection::{Shared, start_connection, supervise};
 use crate::transport::handshake::{handshake, handshake_with_retry};
+use crate::{EndpointAddr, NexusEndpoint, RelayMode};
 
 mod connection;
 mod error;
@@ -39,7 +37,11 @@ pub use error::TransportError;
 
 use portalis_nexus_protocol::MAX_OUTBOUND_QUEUE;
 
-pub(crate) type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+/// The one bidirectional QUIC stream the service opens for this connection.
+pub(crate) struct Socket {
+    pub(crate) send: iroh::endpoint::SendStream,
+    pub(crate) receive: iroh::endpoint::RecvStream,
+}
 
 /// A supervised connection to a Portalis Nexus endpoint.
 ///
@@ -48,6 +50,7 @@ pub(crate) type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 /// socket ends, so commands issued through the handle survive a server restart.
 pub struct NexusClient {
     shared: Arc<Shared>,
+    endpoint: NexusEndpoint,
     events: Mutex<Option<mpsc::Receiver<Envelope>>>,
     supervisor: Option<JoinHandle<()>>,
 }
@@ -60,12 +63,13 @@ impl NexusClient {
     ///
     /// # Errors
     ///
-    /// Returns [`TransportError`] when the WebSocket handshake, subprotocol, or
-    /// protobuf hello is invalid.
-    pub async fn connect(endpoint: &str) -> Result<Self, TransportError> {
+    /// Returns [`TransportError`] when QUIC, ALPN, or the protobuf hello is
+    /// invalid.
+    pub async fn connect(endpoint: EndpointAddr) -> Result<Self, TransportError> {
         let config = ClientConfig::default();
-        let connection = handshake(endpoint, config.request_timeout).await?;
-        Ok(Self::supervised(endpoint, connection, config))
+        let local = bind_endpoint().await?;
+        let connection = handshake(&local, endpoint.clone(), config.request_timeout).await?;
+        Ok(Self::supervised(endpoint, local, connection, config))
     }
 
     /// Connects under the configured retry policy, then supervises the socket.
@@ -75,22 +79,33 @@ impl NexusClient {
     /// Returns [`TransportError::ReconnectExhausted`] after the policy's final
     /// failed attempt, preserving the final transport error as its source.
     pub async fn connect_with_config(
-        endpoint: &str,
+        endpoint: EndpointAddr,
         config: &ClientConfig,
     ) -> Result<Self, TransportError> {
-        let connection =
-            handshake_with_retry(endpoint, &config.reconnect, config.request_timeout).await?;
-        Ok(Self::supervised(endpoint, connection, config.clone()))
+        let local = bind_endpoint().await?;
+        let connection = handshake_with_retry(
+            &local,
+            endpoint.clone(),
+            &config.reconnect,
+            config.request_timeout,
+        )
+        .await?;
+        Ok(Self::supervised(endpoint, local, connection, config.clone()))
     }
 
     /// Publishes the first connection before returning, so a caller can send a
     /// command immediately without racing the supervisor's first iteration.
-    fn supervised(endpoint: &str, connection: (Socket, ServerHello), config: ClientConfig) -> Self {
+    fn supervised(
+        endpoint: EndpointAddr,
+        local: NexusEndpoint,
+        connection: (Socket, ServerHello),
+        config: ClientConfig,
+    ) -> Self {
         let (events, inbox) = mpsc::channel(MAX_OUTBOUND_QUEUE);
         let shared = Arc::new(Shared::new(
             events,
             config.request_timeout,
-            authority_of(endpoint),
+            authority_of(&endpoint),
         ));
         // Subscribed here, not inside the task: a caller may shut down before
         // the supervisor has run for the first time.
@@ -98,7 +113,8 @@ impl NexusClient {
         let first = start_connection(&shared, connection);
         let supervisor = tokio::spawn(supervise(
             Arc::clone(&shared),
-            endpoint.to_owned(),
+            endpoint,
+            local.clone(),
             config.reconnect,
             first,
             shutdown,
@@ -106,6 +122,7 @@ impl NexusClient {
 
         Self {
             shared,
+            endpoint: local,
             events: Mutex::new(Some(inbox)),
             supervisor: Some(supervisor),
         }
@@ -158,7 +175,7 @@ impl NexusClient {
         // stop the writer task from observing a closed queue.
         let queued = {
             let outbound = self.shared.outbound().ok_or(TransportError::Disconnected)?;
-            outbound.try_send(Message::Binary(frame.into()))
+            outbound.try_send(frame)
         };
         if let Err(error) = queued {
             self.shared.pending.cancel(&request.message_id);
@@ -516,6 +533,7 @@ impl NexusClient {
         if let Some(supervisor) = self.supervisor.take() {
             let _ = supervisor.await;
         }
+        self.endpoint.close().await;
         debug!(authority = self.authority(), "Nexus client stopped");
     }
 }
@@ -568,12 +586,18 @@ fn binding<'a>(hello: &'a ServerHello, server_authority: &'a str) -> SessionBind
 /// Signatures are bound to it, so what the client signs is the server it meant
 /// to reach rather than whatever a relay claims to be.
 #[must_use]
-pub fn authority_of(endpoint: &str) -> String {
+pub fn authority_of(endpoint: &EndpointAddr) -> String {
     endpoint
-        .split_once("://")
-        .map_or(endpoint, |(_, rest)| rest)
-        .split('/')
+        .direct_addresses()
         .next()
-        .unwrap_or_default()
-        .to_owned()
+        .map_or_else(String::new, ToString::to_string)
+}
+
+async fn bind_endpoint() -> Result<NexusEndpoint, TransportError> {
+    let mut secret = [0_u8; 32];
+    secret[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+    secret[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+    NexusEndpoint::bind(secret, Vec::new(), RelayMode::Default)
+        .await
+        .map_err(TransportError::from)
 }

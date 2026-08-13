@@ -4,7 +4,7 @@
 //! transport handles are implementation details, while the eventual Dart API
 //! should speak in collection/share operations.
 
-use portalis_nexus_client::{DeviceSigner, NexusClient, TransportError};
+use portalis_nexus_client::{DeviceSigner, EndpointAddr, NexusClient, TransportError};
 use rand::{rngs::OsRng, RngCore};
 use x25519_dalek::{PublicKey, StaticSecret};
 
@@ -66,7 +66,7 @@ impl DeviceSigner for NexusIdentity {
 
 /// Opens the supervised client used by the online collection workflow.
 #[allow(dead_code)]
-pub(crate) async fn connect(endpoint: &str) -> Result<NexusClient, TransportError> {
+pub(crate) async fn connect(endpoint: EndpointAddr) -> Result<NexusClient, TransportError> {
     NexusClient::connect(endpoint).await
 }
 
