@@ -6,8 +6,8 @@ import '../../features/collections/domain/picked_file.dart';
 import 'bottom_nav.dart';
 import '../../design/theme.dart';
 import '../../features/collections/presentation/home_screen.dart';
-import '../../features/people/presentation/people_screen.dart';
-import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/people/presentation/screen.dart';
+import '../../features/settings/presentation/screen.dart';
 import '../../features/identity/presentation/user_screen.dart';
 
 /// Compact arrangement of the shared adaptive shell state.
@@ -27,7 +27,7 @@ class MobileShellLayout extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: AppColors.surfaceDeep,
         body: AmbientBackground(
-          intensity: Glow.intensityForRate(AppControllers.nexusApp.activity.rateMbps),
+          intensity: Glow.intensityForRate(AppControllers.engine.activity.rateMbps),
           child: SafeArea(
             bottom: false,
             child: IndexedStack(

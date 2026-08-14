@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
-import '../../collections/presentation/collection_source.dart';
+import '../../collections/presentation/source.dart';
 import '../../../design/design.dart';
 import '../../collections/domain/collection.dart';
-import '../application/media_formats.dart';
-import '../domain/media_item.dart';
-import 'media_viewer.dart';
+import '../application/formats.dart';
+import '../domain/item.dart';
+import 'viewer.dart';
 
 /// Coordinates live collection state and the lifetime of an inline player.
 class MediaViewerScreen extends StatefulWidget {

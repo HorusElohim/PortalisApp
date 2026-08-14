@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-import '../data/settings_repository.dart';
-import '../domain/engine_settings.dart';
+import '../data/repository.dart';
+import '../domain/engine.dart';
 import '../domain/storage_entry.dart';
 
 /// UI state and commands for engine configuration and download storage.

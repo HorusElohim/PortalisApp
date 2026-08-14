@@ -1,21 +1,21 @@
 import 'package:flutter/foundation.dart';
 
-import '../data/settings_repository.dart';
+import '../data/service_repository.dart';
 import '../domain/endpoint_config.dart';
 
 /// UI state for the saved Nexus service, independent of its live connection.
-class NexusSettingsController extends ChangeNotifier {
-  NexusSettingsController({required NexusSettingsRepository repository})
+class ServiceController extends ChangeNotifier {
+  ServiceController({required ServiceRepository repository})
       : _repository = repository;
 
-  final NexusSettingsRepository _repository;
+  final ServiceRepository _repository;
 
-  factory NexusSettingsController.production() => NexusSettingsController(
-        repository: const FrbNexusSettingsRepository(),
+  factory ServiceController.production() => ServiceController(
+        repository: const FrbServiceRepository(),
       );
 
-  NexusEndpointConfig _config = const NexusEndpointConfig();
-  NexusEndpointConfig get config => _config;
+  EndpointConfig _config = const EndpointConfig();
+  EndpointConfig get config => _config;
   String? lastError;
   bool _loaded = false;
   bool get loaded => _loaded;
@@ -31,7 +31,7 @@ class NexusSettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> save(NexusEndpointConfig config) async {
+  Future<void> save(EndpointConfig config) async {
     _config = config;
     notifyListeners();
     try {

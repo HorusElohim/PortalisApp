@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import '../domain/media_item.dart';
-import 'media_piece_frame.dart';
-import 'media_thumbnail.dart';
+import '../domain/item.dart';
+import 'piece_frame.dart';
+import 'thumbnail.dart';
 
 /// A thumbnail grid of media, capped so a tile stays thumbnail-sized at any
 /// window width.

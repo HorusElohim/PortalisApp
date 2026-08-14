@@ -7,8 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../design/theme.dart';
-import '../application/media_formats.dart';
-import '../domain/media_item.dart';
+import '../application/formats.dart';
+import '../domain/item.dart';
 import '../platform/heic_preview.dart';
 
 /// Placeholder tile standing in for real thumbnails/covers/media — shown

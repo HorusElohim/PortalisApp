@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../data/identity_repository.dart';
+import '../data/repository.dart';
 import '../domain/device_profile.dart';
 
 /// Caches the one device-level identity and notifies every interested surface

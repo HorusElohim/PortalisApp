@@ -17,9 +17,9 @@ class DesktopTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: AppControllers.nexusApp,
+        listenable: AppControllers.engine,
         builder: (context, _) {
-          final active = AppControllers.nexusApp.activity.isMoving;
+          final active = AppControllers.engine.activity.isMoving;
           return Container(
             decoration: BoxDecoration(
               color: AppColors.surfaceSunken,
@@ -79,7 +79,7 @@ class DesktopTopBar extends StatelessWidget {
       );
 
   String? get _peopleCount {
-    final contacts = AppControllers.nexusApp.state?.contacts ?? const [];
+    final contacts = AppControllers.engine.state?.contacts ?? const [];
     return contacts.isEmpty ? null : '${contacts.length}';
   }
 }

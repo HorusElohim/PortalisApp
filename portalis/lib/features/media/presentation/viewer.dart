@@ -4,10 +4,10 @@ import 'package:video_player/video_player.dart';
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
 import '../../collections/domain/collection.dart';
-import '../../collections/presentation/collection_presentation.dart';
-import '../domain/media_item.dart';
-import 'media_thumbnail.dart';
-import 'media_piece_frame.dart';
+import '../../collections/presentation/peer_color.dart';
+import '../domain/item.dart';
+import 'thumbnail.dart';
+import 'piece_frame.dart';
 
 /// Renders a collection item without owning navigation, backend state, or the
 /// video controller lifecycle.

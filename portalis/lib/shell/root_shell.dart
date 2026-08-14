@@ -6,9 +6,9 @@ import 'desktop/pane.dart';
 import 'desktop/layout.dart';
 import '../features/collections/presentation/home_screen.dart';
 import 'mobile/layout.dart';
-import '../features/collections/presentation/collection_share.dart';
-import '../features/people/presentation/people_screen.dart';
-import '../features/settings/presentation/settings_screen.dart';
+import '../features/collections/presentation/share.dart';
+import '../features/people/presentation/screen.dart';
+import '../features/settings/presentation/screen.dart';
 import '../features/identity/presentation/user_screen.dart';
 
 /// The single application shell. Its parent state owns navigation and
@@ -41,7 +41,7 @@ class _RootShellState extends AdaptiveShellState<RootShell> {
   Widget buildWideLayout(BuildContext context) => DesktopShellLayout(
         pane: pane,
         onPane: selectPane,
-        liveRate: AppControllers.nexusApp.activity.rateMbps,
+        liveRate: AppControllers.engine.activity.rateMbps,
         home: Home(
           embedded: true,
           openId: openId,

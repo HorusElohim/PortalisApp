@@ -9,7 +9,7 @@ import 'package:image_picker/image_picker.dart' hide PickedFile;
 import '../../../app/app_controllers.dart';
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import '../../media/application/media_formats.dart';
+import '../../media/application/formats.dart';
 import '../../../nexus/application/app_controller.dart';
 import '../../../nexus/domain/app_state.dart';
 import '../domain/picked_file.dart';
@@ -45,7 +45,7 @@ class ShareScreen extends StatefulWidget {
 
   /// Injected by tests and alternate shells; production uses the one
   /// application-owned Nexus runtime.
-  final NexusAppController? controller;
+  final AppController? controller;
 
   @override
   State<ShareScreen> createState() => _ShareScreenState();
@@ -57,8 +57,8 @@ class _ShareScreenState extends State<ShareScreen> {
   bool _busy = false;
   String? _error;
 
-  NexusAppController get _controller =>
-      widget.controller ?? AppControllers.nexusApp;
+  AppController get _controller =>
+      widget.controller ?? AppControllers.engine;
 
   @override
   void initState() {
@@ -282,7 +282,7 @@ class _ShareScreenState extends State<ShareScreen> {
       _error = null;
     });
     try {
-      await _controller.send(NexusCommand.importTorrent(source));
+      await _controller.send(EngineCommand.importTorrent(source));
       if (!mounted) return;
       _close();
       showToast(
@@ -337,7 +337,7 @@ class _ShareScreenState extends State<ShareScreen> {
     });
     try {
       await _controller.send(
-        NexusCommand(
+        EngineCommand(
           kind: 'createCollection',
           name: name,
           files: _files

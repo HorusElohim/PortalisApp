@@ -5,10 +5,10 @@ import '../../../design/theme.dart';
 import '../domain/collection.dart';
 import '../domain/peer_observation.dart';
 import '../domain/transfer_history.dart';
-import 'collection_commands.dart';
-import 'collection_import_progress.dart';
-import 'collection_peers.dart';
-import 'collection_presentation.dart';
+import 'commands.dart';
+import 'import_progress.dart';
+import 'peers.dart';
+import 'peer_color.dart';
 
 /// Live collection facts and actions, independent of navigation and commands.
 class CollectionOverview extends StatelessWidget {

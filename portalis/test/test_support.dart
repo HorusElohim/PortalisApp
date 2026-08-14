@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/app/app_controllers.dart';
 import 'package:portalis/features/collections/domain/collection.dart';
-import 'package:portalis/features/collections/domain/collection_import.dart';
-import 'package:portalis/features/media/domain/media_item.dart';
+import 'package:portalis/features/collections/domain/import_state.dart';
+import 'package:portalis/features/media/domain/item.dart';
 import 'package:portalis/nexus/domain/app_state.dart';
-import 'package:portalis/features/settings/domain/engine_settings.dart';
+import 'package:portalis/features/settings/domain/engine.dart';
 import 'package:portalis/main.dart';
 import 'package:portalis/shell/navigation.dart';
 
@@ -17,20 +17,20 @@ export 'package:flutter_test/flutter_test.dart';
 export 'package:portalis/app/app_controllers.dart';
 export 'package:portalis/design/design.dart';
 export 'package:portalis/features/collections/domain/collection.dart';
-export 'package:portalis/features/collections/domain/collection_import.dart';
+export 'package:portalis/features/collections/domain/import_state.dart';
 export 'package:portalis/features/collections/domain/paste.dart';
-export 'package:portalis/features/collections/presentation/collection_detail.dart';
-export 'package:portalis/features/collections/presentation/collection_share.dart';
+export 'package:portalis/features/collections/presentation/detail.dart';
+export 'package:portalis/features/collections/presentation/share.dart';
 export 'package:portalis/features/collections/presentation/command_bar.dart';
-export 'package:portalis/features/media/domain/media_item.dart';
-export 'package:portalis/features/media/presentation/media_viewer_screen.dart';
+export 'package:portalis/features/media/domain/item.dart';
+export 'package:portalis/features/media/presentation/viewer_screen.dart';
 export 'package:portalis/nexus/domain/app_state.dart';
-export 'package:portalis/features/collections/presentation/collection_route.dart';
-export 'package:portalis/features/settings/domain/engine_settings.dart';
+export 'package:portalis/features/collections/presentation/route.dart';
+export 'package:portalis/features/settings/domain/engine.dart';
 export 'package:portalis/main.dart';
-export 'package:portalis/features/people/presentation/people_screen.dart';
+export 'package:portalis/features/people/presentation/screen.dart';
 export 'package:portalis/shell/root_shell.dart';
-export 'package:portalis/features/settings/presentation/settings_screen.dart';
+export 'package:portalis/features/settings/presentation/screen.dart';
 export 'package:portalis/features/identity/presentation/user_screen.dart';
 export 'package:portalis/shell/navigation.dart';
 export 'package:portalis/design/theme.dart';
@@ -129,15 +129,15 @@ EngineSettings buildEngineSettings() => const EngineSettings(
 Future<void> pumpApp(
   WidgetTester tester, {
   Size size = phoneSize,
-  List<AppCollection> nexusCollections = const [],
+  List<AppCollection> engineCollections = const [],
   String? error,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(const MyApp());
   await tester.pump();
-  AppControllers.nexusApp.debugSeed(
-    buildNexusState(nexusCollections),
+  AppControllers.engine.debugSeed(
+    buildNexusState(engineCollections),
     details: const Stream<AppDetail?>.empty(),
     error: error,
   );
@@ -151,7 +151,7 @@ Future<void> pumpTransition(WidgetTester tester) async {
 
 
 void resetTestState() {
-  AppControllers.nexusApp.debugSeed(null);
+  AppControllers.engine.debugSeed(null);
   AppNavigation.tab.value = AppNavigation.homeTab;
   AppNavigation.depth.value = 0;
 }

@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
 import '../domain/collection.dart';
-import 'collection_commands.dart';
-import 'collection_detail.dart';
-import 'collection_source.dart';
-import 'collection_views.dart';
-import 'collections_list.dart';
+import 'commands.dart';
+import 'detail.dart';
+import 'source.dart';
+import 'views.dart';
+import 'list.dart';
 import 'command_bar.dart';
-import 'share_collection_action.dart';
+import 'share_action.dart';
 import '../../../nexus/data/collection_view.dart';
 import '../../../nexus/domain/app_state.dart';
 
@@ -22,11 +22,11 @@ import '../../../nexus/domain/app_state.dart';
 /// command bar always visible, exactly as it always did; opening one is the
 /// caller's business (see [Home.onOpen]), not this widget's.
 ///
-/// [nexusCollectionView] is what makes reusing those widgets possible: this
+/// [collectionView] is what makes reusing those widgets possible: this
 /// file translates Nexus's vocabulary into theirs and otherwise makes no
 /// rendering decision of its own.
-class NexusHomeLibrary extends StatelessWidget {
-  const NexusHomeLibrary({
+class HomeLibrary extends StatelessWidget {
+  const HomeLibrary({
     super.key,
     required this.wide,
     required this.state,
@@ -72,8 +72,8 @@ class NexusHomeLibrary extends StatelessWidget {
       collection.name.toLowerCase().contains(query.toLowerCase());
 
   /// The row summary for one collection — cheap, and never a subscription:
-  /// see [nexusCollectionView]'s own doc for what a missing detail costs it.
-  Collection _rowView(AppCollection collection) => nexusCollectionView(
+  /// see [collectionView]'s own doc for what a missing detail costs it.
+  Collection _rowView(AppCollection collection) => collectionView(
         collection: collection,
         detail: null,
         contacts: state?.contacts ?? const [],

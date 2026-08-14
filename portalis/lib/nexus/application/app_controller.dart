@@ -6,15 +6,15 @@ import '../data/app_repository.dart';
 import '../domain/app_state.dart';
 
 /// Owns Portalis's one app-level Nexus state subscription.
-class NexusAppController extends ChangeNotifier {
-  NexusAppController({required NexusAppRepository repository})
+class AppController extends ChangeNotifier {
+  AppController({required AppRepository repository})
       : _repository = repository;
 
-  factory NexusAppController.production() => NexusAppController(
-        repository: const FrbNexusAppRepository(),
+  factory AppController.production() => AppController(
+        repository: const FrbAppRepository(),
       );
 
-  final NexusAppRepository _repository;
+  final AppRepository _repository;
   StreamSubscription<AppSnapshot>? _subscription;
   Future<void>? _starting;
 
@@ -24,10 +24,10 @@ class NexusAppController extends ChangeNotifier {
 
   /// What the engine is doing, derived from the one state this controller
   /// owns. Every piece of chrome reads this rather than counting for itself
-  /// — see [NexusActivity] for why that matters.
-  NexusActivity get activity {
+  /// — see [EngineActivity] for why that matters.
+  EngineActivity get activity {
     final collections = _state?.collections;
-    if (collections == null || collections.isEmpty) return NexusActivity.idle;
+    if (collections == null || collections.isEmpty) return EngineActivity.idle;
     var transfers = 0;
     var down = 0;
     var up = 0;
@@ -40,7 +40,7 @@ class NexusAppController extends ChangeNotifier {
       up += transfer.upBytesPerSecond;
       peers += transfer.peers;
     }
-    return NexusActivity(
+    return EngineActivity(
       transfers: transfers,
       downBytesPerSecond: down,
       upBytesPerSecond: up,
@@ -86,7 +86,7 @@ class NexusAppController extends ChangeNotifier {
     }
   }
 
-  Future<AppAccepted> send(NexusCommand command) => _repository.send(command);
+  Future<AppAccepted> send(EngineCommand command) => _repository.send(command);
 
   /// Selects the one collection whose expensive detail projection is needed.
   /// Widgets consume this stream directly; it deliberately does not become a

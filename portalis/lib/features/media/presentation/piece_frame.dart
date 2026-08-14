@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import '../domain/media_item.dart';
+import '../domain/item.dart';
 
 /// Paints only piece state supplied by the backend. When older/unavailable
 /// telemetry has no ranges, the existing aggregate perimeter remains as the

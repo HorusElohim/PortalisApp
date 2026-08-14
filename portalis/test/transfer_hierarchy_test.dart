@@ -2,9 +2,9 @@ import 'dart:math' as math;
 
 import 'test_support.dart';
 
-import 'package:portalis/features/collections/presentation/collection_commands.dart';
-import 'package:portalis/features/collections/presentation/collection_overview.dart';
-import 'package:portalis/features/collections/presentation/collection_views.dart';
+import 'package:portalis/features/collections/presentation/commands.dart';
+import 'package:portalis/features/collections/presentation/overview.dart';
+import 'package:portalis/features/collections/presentation/views.dart';
 
 void main() {
   testWidgets('opening a transfer replaces row facts instead of repeating them',

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:portalis/features/media/application/media_formats.dart';
+import 'package:portalis/features/media/application/formats.dart';
 import 'package:portalis/features/settings/presentation/formats_screen.dart';
 
 void main() {

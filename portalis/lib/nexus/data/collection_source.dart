@@ -6,7 +6,7 @@ import '../../features/collections/domain/collection.dart';
 import '../../features/collections/domain/peer_observation.dart';
 import '../../features/collections/domain/picked_file.dart';
 import '../../features/collections/domain/transfer_history.dart';
-import '../../features/collections/presentation/collection_source.dart';
+import '../../features/collections/presentation/source.dart';
 import '../application/app_controller.dart';
 import '../domain/app_state.dart';
 import 'collection_view.dart';
@@ -15,26 +15,26 @@ import 'collection_view.dart';
 ///
 /// "Restart" resumes — the same thing it meant against the legacy backend's
 /// `restart_collection`, not a retry of a stalled transfer. A free function
-/// rather than a method on [NexusCollectionSource] because [Home]'s inline
+/// rather than a method on [EngineCollectionSource] because [Home]'s inline
 /// row commands need the exact same dispatch without paying for a source's
 /// subscription just to fire one command.
 Future<void> sendSetPaused(
-  NexusAppController controller,
+  AppController controller,
   int collectionId, {
   required bool paused,
 }) =>
     controller.send(
-      NexusCommand(kind: 'setPaused', collection: collectionId, paused: paused),
+      EngineCommand(kind: 'setPaused', collection: collectionId, paused: paused),
     );
 
 /// Deletes one collection, optionally taking its downloaded files with it.
 Future<void> sendDeleteCollection(
-  NexusAppController controller,
+  AppController controller,
   int collectionId, {
   required bool deleteFiles,
 }) =>
     controller.send(
-      NexusCommand(
+      EngineCommand(
         kind: 'deleteCollection',
         collection: collectionId,
         deleteFiles: deleteFiles,
@@ -56,8 +56,8 @@ Future<void> sendDeleteCollection(
 /// once that screen is gone. [CollectionDetail]'s own state does this: the
 /// contract every [CollectionSource] makes is that its owner calls `dispose`
 /// exactly once, so this source does not also call it on itself.
-class NexusCollectionSource extends CollectionSource with ChangeNotifier {
-  NexusCollectionSource({required this.controller, required this.collectionId}) {
+class EngineCollectionSource extends CollectionSource with ChangeNotifier {
+  EngineCollectionSource({required this.controller, required this.collectionId}) {
     controller.addListener(notifyListeners);
     _detailSubscription =
         controller.watchDetail(collectionId).listen((detail) {
@@ -66,7 +66,7 @@ class NexusCollectionSource extends CollectionSource with ChangeNotifier {
     });
   }
 
-  final NexusAppController controller;
+  final AppController controller;
   final int collectionId;
 
   AppDetail? _detail;
@@ -83,7 +83,7 @@ class NexusCollectionSource extends CollectionSource with ChangeNotifier {
   Collection resolve(Collection seed) {
     final collection = _nexusCollection;
     if (collection == null) return seed;
-    return nexusCollectionView(
+    return collectionView(
       collection: collection,
       detail: _detail,
       contacts: controller.state?.contacts ?? const [],
@@ -91,19 +91,19 @@ class NexusCollectionSource extends CollectionSource with ChangeNotifier {
   }
 
   @override
-  TransferHistory? historyFor(String id) => nexusTransferHistory(_detail);
+  TransferHistory? historyFor(String id) => transferHistory(_detail);
 
   @override
   List<PeerObservation> peerHistoryFor(String id) {
     final collection = _nexusCollection;
     if (collection == null) return const [];
-    return nexusPeerObservations(collection: collection, detail: _detail);
+    return peerObservations(collection: collection, detail: _detail);
   }
 
   @override
   Future<void> addMedia(String id, String label, List<PickedFile> files) =>
       controller.send(
-        NexusCommand(
+        EngineCommand(
           kind: 'addMedia',
           collection: collectionId,
           label: label,
@@ -142,7 +142,7 @@ class NexusCollectionSource extends CollectionSource with ChangeNotifier {
   /// download the first time, revising a running one afterwards.
   @override
   Future<void> setSelection(String id, Set<int> entries) => controller.send(
-        NexusCommand(
+        EngineCommand(
           kind: 'downloadSelection',
           collection: collectionId,
           entries: entries.toList()..sort(),

@@ -35,7 +35,7 @@ class _UserScreenState extends State<UserScreen> {
   int get _totalOnDisk => _sum((c) => c.onDiskBytes.toInt());
 
   int _sum(int Function(AppCollection) of) =>
-      AppControllers.nexusApp.state?.collections
+      AppControllers.engine.state?.collections
           .fold<int>(0, (total, collection) => total + of(collection)) ??
       0;
 
@@ -78,7 +78,7 @@ class _UserScreenState extends State<UserScreen> {
       body: ListenableBuilder(
         listenable: Listenable.merge([
           AppControllers.identity,
-          AppControllers.nexusApp,
+          AppControllers.engine,
         ]),
         builder: (context, _) {
           final identity = AppControllers.identity;
@@ -88,9 +88,9 @@ class _UserScreenState extends State<UserScreen> {
               identityError: identity.lastError,
               sentBytes: _totalUploaded,
               receivedBytes: _totalOnDisk,
-              people: AppControllers.nexusApp.state?.contacts.length ?? 0,
+              people: AppControllers.engine.state?.contacts.length ?? 0,
               collections:
-                  AppControllers.nexusApp.state?.collections.length ?? 0,
+                  AppControllers.engine.state?.collections.length ?? 0,
               onRename: identity.info == null ? null : _rename,
               onOpenPeople: () =>
                   AppNavigation.tab.value = AppNavigation.peopleTab,

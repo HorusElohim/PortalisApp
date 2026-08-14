@@ -7,11 +7,11 @@ import '../../../app/app_controllers.dart';
 import '../../../design/collection_deletion_dialog.dart';
 import '../../../design/design.dart';
 import '../domain/picked_file.dart';
-import 'collection_commands.dart';
-import 'collection_share.dart';
+import 'commands.dart';
+import 'share.dart';
 import '../../../nexus/data/collection_source.dart';
 import '../../../nexus/domain/app_state.dart';
-import 'collection_route.dart';
+import 'route.dart';
 import 'home_library.dart';
 
 /// App-shell adapter for the Nexus collection library. It coordinates routes
@@ -50,7 +50,7 @@ class _HomeState extends State<Home> {
   // one at a time, because Nexus's detail stream costs nothing until
   // something asks for it — an inline-expanded row is exactly one such ask,
   // and there is at most one open at a time.
-  NexusCollectionSource? _openSource;
+  EngineCollectionSource? _openSource;
 
   @override
   void initState() {
@@ -68,8 +68,8 @@ class _HomeState extends State<Home> {
     _openSource?.dispose();
     _openSource = widget.openId == null
         ? null
-        : NexusCollectionSource(
-            controller: AppControllers.nexusApp,
+        : EngineCollectionSource(
+            controller: AppControllers.engine,
             collectionId: widget.openId!,
           );
   }
@@ -98,7 +98,7 @@ class _HomeState extends State<Home> {
       widget.onOpen!(collection.id);
       return;
     }
-    _push(nexusCollectionScreen(collection, AppControllers.nexusApp));
+    _push(routeFor(collection, AppControllers.engine));
   }
 
   void _handleCommand((AppCollection, CollectionCommand) action) {
@@ -117,9 +117,9 @@ class _HomeState extends State<Home> {
     try {
       switch (command) {
         case CollectionCommand.restart:
-          await sendSetPaused(AppControllers.nexusApp, collection.id, paused: false);
+          await sendSetPaused(AppControllers.engine, collection.id, paused: false);
         case CollectionCommand.pause:
-          await sendSetPaused(AppControllers.nexusApp, collection.id, paused: true);
+          await sendSetPaused(AppControllers.engine, collection.id, paused: true);
         case CollectionCommand.delete:
           return;
       }
@@ -139,7 +139,7 @@ class _HomeState extends State<Home> {
     if (choice == null || !mounted) return;
     try {
       await sendDeleteCollection(
-        AppControllers.nexusApp,
+        AppControllers.engine,
         collection.id,
         deleteFiles: choice == CollectionDeletionChoice.withFiles,
       );
@@ -194,33 +194,33 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> _importTorrent(String source) async {
-    final accepted = await AppControllers.nexusApp.send(
-      NexusCommand.importTorrent(source),
+    final accepted = await AppControllers.engine.send(
+      EngineCommand.importTorrent(source),
     );
     final collection = accepted.collection;
     if (collection == null) {
-      throw StateError('Nexus did not identify the imported torrent');
+      throw StateError('The engine did not identify the imported torrent');
     }
     // Straight to the collection, whether the source was a magnet or a
     // descriptor. A magnet's file list arrives from the swarm a moment later
     // and the screen fills in; a descriptor's is already there. Waiting for
     // the difference used to mean a magnet import landed nowhere at all.
     if (!mounted) return;
-    _push(NexusCollectionDetail(
+    _push(CollectionRoute(
       collection: collection,
-      controller: AppControllers.nexusApp,
+      controller: AppControllers.engine,
     ));
   }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: AppControllers.nexusApp,
+      listenable: AppControllers.engine,
       builder: (context, _) {
-        final library = NexusHomeLibrary(
+        final library = HomeLibrary(
           wide: widget.embedded,
-          state: AppControllers.nexusApp.state,
-          error: AppControllers.nexusApp.lastError,
+          state: AppControllers.engine.state,
+          error: AppControllers.engine.lastError,
           query: _query,
           openId: widget.openId,
           openSource: _openSource,

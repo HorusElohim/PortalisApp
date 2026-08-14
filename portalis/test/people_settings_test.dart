@@ -16,7 +16,7 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(home: PeopleScreen()),
       );
-      AppControllers.nexusApp.debugSeed(
+      AppControllers.engine.debugSeed(
         AppSnapshot(
           device: const AppDevice(
             name: 'Portalis',
@@ -57,7 +57,7 @@ void main() {
       await tester.binding.setSurfaceSize(desktopSize);
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(const MaterialApp(home: PeopleScreen()));
-      AppControllers.nexusApp.debugSeed(buildNexusState(const []));
+      AppControllers.engine.debugSeed(buildNexusState(const []));
       await tester.pump();
 
       expect(find.textContaining('Nobody yet'), findsOneWidget);

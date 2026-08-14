@@ -37,7 +37,7 @@ void main() {
         (tester) async {
       // The header provides a compact summary while the library owns the
       // single source of truth for each collection.
-      await pumpApp(tester, nexusCollections: [
+      await pumpApp(tester, engineCollections: [
         buildNexusCollection(
           status: 'Downloading',
           transfer: const AppTransfer(
@@ -57,7 +57,7 @@ void main() {
 
     testWidgets('uses the phone layout narrow and three panes wide',
         (tester) async {
-      await pumpApp(tester, nexusCollections: [buildNexusCollection()]);
+      await pumpApp(tester, engineCollections: [buildNexusCollection()]);
 
       await pumpApp(tester, size: phoneSize);
       expect(find.byType(AppBottomNav), findsOneWidget);
@@ -66,7 +66,7 @@ void main() {
       await tester.binding.setSurfaceSize(desktopSize);
       await tester.pumpWidget(const MyApp());
       await tester.pump();
-      AppControllers.nexusApp
+      AppControllers.engine
           .debugSeed(buildNexusState([buildNexusCollection()]));
       await tester.pump();
       // The desktop sidebar carries a People pane that mobile has no room
@@ -81,7 +81,7 @@ void main() {
       // It used to be the one row that could not expand, because choosing its
       // files happened on a screen of its own. Choosing happens on the
       // collection now, so there is nothing left for a row to defer to.
-      await pumpApp(tester, size: desktopSize, nexusCollections: [
+      await pumpApp(tester, size: desktopSize, engineCollections: [
         buildNexusCollection(id: 1, name: 'Iceland'),
         buildNexusCollection(
           id: 2,
@@ -104,7 +104,7 @@ void main() {
       // shells have to agree about where you are rather than each keeping its
       // own idea of it.
       await pumpApp(tester,
-          size: desktopSize, nexusCollections: [buildNexusCollection()]);
+          size: desktopSize, engineCollections: [buildNexusCollection()]);
       await tester.tap(find.byKey(const Key('identityChip')));
       await tester.pump();
 
@@ -129,7 +129,7 @@ void main() {
       // the header rather than the list. What is left in the list is what
       // there is to look at.
       await pumpApp(tester,
-          size: desktopSize, nexusCollections: [buildNexusCollection()]);
+          size: desktopSize, engineCollections: [buildNexusCollection()]);
 
       for (final gone in ['Transfers', 'Settings', 'People']) {
         expect(find.text(gone), findsNothing, reason: '$gone is not a row');
@@ -171,7 +171,7 @@ void main() {
 
     testWidgets('the command bar dispatches on what was pasted',
         (tester) async {
-      await pumpApp(tester, size: desktopSize, nexusCollections: [
+      await pumpApp(tester, size: desktopSize, engineCollections: [
         buildNexusCollection(name: 'Iceland trip'),
         buildNexusCollection(id: 2, name: 'Band demos'),
       ]);
@@ -225,7 +225,7 @@ void main() {
         (tester) async {
       // The distinction that makes it a Home button and not just a tab: one
       // tap lands you at the start, not one screen shallower.
-      await pumpApp(tester, nexusCollections: [
+      await pumpApp(tester, engineCollections: [
         buildNexusCollection(
           name: 'Episode',
           nature: 'Torrent',
@@ -234,7 +234,7 @@ void main() {
       ]);
       await tester.tap(find.text('Episode'));
       await pumpTransition(tester);
-      expect(find.byType(NexusCollectionDetail), findsOneWidget);
+      expect(find.byType(CollectionRoute), findsOneWidget);
       expect(AppNavigation.depth.value, greaterThan(0));
 
       AppNavigation.goHome();
@@ -244,7 +244,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
       }
 
-      expect(find.byType(NexusCollectionDetail), findsNothing);
+      expect(find.byType(CollectionRoute), findsNothing);
       expect(AppNavigation.depth.value, 0);
       expect(tester.takeException(), isNull);
     });

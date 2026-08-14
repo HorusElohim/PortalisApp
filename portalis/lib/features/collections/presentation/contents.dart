@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import '../../media/domain/media_item.dart';
-import '../../media/presentation/media_grid.dart';
+import '../../media/domain/item.dart';
+import '../../media/presentation/grid.dart';
 import '../domain/collection.dart';
-import 'collection_presentation.dart';
+import 'peer_color.dart';
 
 /// Manifest-entry grouping and media tiles for a collection.
 class CollectionContents extends StatelessWidget {

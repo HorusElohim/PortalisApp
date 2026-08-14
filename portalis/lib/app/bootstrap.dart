@@ -28,7 +28,7 @@ Future<void> runPortalisApp() async {
         'Regenerate the bridge and rebuild the native backend together.',
       );
     }
-    await AppControllers.nexusApp.start();
+    await AppControllers.engine.start();
     // Awaited so the first frame already paints the persisted theme — a
     // load kicked off after runApp would flash Nature before a stored
     // Future preference lands.

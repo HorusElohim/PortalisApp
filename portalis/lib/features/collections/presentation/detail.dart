@@ -9,17 +9,17 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../design/collection_deletion_dialog.dart';
 import '../../../design/design.dart';
 import '../../../design/resizable_media_preview.dart';
-import '../../media/domain/media_item.dart';
-import '../../media/presentation/media_viewer_screen.dart';
+import '../../media/domain/item.dart';
+import '../../media/presentation/viewer_screen.dart';
 import '../domain/collection.dart';
 import '../domain/picked_file.dart';
 import '../platform/no_copy_source_picker.dart';
 import '../platform/photo_library_picker.dart';
 import '../platform/source_access.dart';
-import 'collection_contents.dart';
-import 'collection_commands.dart';
-import 'collection_overview.dart';
-import 'collection_source.dart';
+import 'contents.dart';
+import 'commands.dart';
+import 'overview.dart';
+import 'source.dart';
 import '../../../design/theme.dart';
 
 /// Shows one collection and coordinates user actions with whichever

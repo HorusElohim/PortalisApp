@@ -20,12 +20,12 @@ class PeopleScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: AppControllers.nexusApp,
+        listenable: AppControllers.engine,
         builder: (context, _) => _build(context),
       );
 
   Widget _build(BuildContext context) {
-    final state = AppControllers.nexusApp.state;
+    final state = AppControllers.engine.state;
     final contacts = state?.contacts ?? const <AppContact>[];
     final collections = state?.collections ?? const <AppCollection>[];
 

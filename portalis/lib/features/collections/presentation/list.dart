@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../domain/collection.dart';
-import 'collection_commands.dart';
-import 'collection_views.dart';
+import 'commands.dart';
+import 'views.dart';
 
 /// The wide-layout collection list. The caller supplies optional detail so
 /// this component does not depend on a navigation strategy.

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:portalis/features/settings/domain/engine_settings.dart';
+import 'package:portalis/features/settings/domain/engine.dart';
 
 const _settings = EngineSettings(
   uploadLimitBps: 100,

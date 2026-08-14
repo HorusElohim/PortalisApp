@@ -7,7 +7,7 @@ import '../../../app/app_controllers.dart';
 import '../../../design/design.dart';
 import '../domain/storage_entry.dart';
 import '../../../design/theme.dart';
-import '../../collections/presentation/collection_route.dart';
+import '../../collections/presentation/route.dart';
 
 /// What's actually on disk under the download directory, joined against the
 /// collections the app knows about — not just the raw filesystem, and not
@@ -143,7 +143,7 @@ class _EntryRow extends StatelessWidget {
   void _openCollection(BuildContext context) {
     // Joined on the handle the breakdown resolved from the substrate, not on
     // a name two collections could share.
-    final collection = AppControllers.nexusApp.state?.collections
+    final collection = AppControllers.engine.state?.collections
         .where((item) => item.id == entry.collection)
         .firstOrNull;
     if (collection == null) {
@@ -154,7 +154,7 @@ class _EntryRow extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) =>
-            nexusCollectionScreen(collection, AppControllers.nexusApp),
+            routeFor(collection, AppControllers.engine),
       ),
     );
   }

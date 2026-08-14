@@ -7,8 +7,8 @@ import '../design/design.dart';
 import '../features/collections/domain/picked_file.dart';
 import 'navigation.dart';
 import 'desktop/pane.dart';
-import '../features/collections/presentation/collection_share.dart';
-import '../features/collections/presentation/collection_route.dart';
+import '../features/collections/presentation/share.dart';
+import '../features/collections/presentation/route.dart';
 
 /// The one stateful shell for every window size.
 ///
@@ -48,7 +48,7 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     unawaited(
-        AppControllers.nexusApp.setActive(state == AppLifecycleState.resumed));
+        AppControllers.engine.setActive(state == AppLifecycleState.resumed));
   }
 
   void _onTabChanged() {
@@ -81,14 +81,14 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
   /// pushing from an embedded pane would otherwise do.
   void openCollection(int id, {required bool inline}) {
     if (!inline) {
-      final collection = AppControllers.nexusApp.state?.collections
+      final collection = AppControllers.engine.state?.collections
           .where((item) => item.id == id)
           .firstOrNull;
       if (collection == null) return;
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) =>
-              nexusCollectionScreen(collection, AppControllers.nexusApp),
+              routeFor(collection, AppControllers.engine),
         ),
       );
       return;
@@ -126,7 +126,7 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
   @override
   Widget build(BuildContext context) => WindowBuilder(
         builder: (context, window) => ListenableBuilder(
-          listenable: AppControllers.nexusApp,
+          listenable: AppControllers.engine,
           builder: (context, _) => KeyedSubtree(
             // Desktop and compact layouts have incompatible parent chains.
             // Make a breakpoint crossing an explicit replacement rather than
@@ -145,7 +145,7 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
   void dispose() {
     AppNavigation.tab.removeListener(_onTabChanged);
     WidgetsBinding.instance.removeObserver(this);
-    unawaited(AppControllers.nexusApp.stop());
+    unawaited(AppControllers.engine.stop());
     super.dispose();
   }
 

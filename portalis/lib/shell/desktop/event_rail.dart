@@ -16,9 +16,9 @@ class DesktopEventRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: AppControllers.nexusApp,
+        listenable: AppControllers.engine,
         builder: (context, _) {
-          final activity = AppControllers.nexusApp.activity;
+          final activity = AppControllers.engine.activity;
           if (!activity.isMoving) return const SizedBox.shrink();
 
           return Row(

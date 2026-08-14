@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import 'collection_detail.dart';
+import 'detail.dart';
 import '../../../nexus/application/app_controller.dart';
 import '../../../nexus/data/collection_source.dart';
 import '../../../nexus/data/collection_view.dart';
@@ -16,45 +16,45 @@ import '../../../nexus/domain/app_state.dart';
 /// screen could show a half-fetched collection alongside the files it had
 /// skipped. Choosing now happens on the collection itself, where it stays
 /// available for as long as the collection does.
-Widget nexusCollectionScreen(
+Widget routeFor(
   AppCollection collection,
-  NexusAppController controller,
+  AppController controller,
 ) =>
-    NexusCollectionDetail(collection: collection.id, controller: controller);
+    CollectionRoute(collection: collection.id, controller: controller);
 
 /// One Nexus collection, on its own screen.
 ///
 /// Not a second implementation of the collection screen: this *is*
 /// [CollectionScreen] — the exact widget the legacy collection screen uses —
-/// given a [NexusCollectionSource] instead of the legacy collections
+/// given a [EngineCollectionSource] instead of the legacy collections
 /// controller. Every rendering and command decision lives in
 /// [CollectionDetail]; this file only wires where its data and its commands
 /// go, and owns the source's subscription for as long as this screen does.
-class NexusCollectionDetail extends StatefulWidget {
-  const NexusCollectionDetail({
+class CollectionRoute extends StatefulWidget {
+  const CollectionRoute({
     super.key,
     required this.collection,
     required this.controller,
   });
 
   final int collection;
-  final NexusAppController controller;
+  final AppController controller;
 
   @override
-  State<NexusCollectionDetail> createState() => _NexusCollectionDetailState();
+  State<CollectionRoute> createState() => _CollectionRouteState();
 }
 
-class _NexusCollectionDetailState extends State<NexusCollectionDetail> {
+class _CollectionRouteState extends State<CollectionRoute> {
   // Constructed once, here, so its subscription survives every rebuild this
   // wrapper goes through — and disposed here too, because whoever constructs
   // a source owns it. Built in `initState` rather than lazily so that
   // disposing never has to first create the thing it is disposing.
-  late final NexusCollectionSource _source;
+  late final EngineCollectionSource _source;
 
   @override
   void initState() {
     super.initState();
-    _source = NexusCollectionSource(
+    _source = EngineCollectionSource(
       controller: widget.controller,
       collectionId: widget.collection,
     );
@@ -102,7 +102,7 @@ class _NexusCollectionDetailState extends State<NexusCollectionDetail> {
             // A seed only: `_source.resolve` supplies the live answer on
             // every rebuild. This covers the one frame before that answer
             // exists.
-            collection: nexusCollectionView(
+            collection: collectionView(
               collection: current,
               detail: null,
               contacts: widget.controller.state?.contacts ?? const [],

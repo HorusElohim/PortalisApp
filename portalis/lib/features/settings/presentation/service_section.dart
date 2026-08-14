@@ -5,15 +5,15 @@ import '../../../design/theme.dart';
 import '../../../nexus/domain/endpoint_config.dart';
 
 /// The configuration state of the authenticated Nexus service.
-class NexusServiceSection extends StatelessWidget {
-  const NexusServiceSection({
+class ServiceSection extends StatelessWidget {
+  const ServiceSection({
     super.key,
     required this.config,
     required this.onConfigure,
     required this.onClear,
   });
 
-  final NexusEndpointConfig config;
+  final EndpointConfig config;
   final VoidCallback onConfigure;
   final VoidCallback onClear;
 

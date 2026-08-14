@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../../../design/theme.dart';
 import '../../../design/formatters.dart';
-import '../../media/presentation/media_thumbnail.dart';
+import '../../media/presentation/thumbnail.dart';
 import '../domain/collection.dart';
-import 'collection_commands.dart';
-import 'collection_presentation.dart';
+import 'commands.dart';
+import 'peer_color.dart';
 import '../../../design/indicators.dart';
 import '../../../design/primitives.dart';
 

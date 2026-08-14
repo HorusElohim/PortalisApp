@@ -5,13 +5,13 @@ import 'package:flutter/material.dart';
 
 import '../../../app/app_controllers.dart';
 import '../../../design/design.dart';
-import '../domain/engine_settings.dart';
+import '../domain/engine.dart';
 import '../../../nexus/domain/endpoint_config.dart';
 import 'service_section.dart';
 import '../domain/listen_port_range.dart';
 import '../application/efficiency_benchmark.dart';
 import 'efficiency_benchmark_card.dart';
-import 'settings_sections.dart';
+import 'sections.dart';
 import 'theme_picker_row.dart';
 import '../../../shell/navigation.dart';
 import '../../../design/theme.dart';
@@ -187,7 +187,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final nodeId = TextEditingController(text: current.nodeId ?? '');
     final directAddress =
         TextEditingController(text: current.directAddress ?? '');
-    final next = await showDialog<NexusEndpointConfig>(
+    final next = await showDialog<EndpointConfig>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.surface,
@@ -232,7 +232,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(
-              NexusEndpointConfig(
+              EndpointConfig(
                 nodeId: nodeId.text.trim(),
                 directAddress: directAddress.text.trim(),
               ),
@@ -257,7 +257,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _clearNexus() async {
     try {
-      await _nexus.save(const NexusEndpointConfig());
+      await _nexus.save(const EndpointConfig());
     } catch (error) {
       if (mounted) {
         showToast(context, 'Couldn\'t remove Nexus service: $error',
@@ -419,12 +419,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// What most people ever need: how fast, and whether to keep sharing.
   List<Widget> _basicSections(EngineSettings s) {
     return [
-      SettingsHealthCard(settings: s, controller: AppControllers.nexusApp),
+      SettingsHealthCard(settings: s, controller: AppControllers.engine),
       SettingsSection(
         label: 'APPEARANCE',
         children: const [ThemePickerRow()],
       ),
-      NexusServiceSection(
+      ServiceSection(
         config: _nexus.config,
         onConfigure: _configureNexus,
         onClear: _clearNexus,

@@ -1,7 +1,7 @@
 import '../../../nexus/bridge/portalis_api.dart' as nexus_bridge;
 import '../../../nexus/bridge/settings.dart' as settings_bridge;
 import '../../../nexus/bridge/torrent.dart' as torrent_bridge;
-import '../domain/engine_settings.dart';
+import '../domain/engine.dart';
 import '../domain/storage_entry.dart';
 
 /// Native operations needed by the settings feature.

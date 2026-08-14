@@ -5,7 +5,7 @@ import '../../../design/peer_chip.dart';
 import '../../../design/theme.dart';
 import '../domain/collection.dart';
 import '../domain/peer_observation.dart';
-import 'collection_presentation.dart';
+import 'peer_color.dart';
 
 /// Presents identified collaborators and anonymous torrent observations as one
 /// peer surface while keeping their identity guarantees visually distinct.

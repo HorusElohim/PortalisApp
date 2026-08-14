@@ -1,5 +1,5 @@
-import '../../media/domain/media_item.dart';
-import 'collection_import.dart';
+import '../../media/domain/item.dart';
+import 'import_state.dart';
 
 /// Pure collection state used by the Flutter application.
 ///

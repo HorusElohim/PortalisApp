@@ -5,19 +5,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/features/collections/domain/picked_file.dart';
-import 'package:portalis/features/collections/presentation/collection_overview.dart';
-import 'package:portalis/features/collections/presentation/collection_share.dart';
+import 'package:portalis/features/collections/presentation/overview.dart';
+import 'package:portalis/features/collections/presentation/share.dart';
 import 'package:portalis/nexus/application/app_controller.dart';
 import 'package:portalis/nexus/data/app_repository.dart';
 import 'package:portalis/nexus/data/collection_source.dart';
 import 'package:portalis/nexus/domain/app_state.dart';
-import 'package:portalis/features/collections/presentation/collection_route.dart';
+import 'package:portalis/features/collections/presentation/route.dart';
 import 'package:portalis/features/collections/presentation/home_library.dart';
 
 void main() {
   test('owns one state subscription and forwards lifecycle changes', () async {
     final repository = _Repository();
-    final controller = NexusAppController(repository: repository);
+    final controller = AppController(repository: repository);
     var notifications = 0;
     controller.addListener(() => notifications++);
 
@@ -40,7 +40,7 @@ void main() {
 
   test('forwards the selected detail stream without caching it', () async {
     final repository = _Repository();
-    final controller = NexusAppController(repository: repository);
+    final controller = AppController(repository: repository);
     final detail = AppDetail(
       id: 9,
       entries: [
@@ -70,13 +70,13 @@ void main() {
   /// a delta against what a screen believed it last saw.
   testWidgets('a torrent collection deselects a file in place', (tester) async {
     final repository = _Repository();
-    final controller = NexusAppController(repository: repository);
+    final controller = AppController(repository: repository);
     await controller.start();
     await tester.binding.setSurfaceSize(const Size(420, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
-        home: NexusCollectionDetail(collection: 9, controller: controller),
+        home: CollectionRoute(collection: 9, controller: controller),
       ),
     );
     repository.states.add(_torrentState());
@@ -124,13 +124,13 @@ void main() {
   /// person means by that, so the command is refused rather than sent.
   testWidgets('the last wanted file cannot be deselected', (tester) async {
     final repository = _Repository();
-    final controller = NexusAppController(repository: repository);
+    final controller = AppController(repository: repository);
     await controller.start();
     await tester.binding.setSurfaceSize(const Size(420, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
-        home: NexusCollectionDetail(collection: 9, controller: controller),
+        home: CollectionRoute(collection: 9, controller: controller),
       ),
     );
     repository.states.add(_torrentState());
@@ -170,7 +170,7 @@ void main() {
       (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     final repository = _Repository();
-    final controller = NexusAppController(repository: repository);
+    final controller = AppController(repository: repository);
     var closed = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -231,7 +231,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: NexusHomeLibrary(
+          body: HomeLibrary(
             wide: false,
             state: AppSnapshot(
               device: const AppDevice(
@@ -270,7 +270,7 @@ void main() {
   testWidgets('New share imports a magnet without needing a name or files',
       (tester) async {
     final repository = _Repository();
-    final controller = NexusAppController(repository: repository);
+    final controller = AppController(repository: repository);
     var closed = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -301,7 +301,7 @@ void main() {
   /// they can see, so activity has exactly one derivation.
   test('activity is idle when Nexus holds nothing, whatever else is running',
       () {
-    final controller = NexusAppController(repository: _Repository());
+    final controller = AppController(repository: _Repository());
 
     // Before any state has arrived at all.
     expect(controller.activity.isMoving, isFalse);
@@ -315,7 +315,7 @@ void main() {
   });
 
   test('activity sums only what is actually moving', () {
-    final controller = NexusAppController(repository: _Repository());
+    final controller = AppController(repository: _Repository());
     final idle = _collectionState().collections.single;
     controller.debugSeed(
       AppSnapshot(
@@ -379,20 +379,20 @@ void main() {
       'the wide layout grows the open row into its own detail instead of '
       'pushing a screen', (tester) async {
     final repository = _Repository();
-    final controller = NexusAppController(repository: repository);
+    final controller = AppController(repository: repository);
     controller.debugSeed(
       _collectionState(),
       details: const Stream<AppDetail?>.empty(),
     );
 
     int? openId;
-    NexusCollectionSource? source;
+    EngineCollectionSource? source;
 
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: StatefulBuilder(
-            builder: (context, setState) => NexusHomeLibrary(
+            builder: (context, setState) => HomeLibrary(
               wide: true,
               state: controller.state,
               error: null,
@@ -403,13 +403,13 @@ void main() {
               onImportTorrent: (_) async {},
               onCreateCollection: () {},
               // No addTearDown here: once this is handed to
-              // `NexusHomeLibrary`, `CollectionDetail`'s own state is its
+              // `HomeLibrary`, `CollectionDetail`'s own state is its
               // sole owner and disposes it when the row collapses or the
               // tree tears down — a second dispose call is the bug this
               // ownership rule exists to prevent.
               onOpen: (collection) => setState(() {
                 openId = collection.id;
-                source = NexusCollectionSource(
+                source = EngineCollectionSource(
                   controller: controller,
                   collectionId: collection.id,
                 );
@@ -434,14 +434,14 @@ void main() {
       'collection detail deletes through the same command bar and dialog '
       'the legacy screen uses', (tester) async {
     final repository = _Repository();
-    final controller = NexusAppController(repository: repository);
+    final controller = AppController(repository: repository);
     controller.debugSeed(
       _collectionState(),
       details: const Stream<AppDetail?>.empty(),
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: NexusCollectionDetail(collection: 9, controller: controller),
+        home: CollectionRoute(collection: 9, controller: controller),
       ),
     );
 
@@ -459,14 +459,14 @@ void main() {
 
   testWidgets('choosing "delete with files" carries the flag', (tester) async {
     final repository = _Repository();
-    final controller = NexusAppController(repository: repository);
+    final controller = AppController(repository: repository);
     controller.debugSeed(
       _collectionState(),
       details: const Stream<AppDetail?>.empty(),
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: NexusCollectionDetail(collection: 9, controller: controller),
+        home: CollectionRoute(collection: 9, controller: controller),
       ),
     );
 
@@ -482,14 +482,14 @@ void main() {
       'restart resumes and pause pauses, both through the one setPaused '
       'command', (tester) async {
     final repository = _Repository();
-    final controller = NexusAppController(repository: repository);
+    final controller = AppController(repository: repository);
     controller.debugSeed(
       _collectionState(),
       details: const Stream<AppDetail?>.empty(),
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: NexusCollectionDetail(collection: 9, controller: controller),
+        home: CollectionRoute(collection: 9, controller: controller),
       ),
     );
 
@@ -548,7 +548,7 @@ AppSnapshot _state(String name) => AppSnapshot(
     );
 
 /// One torrent import, downloading. `Torrent` is what makes its files a
-/// choice at all — see `NexusCollectionSource.supportsSelection`.
+/// choice at all — see `EngineCollectionSource.supportsSelection`.
 AppSnapshot _torrentState() => AppSnapshot(
       device: const AppDevice(
         name: 'Mina',
@@ -578,17 +578,17 @@ AppSnapshot _torrentState() => AppSnapshot(
       alerts: const [],
     );
 
-class _Repository implements NexusAppRepository {
+class _Repository implements AppRepository {
   final states = StreamController<AppSnapshot>.broadcast();
   final details = StreamController<AppDetail?>.broadcast();
   final active = <bool>[];
   final detailCollections = <int?>[];
-  final commands = <NexusCommand>[];
+  final commands = <EngineCommand>[];
   var starts = 0;
   var stops = 0;
 
   @override
-  Future<AppAccepted> send(NexusCommand command) async {
+  Future<AppAccepted> send(EngineCommand command) async {
     commands.add(command);
     return AppAccepted(id: BigInt.zero, collection: null, queued: false);
   }

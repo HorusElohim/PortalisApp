@@ -3,8 +3,8 @@
 /// The Node ID is the cryptographic identity Iroh authenticates. The direct
 /// address only tells it where to begin reaching that identity, so it may
 /// change without changing what the app trusts.
-class NexusEndpointConfig {
-  const NexusEndpointConfig({this.nodeId, this.directAddress});
+class EndpointConfig {
+  const EndpointConfig({this.nodeId, this.directAddress});
 
   final String? nodeId;
   final String? directAddress;

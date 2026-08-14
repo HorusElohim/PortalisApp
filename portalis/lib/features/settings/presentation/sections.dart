@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../design/design.dart';
 import '../../../nexus/application/app_controller.dart';
 import '../../../design/theme.dart';
-import '../domain/engine_settings.dart';
+import '../domain/engine.dart';
 
 /// Arranges setting sections according to the width they actually receive.
 class SettingsSectionsLayout extends StatelessWidget {
@@ -40,7 +40,7 @@ class SettingsHealthCard extends StatelessWidget {
   });
 
   final EngineSettings settings;
-  final NexusAppController controller;
+  final AppController controller;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(

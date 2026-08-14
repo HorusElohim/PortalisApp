@@ -116,15 +116,15 @@ extension EntryPreview on AppEntry {
 /// two disagreed — "1 ACTIVE TRANSFER" above a window reading "0
 /// collections". A person cannot act on a status that contradicts the list
 /// beside it, so there is one derivation and no widget may make its own.
-class NexusActivity {
-  const NexusActivity({
+class EngineActivity {
+  const EngineActivity({
     required this.transfers,
     required this.downBytesPerSecond,
     required this.upBytesPerSecond,
     required this.peers,
   });
 
-  static const idle = NexusActivity(
+  static const idle = EngineActivity(
     transfers: 0,
     downBytesPerSecond: 0,
     upBytesPerSecond: 0,
@@ -154,8 +154,8 @@ class NexusActivity {
 /// copying: `AppCommand` requires `files` and `entries` at every call site and
 /// wants a `Uint32List` where callers hold a `List<int>`. Defaults and that
 /// conversion live here, so asking to pause a collection stays one line.
-class NexusCommand {
-  const NexusCommand({
+class EngineCommand {
+  const EngineCommand({
     required this.kind,
     this.name,
     this.files = const [],
@@ -173,7 +173,7 @@ class NexusCommand {
     this.active,
   });
 
-  const NexusCommand.importTorrent(String source)
+  const EngineCommand.importTorrent(String source)
       : this(kind: 'importTorrent', source: source);
 
   final String kind;

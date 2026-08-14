@@ -2,12 +2,12 @@ import 'test_support.dart';
 
 import 'package:portalis/features/collections/domain/picked_file.dart';
 import 'package:portalis/features/collections/domain/transfer_history.dart';
-import 'package:portalis/features/collections/presentation/collection_source.dart';
+import 'package:portalis/features/collections/presentation/source.dart';
 
 
 import 'package:portalis/features/collections/domain/peer_observation.dart';
-import 'package:portalis/features/collections/presentation/collection_peers.dart';
-import 'package:portalis/features/collections/presentation/collection_presentation.dart';
+import 'package:portalis/features/collections/presentation/peers.dart';
+import 'package:portalis/features/collections/presentation/peer_color.dart';
 
 /// A source that answers with exactly what it was given.
 ///

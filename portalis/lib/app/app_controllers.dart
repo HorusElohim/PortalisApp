@@ -1,8 +1,8 @@
 import '../design/theme_controller.dart';
-import '../features/identity/application/identity_controller.dart';
+import '../features/identity/application/controller.dart';
 import '../nexus/application/app_controller.dart';
-import '../nexus/application/settings_controller.dart';
-import '../features/settings/application/settings_controller.dart';
+import '../nexus/application/service_controller.dart';
+import '../features/settings/application/controller.dart';
 
 /// Application-owned controller instances shared by the widget tree.
 ///
@@ -10,8 +10,8 @@ import '../features/settings/application/settings_controller.dart';
 /// sole place that chooses their production implementations and lifetime.
 abstract final class AppControllers {
   static final identity = IdentityController.production();
-  static final nexus = NexusSettingsController.production();
-  static final nexusApp = NexusAppController.production();
+  static final nexus = ServiceController.production();
+  static final engine = AppController.production();
   static final settings = SettingsController.production();
   static final theme = ThemeController.instance;
 }

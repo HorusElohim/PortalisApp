@@ -8,17 +8,17 @@ import '../domain/app_state.dart';
 /// implements this rather than faking FFI. The projection types it returns are
 /// the generated ones: mirroring them by hand bought nothing and could lose a
 /// field in silence. See `domain/app_state.dart`.
-abstract interface class NexusAppRepository {
+abstract interface class AppRepository {
   Future<void> start();
   Future<void> stop();
   Future<void> setActive(bool active);
   Stream<AppSnapshot> watchStates();
   Stream<AppDetail?> watchDetail(int? collection);
-  Future<AppAccepted> send(NexusCommand command);
+  Future<AppAccepted> send(EngineCommand command);
 }
 
-class FrbNexusAppRepository implements NexusAppRepository {
-  const FrbNexusAppRepository();
+class FrbAppRepository implements AppRepository {
+  const FrbAppRepository();
 
   @override
   Future<void> start() => bridge.start();
@@ -37,6 +37,6 @@ class FrbNexusAppRepository implements NexusAppRepository {
       bridge.watchDetail(collection: collection);
 
   @override
-  Future<AppAccepted> send(NexusCommand command) =>
+  Future<AppAccepted> send(EngineCommand command) =>
       bridge.send(command: command.toBridge());
 }

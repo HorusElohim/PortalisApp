@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import '../domain/collection_import.dart';
+import '../domain/import_state.dart';
 
 /// Real-time local publication progress reported by the Rust backend.
 class CollectionImportProgress extends StatelessWidget {

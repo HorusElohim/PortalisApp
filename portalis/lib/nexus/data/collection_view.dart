@@ -1,7 +1,7 @@
 import '../../features/collections/domain/collection.dart';
 import '../../features/collections/domain/peer_observation.dart';
 import '../../features/collections/domain/transfer_history.dart';
-import '../../features/media/domain/media_item.dart';
+import '../../features/media/domain/item.dart';
 import '../domain/app_state.dart';
 
 /// The Nexus projection, in the shape the collection screen already draws.
@@ -24,7 +24,7 @@ import '../domain/app_state.dart';
 /// becomes a stand-in list whose length is [AppCollection.entries] and
 /// whose items claim nothing else, which is exactly as much as a row without
 /// a subscription is entitled to say.
-Collection nexusCollectionView({
+Collection collectionView({
   required AppCollection collection,
   required AppDetail? detail,
   required List<AppContact> contacts,
@@ -119,7 +119,7 @@ List<MediaItem> _placeholderMedia(int count) => List.generate(
 ///
 /// `null` when nothing has been recorded, so the overview hides the panel
 /// rather than drawing an empty chart.
-TransferHistory? nexusTransferHistory(AppDetail? detail) {
+TransferHistory? transferHistory(AppDetail? detail) {
   final readings = detail?.readings ?? const [];
   if (readings.isEmpty) return null;
   return TransferHistory.restore(
@@ -142,7 +142,7 @@ TransferHistory? nexusTransferHistory(AppDetail? detail) {
 /// seen now. There is no remembered-peer tier here: the core reports what is
 /// live, and inventing a history of departed addresses would be the interface
 /// keeping state the core deliberately does not.
-List<PeerObservation> nexusPeerObservations({
+List<PeerObservation> peerObservations({
   required AppCollection collection,
   required AppDetail? detail,
 }) {
