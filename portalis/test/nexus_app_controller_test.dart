@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/features/nexus/application/nexus_app_controller.dart';
 import 'package:portalis/features/nexus/data/nexus_app_repository.dart';
 import 'package:portalis/features/nexus/domain/nexus_app_state.dart';
+import 'package:portalis/features/nexus/presentation/nexus_collection_detail.dart';
 import 'package:portalis/features/nexus/presentation/nexus_home_library.dart';
 import 'package:portalis/features/nexus/presentation/nexus_torrent_preparation.dart';
 
@@ -154,7 +155,81 @@ void main() {
     await tester.tap(find.text('Episode archive'));
     expect(opened, same(collection));
   });
+
+  testWidgets('collection detail sends its delete through Nexus',
+      (tester) async {
+    final repository = _Repository();
+    final controller = NexusAppController(repository: repository);
+    controller.debugSeed(
+      _collectionState(),
+      details: const Stream<NexusDetail?>.empty(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NexusCollectionDetail(collection: 9, controller: controller),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('nexusDeleteCollection')));
+    await tester.pump();
+    await tester.tap(find.text('Delete collection'));
+    await tester.pump();
+
+    expect(repository.commands, hasLength(1));
+    expect(repository.commands.single.kind, 'deleteCollection');
+    expect(repository.commands.single.collection, 9);
+    expect(repository.commands.single.deleteFiles, isFalse);
+  });
+
+  testWidgets('collection detail sends its rename through Nexus',
+      (tester) async {
+    final repository = _Repository();
+    final controller = NexusAppController(repository: repository);
+    controller.debugSeed(_collectionState());
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NexusCollectionDetail(collection: 9, controller: controller),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('nexusRenameCollection')));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'Renamed archive');
+    await tester.tap(find.text('Rename').last);
+    await tester.pump();
+
+    expect(repository.commands, hasLength(1));
+    expect(repository.commands.single.kind, 'renameCollection');
+    expect(repository.commands.single.collection, 9);
+    expect(repository.commands.single.name, 'Renamed archive');
+  });
 }
+
+NexusAppState _collectionState() => NexusAppState(
+      device: const NexusDevice(
+        name: 'Mina',
+        handle: null,
+        fingerprint: 'fingerprint',
+        devices: 1,
+      ),
+      connectivity: 'LocalOnly',
+      contacts: const [],
+      collections: [
+        NexusCollection(
+          id: 9,
+          name: 'Episode archive',
+          role: 'Owner',
+          revision: BigInt.one,
+          status: 'Available',
+          members: const [],
+          entries: 0,
+          totalBytes: BigInt.zero,
+          transfer: null,
+          pending: null,
+        ),
+      ],
+      alerts: const [],
+    );
 
 NexusAppState _state(String name) => NexusAppState(
       device: NexusDevice(

@@ -30,6 +30,9 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Nexus collection detail now supports renaming and safe collection-only
+  deletion through the same command boundary as the Home library.
+
 - Home now renders its collection library directly from the app-owned Nexus
   state stream. Its cards, filters, summaries, and collection routes no
   longer project or observe legacy collection records.
