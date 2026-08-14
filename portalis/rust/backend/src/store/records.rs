@@ -59,16 +59,51 @@ pub struct StoredCollection {
     /// Where the media lives on this device. Chosen by the user, so it differs
     /// per device and never travels.
     pub media_path: String,
+    /// Original no-copy sources while this device prepares and seeds the
+    /// collection. Local-only; publications contain descriptors, not paths.
+    pub sources: Vec<StoredSourceFile>,
+    /// Whether this device has been told to stop transferring this
+    /// collection. A local choice, like `media_path`: pausing on a phone says
+    /// nothing about what a laptop should do, so it never travels.
+    pub paused: bool,
+    /// The substrate handle this collection is carried under, once it has
+    /// one: the hex info hash of its torrent.
+    ///
+    /// Without it a holding cannot be attributed back to a collection, so
+    /// every transfer number the interface shows would be an orphan. Local,
+    /// like the rest of this record — the same collection on another device
+    /// is carried under the same handle, but that device records it itself.
+    pub substrate_handle: Option<String>,
+    /// How many bytes of this collection this device is holding.
+    ///
+    /// Counted as it changes rather than measured on demand. The interface
+    /// renders it on every snapshot, and walking a media directory to answer
+    /// that is a filesystem scan per frame.
+    pub on_disk_bytes: u64,
 }
 
 impl StoredCollection {
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(self.name.len() + self.media_path.len() + 41);
+        let source_bytes = self
+            .sources
+            .iter()
+            .map(|source| source.label.len() + source.path.len() + 16)
+            .sum::<usize>();
+        let mut bytes =
+            Vec::with_capacity(self.name.len() + self.media_path.len() + source_bytes + 45);
         bytes.push(self.role.code());
         bytes.extend_from_slice(&self.content_key);
         write_string(&mut bytes, &self.name);
         write_string(&mut bytes, &self.media_path);
+        let count = u32::try_from(self.sources.len()).unwrap_or(u32::MAX);
+        bytes.extend_from_slice(&count.to_be_bytes());
+        for source in self.sources.iter().take(count as usize) {
+            source.encode_into(&mut bytes);
+        }
+        bytes.push(u8::from(self.paused));
+        bytes.extend_from_slice(&self.on_disk_bytes.to_be_bytes());
+        write_string(&mut bytes, self.substrate_handle.as_deref().unwrap_or(""));
         bytes
     }
 
@@ -82,12 +117,42 @@ impl StoredCollection {
         let content_key = reader.array::<CONTENT_KEY_BYTES>()?;
         let name = reader.string()?;
         let media_path = reader.string()?;
+        // Schemas 1–4 ended after `media_path`; they decode as collections
+        // with no pending native sources.
+        let sources = if reader.bytes.is_empty() {
+            Vec::new()
+        } else {
+            let count = reader.u32()?;
+            (0..count)
+                .map(|_| StoredSourceFile::decode_from(&mut reader))
+                .collect::<Result<Vec<_>, Malformed>>()?
+        };
+        // Schema 5 ended after the sources. Those rows decode as a collection
+        // nobody has paused, holding nothing counted yet — which is what a
+        // store written before the count existed can honestly claim.
+        let (paused, on_disk_bytes) = if reader.bytes.is_empty() {
+            (false, 0)
+        } else {
+            (reader.byte()? != 0, reader.u64()?)
+        };
+        // Schema 6 ended there. An empty handle and an absent one are the same
+        // thing — a collection nothing is carrying yet — so they share a
+        // representation rather than needing a flag to tell them apart.
+        let substrate_handle = if reader.bytes.is_empty() {
+            None
+        } else {
+            Some(reader.string()?).filter(|handle| !handle.is_empty())
+        };
         reader.finish()?;
         Ok(Self {
             name,
             role,
             content_key,
             media_path,
+            sources,
+            paused,
+            on_disk_bytes,
+            substrate_handle,
         })
     }
 }
@@ -156,6 +221,52 @@ pub struct StoredImportEntry {
     /// All resolved files start selected. The person's later selection is
     /// durable so restarting before confirmation cannot widen a download.
     pub selected: bool,
+}
+
+/// One original file selected for an owner-created collection.
+///
+/// Its path is local-only and durable because hashing can outlive the process
+/// that accepted the command. The published descriptor contains names and
+/// lengths, never these device-specific locations.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredSourceFile {
+    pub label: String,
+    pub path: String,
+    pub bytes: u64,
+}
+
+impl StoredSourceFile {
+    fn encode_into(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.bytes.to_be_bytes());
+        write_string(bytes, &self.label);
+        write_string(bytes, &self.path);
+    }
+
+    fn decode_from(reader: &mut Reader<'_>) -> Result<Self, Malformed> {
+        Ok(Self {
+            bytes: reader.u64()?,
+            label: reader.string()?,
+            path: reader.string()?,
+        })
+    }
+
+    #[must_use]
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(self.label.len() + self.path.len() + 16);
+        self.encode_into(&mut bytes);
+        bytes
+    }
+
+    /// # Errors
+    ///
+    /// Returns [`Malformed`] when the row is truncated or carries trailing
+    /// bytes.
+    pub fn decode(bytes: &[u8]) -> Result<Self, Malformed> {
+        let mut reader = Reader::new(bytes);
+        let source = Self::decode_from(&mut reader)?;
+        reader.finish()?;
+        Ok(source)
+    }
 }
 
 impl StoredImportEntry {
@@ -345,7 +456,39 @@ mod tests {
             role: Role::Owner,
             content_key: [7; CONTENT_KEY_BYTES],
             media_path: "/Users/ada/Pictures/Iceland".to_owned(),
+            sources: Vec::new(),
+            paused: false,
+            on_disk_bytes: 0,
+            substrate_handle: None,
         }
+    }
+
+    /// A row written before schema 6 has no pause flag and no byte count. It
+    /// decodes as a collection nobody paused holding nothing counted, rather
+    /// than being refused — the fields are local facts, and inventing either
+    /// would be worse than admitting the row predates them.
+    #[test]
+    fn a_row_from_before_the_local_facts_decodes_without_them() {
+        let stored = StoredCollection {
+            paused: true,
+            on_disk_bytes: 4096,
+            substrate_handle: Some("a1b2c3".to_owned()),
+            ..collection()
+        };
+        let encoded = stored.encode();
+        assert_eq!(
+            StoredCollection::decode(&encoded).expect("decodes"),
+            stored,
+            "what was written is what comes back"
+        );
+
+        // The same row as schema 5 wrote it: everything up to the sources.
+        let older = &encoded[..encoded.len() - 9 - (4 + "a1b2c3".len())];
+        let decoded = StoredCollection::decode(older).expect("an older row still decodes");
+        assert!(!decoded.paused);
+        assert_eq!(decoded.on_disk_bytes, 0);
+        assert_eq!(decoded.substrate_handle, None);
+        assert_eq!(decoded.name, stored.name);
     }
 
     #[test]
@@ -360,11 +503,41 @@ mod tests {
             name: String::new(),
             role: Role::Member,
             media_path: String::new(),
-            ..stored
+            ..stored.clone()
         };
         assert_eq!(
             StoredCollection::decode(&bare.encode()).expect("decodes"),
             bare
+        );
+
+        let with_sources = StoredCollection {
+            sources: vec![StoredSourceFile {
+                label: "Episode 1.mp4".to_owned(),
+                path: "phasset://native-identifier".to_owned(),
+                bytes: 42,
+            }],
+            ..collection()
+        };
+        assert_eq!(
+            StoredCollection::decode(&with_sources.encode()).expect("decodes sources"),
+            with_sources
+        );
+
+        let current = stored.encode();
+        // What each later schema appended: a source count with no sources,
+        // then the pause flag and the byte count. Removing both leaves the row
+        // exactly as schemas 1 to 4 wrote it. Named rather than counted, so
+        // the next field to arrive breaks this loudly instead of quietly
+        // truncating somewhere else.
+        const SOURCE_COUNT: usize = 4;
+        const LOCAL_FACTS: usize = 1 + 8;
+        const ABSENT_HANDLE: usize = 4;
+        let schema_four = &current[..current.len() - SOURCE_COUNT - LOCAL_FACTS - ABSENT_HANDLE];
+        assert_eq!(
+            StoredCollection::decode(schema_four)
+                .expect("older rows decode without invented sources")
+                .sources,
+            Vec::new()
         );
     }
 
@@ -477,6 +650,18 @@ mod tests {
                 selected: true,
             })
         );
+    }
+
+    #[test]
+    fn a_zero_copy_source_keeps_its_native_location_and_metadata() {
+        let source = StoredSourceFile {
+            label: "Episode 1.mp4".to_owned(),
+            path: "phasset://native-identifier".to_owned(),
+            bytes: 42,
+        };
+
+        assert_eq!(StoredSourceFile::decode(&source.encode()), Ok(source));
+        assert_eq!(StoredSourceFile::decode(&[]), Err(Malformed));
     }
 
     #[test]

@@ -167,6 +167,10 @@ fn write_everything(file: &std::path::Path) {
                 role: Role::Owner,
                 content_key: [0x77; 32],
                 media_path: "/Users/ada/Pictures/Iceland".to_owned(),
+                sources: Vec::new(),
+                paused: false,
+                on_disk_bytes: 0,
+                substrate_handle: None,
             },
         )
         .expect("writes");
@@ -178,6 +182,10 @@ fn write_everything(file: &std::path::Path) {
                 role: Role::Member,
                 content_key: [0x88; 32],
                 media_path: "/Users/ada/Pictures/Shared".to_owned(),
+                sources: Vec::new(),
+                paused: false,
+                on_disk_bytes: 0,
+                substrate_handle: None,
             },
         )
         .expect("writes");

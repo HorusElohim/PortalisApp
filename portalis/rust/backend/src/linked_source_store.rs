@@ -57,3 +57,11 @@ pub(crate) fn paths_for(info_hash: &str) -> Vec<String> {
         })
         .unwrap_or_default()
 }
+
+pub(crate) fn descriptor_for(info_hash: &str) -> anyhow::Result<Vec<u8>> {
+    load()?
+        .into_iter()
+        .find(|record| record.info_hash.eq_ignore_ascii_case(info_hash))
+        .map(|record| record.torrent_bytes)
+        .ok_or_else(|| anyhow::anyhow!("no descriptor was persisted for {info_hash}"))
+}

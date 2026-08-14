@@ -164,6 +164,7 @@ fn accept(command: &Command) -> Result<backend::projection::state::Accepted, Com
     if command.is_deferrable() {
         return Ok(backend::projection::state::Accepted {
             id: 1,
+            collection: None,
             queued: true,
         });
     }
@@ -203,6 +204,8 @@ fn facts(progress: Option<Progress>, failure: Option<Status>) -> CollectionFacts
         members: vec![vec![2; 32]],
         progress,
         failure,
+        paused: false,
+        on_disk_bytes: 0,
     }
 }
 
@@ -246,5 +249,6 @@ fn detail(id: Handle) -> backend::projection::state::Detail {
         pieces: vec![0b1010_1010; 1_024],
         // 60 rows of packed (t, down, up, progress).
         samples: vec![0; 60 * 16],
+        peers: vec!["10.0.0.1:6881".to_owned(), "10.0.0.2:6881".to_owned()],
     }
 }

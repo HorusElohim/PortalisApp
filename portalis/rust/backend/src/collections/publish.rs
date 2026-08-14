@@ -33,6 +33,16 @@ pub trait Author {
     fn sign(&self, payload: &[u8]) -> [u8; SIGNATURE_BYTES];
 }
 
+impl Author for crate::nexus::NexusIdentity {
+    fn public_key(&self) -> [u8; DEVICE_KEY_BYTES] {
+        self.signing_identity().public_key()
+    }
+
+    fn sign(&self, payload: &[u8]) -> [u8; SIGNATURE_BYTES] {
+        self.signing_identity().sign(payload).to_bytes()
+    }
+}
+
 /// One entry's `.torrent`, sealed for the members of one collection.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SealedEntryPayload {

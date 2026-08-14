@@ -71,6 +71,10 @@ pub struct CollectionFacts {
     pub progress: Option<Progress>,
     /// Set when verification refused this collection's latest revision.
     pub failure: Option<Status>,
+    /// Whether this device has been told to stop transferring it.
+    pub paused: bool,
+    /// How much of it this device is holding.
+    pub on_disk_bytes: u64,
 }
 
 /// Builds one collection's projection, deriving everything the interface would
@@ -86,6 +90,7 @@ pub fn collection(handles: &mut Handles, facts: &CollectionFacts) -> CollectionS
     CollectionState {
         id,
         name: facts.name.clone(),
+        nature: crate::projection::state::Nature::Native,
         role: match facts.role {
             StoredRole::Owner => Role::Owner,
             StoredRole::Member => Role::Member,
@@ -97,6 +102,7 @@ pub fn collection(handles: &mut Handles, facts: &CollectionFacts) -> CollectionS
         members,
         entries: facts.entries,
         total_bytes: facts.total_bytes,
+        on_disk_bytes: facts.on_disk_bytes,
         transfer: facts.progress.map(transfer),
         pending: None,
     }
@@ -105,6 +111,11 @@ pub fn collection(handles: &mut Handles, facts: &CollectionFacts) -> CollectionS
 /// What a collection is doing, from the numbers rather than from a flag
 /// somebody remembered to set.
 fn status_of(facts: &CollectionFacts) -> Status {
+    // A person's choice outranks the numbers. A collection whose last reading
+    // arrived before it was paused is paused, not downloading.
+    if facts.paused {
+        return Status::Paused;
+    }
     match facts.progress {
         None if facts.revision == 0 => Status::WaitingForOwner,
         None => Status::Available,
@@ -198,6 +209,8 @@ mod tests {
             members: vec![MEMBER.to_vec()],
             progress: None,
             failure: None,
+            paused: false,
+            on_disk_bytes: 0,
         }
     }
 

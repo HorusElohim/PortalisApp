@@ -1200,9 +1200,10 @@ mod native {
         // A fresh torrent per batch: its own directory and info-hash. The
         // persisted name is reused after restart so interrupted work resumes
         // in the same staging directory instead of orphaning another copy.
-        let torrent_info = crate::substrate::current()
+        let published = crate::substrate::current()
             .publish(batch_name, files, progress.clone())
             .await?;
+        let torrent_info = published.info;
         clog!(
             "collections",
             "add_media_to_collection: seeded torrent info_hash={}",

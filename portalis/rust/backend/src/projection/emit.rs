@@ -211,12 +211,14 @@ mod tests {
         CollectionState {
             id: COLLECTION,
             name: "Iceland".to_owned(),
+            nature: crate::projection::state::Nature::Native,
             role: Role::Owner,
             revision: 1,
             status: Status::Available,
             members: Vec::new(),
             entries: 2,
             total_bytes: 1_024,
+            on_disk_bytes: 0,
             transfer,
             pending: None,
         }
@@ -238,6 +240,7 @@ mod tests {
             entries: Vec::new(),
             pieces: vec![pieces; 4],
             samples: Vec::new(),
+            peers: Vec::new(),
         }
     }
 

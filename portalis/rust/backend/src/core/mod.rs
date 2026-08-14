@@ -12,3 +12,5 @@
 pub mod events;
 pub mod nexus;
 pub mod supervisor;
+pub mod torrents;
+pub mod transfers;

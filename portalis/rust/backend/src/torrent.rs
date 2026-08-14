@@ -77,13 +77,6 @@ pub struct SourceFile {
 /// are requested. It is deliberately smaller than the live torrent DTO: the
 /// collection workflow needs a selection list, not an engine session.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct TorrentMetadata {
-    pub(crate) name: String,
-    pub(crate) files: Vec<TorrentMetadataFile>,
-    pub(crate) descriptor: Vec<u8>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TorrentMetadataFile {
     pub(crate) label: String,
     pub(crate) bytes: u64,
@@ -141,61 +134,6 @@ pub(crate) async fn inspect_source_files(files: &[SourceFile]) -> anyhow::Result
 
 /// Reads and validates a local `.torrent` descriptor without creating an
 /// engine session or fetching any payload bytes.
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn metadata_from_torrent_path(path: &str) -> anyhow::Result<TorrentMetadata> {
-    const MAX_DESCRIPTOR_BYTES: u64 = 16 * 1024 * 1024;
-    let metadata = std::fs::metadata(path)?;
-    anyhow::ensure!(
-        metadata.len() <= MAX_DESCRIPTOR_BYTES,
-        "the .torrent descriptor is larger than 16 MiB"
-    );
-    let bytes = std::fs::read(path)?;
-    metadata_from_torrent_bytes(&bytes)
-}
-
-#[cfg(target_arch = "wasm32")]
-pub(crate) fn metadata_from_torrent_path(_path: &str) -> anyhow::Result<TorrentMetadata> {
-    anyhow::bail!("torrent imports are unavailable on web")
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn metadata_from_torrent_bytes(bytes: &[u8]) -> anyhow::Result<TorrentMetadata> {
-    use anyhow::Context;
-    use buffers::ByteBuf;
-    use librqbit_core::torrent_metainfo::torrent_from_bytes_ext;
-
-    let parsed = torrent_from_bytes_ext::<ByteBuf>(bytes)?;
-    let name = parsed
-        .meta
-        .info
-        .name
-        .as_ref()
-        .map(|name| std::str::from_utf8(name.as_ref()))
-        .transpose()?
-        .filter(|name| !name.is_empty())
-        .unwrap_or("Torrent import")
-        .to_owned();
-    let files = parsed
-        .meta
-        .info
-        .iter_file_details()?
-        .map(|file| {
-            Ok(TorrentMetadataFile {
-                label: file
-                    .filename
-                    .to_string()
-                    .context("decoding torrent filename")?,
-                bytes: file.len,
-            })
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
-    Ok(TorrentMetadata {
-        name,
-        files,
-        descriptor: bytes.to_vec(),
-    })
-}
-
 pub(crate) const TORRENT_PIECE_LENGTH: u64 = 2 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
@@ -295,9 +233,54 @@ impl PublishProgress {
 #[cfg(test)]
 mod validation_tests {
     use super::{
-        make_source_names_unique, native::sanitize_component, validate_source_files, SourceFile,
+        is_magnet, is_remote_source, is_torrent_path, make_source_names_unique,
+        native::sanitize_component, validate_source_files, SourceFile,
     };
     use std::io::Write;
+
+    /// The magnet that broke this: its `xs=` web-seed hint ends in
+    /// `big-buck-bunny.torrent`, so judging by the tail of the string reads a
+    /// magnet as a local descriptor and tries to open the whole URI as a
+    /// path — `ENAMETOOLONG`, which names nothing a person could act on.
+    #[test]
+    fn a_magnet_whose_query_ends_in_dot_torrent_is_still_a_magnet() {
+        const MAGNET: &str = "magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c\
+&dn=Big+Buck+Bunny&tr=udp%3A%2F%2Fexplodie.org%3A6969\
+&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fbig-buck-bunny.torrent";
+
+        assert!(is_magnet(MAGNET));
+        assert!(is_remote_source(MAGNET));
+        assert!(
+            !is_torrent_path(MAGNET),
+            "a magnet is never opened as a file, whatever its query string ends with"
+        );
+    }
+
+    #[test]
+    fn a_local_descriptor_is_a_path_and_a_url_never_is() {
+        assert!(is_torrent_path("/Users/ada/Downloads/bundle.torrent"));
+        assert!(is_torrent_path("relative/bundle.TORRENT"), "case is not identity");
+        assert!(!is_torrent_path("/Users/ada/Downloads/bundle.mkv"));
+
+        for remote in [
+            "magnet:?xt=urn:btih:abc",
+            "MAGNET:?xt=urn:btih:abc",
+            "https://example.test/bundle.torrent",
+            "http://example.test/bundle.torrent",
+        ] {
+            assert!(is_remote_source(remote), "{remote}");
+            assert!(!is_torrent_path(remote), "{remote}");
+        }
+
+        // A Windows path is not a URL, however much `C:` resembles a scheme.
+        assert!(!is_remote_source(r"C:\Users\ada\bundle.torrent"));
+
+        // An http URL must never be opened as a file, but it is also not an
+        // input Portalis accepts — the two questions have different answers,
+        // which is why they are different functions.
+        assert!(is_remote_source("https://example.test/bundle.torrent"));
+        assert!(!is_magnet("https://example.test/bundle.torrent"));
+    }
 
     #[test]
     fn accepts_a_path_source_without_a_size_cap() {
@@ -490,6 +473,95 @@ pub(crate) async fn add_info_hash_with_peers(
     peers: Vec<std::net::SocketAddr>,
 ) -> anyhow::Result<TorrentInfo> {
     native::add_info_hash_with_peers(info_hash_hex, peers).await
+}
+
+/// Where downloads land: the person's configured directory, or the platform
+/// default. One answer, so the engine and the collection record agree.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn download_dir() -> std::path::PathBuf {
+    native::output_dir()
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn download_dir() -> std::path::PathBuf {
+    std::path::PathBuf::new()
+}
+
+/// Whether a source names a local `.torrent` descriptor rather than a magnet.
+///
+/// Here rather than in the collection layer because it is a fact about the
+/// engine's own input formats, and both the engine and Nexus have to agree
+/// about it.
+#[must_use]
+pub(crate) fn is_torrent_path(source: &str) -> bool {
+    !is_remote_source(source)
+        && std::path::Path::new(source)
+            .extension()
+            .and_then(std::ffi::OsStr::to_str)
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("torrent"))
+}
+
+/// Whether a source is a magnet link.
+///
+/// Narrower than [`is_remote_source`] on purpose. That one answers "must this
+/// never be opened as a file", which has to be generous to be safe; this one
+/// answers "is this something Portalis accepts", which has to be strict to
+/// keep the accepted set of inputs the one that was actually designed for.
+#[must_use]
+pub(crate) fn is_magnet(source: &str) -> bool {
+    let source = source.trim_start();
+    source.len() >= "magnet:".len() && source[.."magnet:".len()].eq_ignore_ascii_case("magnet:")
+}
+
+/// Whether a source names something to fetch rather than a file to open.
+///
+/// Checked *before* any extension, and that order is the whole point: a
+/// magnet's query string routinely ends in a filename, because trackers put
+/// `&xs=https://…/big-buck-bunny.torrent` in it as a web-seed hint. Judging
+/// by the tail of the string alone reads that as a local descriptor and tries
+/// to open the entire URI as a path, which fails with `ENAMETOOLONG` rather
+/// than with anything that names the real mistake.
+///
+/// The schemes are listed rather than matched as a generic `scheme:` prefix
+/// so a Windows path (`C:\Users\…`) is never mistaken for a URL.
+#[must_use]
+pub(crate) fn is_remote_source(source: &str) -> bool {
+    const REMOTE: [&str; 3] = ["magnet:", "http://", "https://"];
+    let source = source.trim_start();
+    REMOTE
+        .iter()
+        .any(|scheme| source.len() >= scheme.len() && source[..scheme.len()].eq_ignore_ascii_case(scheme))
+}
+
+/// Resolves what a `.torrent` path or magnet URI contains, fetching no
+/// payload.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) async fn inspect_source(source: &str) -> anyhow::Result<crate::substrate::Inspected> {
+    native::inspect_source(source).await
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) async fn inspect_source(_source: &str) -> anyhow::Result<crate::substrate::Inspected> {
+    anyhow::bail!("torrent imports are unavailable on web")
+}
+
+/// Starts fetching exactly the chosen files into `destination`.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) async fn acquire_selection(
+    source: &str,
+    files: &[usize],
+    destination: &std::path::Path,
+) -> anyhow::Result<TorrentInfo> {
+    native::acquire_selection(source, files, destination).await
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) async fn acquire_selection(
+    _source: &str,
+    _files: &[usize],
+    _destination: &std::path::Path,
+) -> anyhow::Result<TorrentInfo> {
+    anyhow::bail!("torrent downloads are unavailable on web")
 }
 
 /// Removes a torrent from the session, leaving its downloaded files on disk
@@ -1199,10 +1271,18 @@ mod native {
         let _ = std::fs::remove_dir(dir);
     }
 
-    /// Builds the collection directory using hard links only. This creates a
-    /// second name for the same filesystem bytes, never a second file. A
-    /// hard-link failure is deliberately surfaced instead of falling back to
-    /// a copy: callers can choose a source on the same filesystem or a
+    /// Builds the collection directory without duplicating source bytes. A
+    /// hard link is a second name for the same data; on macOS, where the App
+    /// Sandbox refuses `link(2)` across the container boundary even for a
+    /// file the person just picked, a `clonefile` is the same promise kept a
+    /// different way — a second, independent inode whose data blocks are
+    /// copy-on-write shared with the source, permitted where a hard link is
+    /// not because the sandbox accounts it as an ordinary write rather than
+    /// the specially-restricted link operation. Either way nothing is
+    /// duplicated on disk until one of the two names is edited.
+    ///
+    /// A failure of both is deliberately surfaced instead of falling back to
+    /// a real copy: callers can choose a source on the same filesystem or a
     /// canonical Portalis destination, but Portalis must not silently violate
     /// its one-copy contract.
     fn link_sources(
@@ -1222,7 +1302,7 @@ mod native {
                 .len();
 
             if source != destination {
-                if let Err(error) = std::fs::hard_link(&source, &destination) {
+                if let Err(error) = same_bytes_new_name(&source, &destination) {
                     if !is_resumable_link(&destination, length) {
                         discard_linked_sources(dir, &created);
                         return Err(error).with_context(|| {
@@ -1238,6 +1318,49 @@ mod native {
             progress.advance(length);
         }
         Ok(created)
+    }
+
+    /// A hard link, or — only where and only because the OS refuses one — a
+    /// copy-on-write clone. Never a byte-for-byte copy.
+    fn same_bytes_new_name(source: &std::path::Path, destination: &std::path::Path) -> std::io::Result<()> {
+        let error = match std::fs::hard_link(source, destination) {
+            Ok(()) => return Ok(()),
+            Err(error) => error,
+        };
+        #[cfg(target_os = "macos")]
+        if macos_clonefile::clone_file(source, destination).is_ok() {
+            return Ok(());
+        }
+        Err(error)
+    }
+
+    /// The one macOS-specific syscall this codebase makes, and made this way
+    /// rather than through a dependency: `clonefile(2)` has had the same
+    /// three-argument C signature since it shipped with APFS, so binding it
+    /// directly is less code than a crate whose surface exists to abstract
+    /// differences this file does not need to hide.
+    #[cfg(target_os = "macos")]
+    mod macos_clonefile {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        use std::path::Path;
+
+        unsafe extern "C" {
+            fn clonefile(source: *const i8, destination: *const i8, flags: u32) -> i32;
+        }
+
+        pub(super) fn clone_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+            let source = CString::new(source.as_os_str().as_bytes())?;
+            let destination = CString::new(destination.as_os_str().as_bytes())?;
+            // SAFETY: both pointers come from `CString`s kept alive for the
+            // duration of the call, and `clonefile` writes through neither.
+            let result = unsafe { clonefile(source.as_ptr(), destination.as_ptr(), 0) };
+            if result == 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error())
+            }
+        }
     }
 
     /// Import batches use a UUID in their layout directory name. If a process
@@ -1453,6 +1576,114 @@ mod native {
 
     fn api(session: Arc<Session>) -> Api {
         Api::new(session, None)
+    }
+
+    /// A source as librqbit takes it: a magnet or `http(s)` URL by reference,
+    /// a local `.torrent` by its bytes.
+    ///
+    /// Read here rather than handed over as a path because a sandboxed app
+    /// may open a file the person chose and still not be able to hand that
+    /// path to something that opens it again later.
+    fn add_torrent_for(source: &str) -> anyhow::Result<AddTorrent<'static>> {
+        if super::is_torrent_path(source) {
+            let bytes = std::fs::read(source)
+                .with_context(|| format!("reading the .torrent descriptor {source:?}"))?;
+            return Ok(AddTorrent::from_bytes(bytes));
+        }
+        Ok(AddTorrent::from_url(source.to_owned()))
+    }
+
+    pub(super) async fn inspect_source(
+        source: &str,
+    ) -> anyhow::Result<crate::substrate::Inspected> {
+        let session = session().await?;
+        let response = session
+            .add_torrent(
+                add_torrent_for(source)?,
+                Some(AddTorrentOptions {
+                    // The whole point: learn what is inside without agreeing
+                    // to fetch any of it. For a magnet this still talks to
+                    // the swarm — that is where the file list lives.
+                    list_only: true,
+                    ..Default::default()
+                }),
+            )
+            .await
+            .with_context(|| format!("resolving what {source:?} contains"))?;
+
+        let listed = match response {
+            AddTorrentResponse::ListOnly(listed) => listed,
+            // A source already being carried has its metadata already, so
+            // this is not a failure — but it is not what this function is
+            // for, and answering from the live torrent would report what is
+            // *selected* rather than what exists.
+            AddTorrentResponse::Added(_, _) | AddTorrentResponse::AlreadyManaged(_, _) => {
+                anyhow::bail!("that source is already being carried")
+            }
+        };
+
+        let name = listed
+            .info
+            .name
+            .as_ref()
+            .map(|name| std::str::from_utf8(name.as_ref()))
+            .transpose()?
+            .filter(|name| !name.is_empty())
+            .unwrap_or("Torrent import")
+            .to_owned();
+        let files = listed
+            .info
+            .iter_file_details()?
+            .map(|file| {
+                Ok(super::TorrentMetadataFile {
+                    label: file
+                        .filename
+                        .to_string()
+                        .context("decoding torrent filename")?,
+                    bytes: file.len,
+                })
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        Ok(crate::substrate::Inspected {
+            info_hash: listed.info_hash.as_string(),
+            name,
+            files,
+            // Present even for a magnet: by the time the swarm has answered
+            // with a file list it has supplied the descriptor too, which is
+            // what makes an imported magnet shareable through Nexus later.
+            descriptor: listed.torrent_bytes.to_vec(),
+        })
+    }
+
+    pub(super) async fn acquire_selection(
+        source: &str,
+        files: &[usize],
+        destination: &std::path::Path,
+    ) -> anyhow::Result<TorrentInfo> {
+        anyhow::ensure!(
+            !files.is_empty(),
+            "choose at least one file before downloading"
+        );
+        let session = session().await?;
+        std::fs::create_dir_all(destination)
+            .with_context(|| format!("creating the download directory {destination:?}"))?;
+        let response = session
+            .add_torrent(
+                add_torrent_for(source)?,
+                Some(AddTorrentOptions {
+                    only_files: Some(files.to_vec()),
+                    output_folder: Some(destination.to_string_lossy().into_owned()),
+                    // Files from a previous attempt are resumed rather than
+                    // treated as an obstacle: an interrupted download is the
+                    // normal case, not an error.
+                    overwrite: true,
+                    ..Default::default()
+                }),
+            )
+            .await
+            .with_context(|| format!("starting the download of {source:?}"))?;
+        response_to_info(&api(session), response)
     }
 
     pub(super) async fn add_torrent_from_magnet(
@@ -1799,6 +2030,86 @@ mod native {
                 b"again"
             );
             std::fs::remove_dir_all(root).unwrap();
+        }
+
+        /// `clonefile` on its own — not through `link_sources`, since a test
+        /// binary is not sandboxed and `hard_link` succeeds first there,
+        /// exactly as it should. What needs proving here is `clone_file`
+        /// itself: a real, independent file, not a link wearing a new name.
+        #[cfg(target_os = "macos")]
+        #[test]
+        fn a_clone_is_a_real_file_that_stops_agreeing_once_either_side_is_written() {
+            let root =
+                std::env::temp_dir().join(format!("portalis-clone-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&root).unwrap();
+            let source = root.join("source.bin");
+            let clone = root.join("clone.bin");
+            std::fs::write(&source, b"first").unwrap();
+
+            super::macos_clonefile::clone_file(&source, &clone).expect("clones");
+            assert_eq!(std::fs::read(&clone).unwrap(), b"first");
+
+            // Unlike a hard link's shared inode, each name now owns its own
+            // future: this is what makes a clone the safer choice for a
+            // system that hashes published bytes and must not have them
+            // change out from under it if the person edits their original.
+            std::fs::write(&source, b"second").unwrap();
+            assert_eq!(std::fs::read(&clone).unwrap(), b"first");
+
+            std::fs::remove_dir_all(root).unwrap();
+        }
+
+        /// The sandboxed EPERM this fallback exists for cannot be reproduced
+        /// outside an actual sandboxed process — both a hard link and a clone
+        /// need the same "create a directory entry here" permission, so
+        /// anything that denies one portably denies both. What a read-only
+        /// directory *can* prove is that `link_sources` actually calls the
+        /// fallback and still fails cleanly when neither can land, rather
+        /// than panicking or silently reporting success.
+        #[cfg(target_os = "macos")]
+        #[test]
+        fn neither_a_link_nor_a_clone_can_land_in_a_read_only_directory() {
+            let root = std::env::temp_dir()
+                .join(format!("portalis-clone-fallback-{}", uuid::Uuid::new_v4()));
+            let source_dir = root.join("source");
+            std::fs::create_dir_all(&source_dir).unwrap();
+            let source = source_dir.join("clip.mp4");
+            std::fs::write(&source, b"bytes").unwrap();
+
+            // A read-only directory refuses the new directory entry a hard
+            // link needs, exactly as the sandbox does — chosen because it is
+            // reproducible on any machine, unlike the sandbox itself.
+            let layout_dir = root.join("layout");
+            std::fs::create_dir_all(&layout_dir).unwrap();
+            std::fs::set_permissions(
+                &layout_dir,
+                std::os::unix::fs::PermissionsExt::from_mode(0o500),
+            )
+            .unwrap();
+
+            let files = [SourceFile {
+                name: "clip.mp4".into(),
+                path: source.to_string_lossy().into_owned(),
+                length_bytes: None,
+            }];
+            let result = link_sources(&layout_dir, &files, &PublishProgress::new(5));
+
+            // Cleanup rather than assertion: `link_sources`'s own failure
+            // path already removes the empty layout directory, so whether it
+            // still exists depends on that path, not on anything this test
+            // is checking. `root`'s own permissions were never touched, so
+            // removing it removes whatever of `layout_dir` is left too.
+            let _ = std::fs::set_permissions(
+                &layout_dir,
+                std::os::unix::fs::PermissionsExt::from_mode(0o700),
+            );
+            std::fs::remove_dir_all(&root).unwrap();
+
+            // A read-only directory refuses a clone for the same reason it
+            // refuses a link, so this asserts the fallback ran and failed the
+            // same honest way, not that it silently produced a file.
+            let error = result.expect_err("neither a link nor a clone can land here");
+            assert!(error.to_string().contains("Portalis will not copy source bytes"));
         }
     }
 }

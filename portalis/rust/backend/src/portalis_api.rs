@@ -10,7 +10,7 @@ use std::sync::{Mutex, OnceLock};
 
 use crate::api::StreamSink;
 use crate::core::nexus::Nexus;
-use crate::projection::state::{Command, Detail, Handle, PortalisState};
+use crate::projection::state::{Command, Detail, Handle, LocalFile, PortalisState};
 
 /// The complete, app-renderable Nexus projection.
 #[derive(Clone, Debug)]
@@ -48,12 +48,14 @@ pub struct AppContact {
 pub struct AppCollection {
     pub id: u32,
     pub name: String,
+    pub nature: String,
     pub role: String,
     pub revision: u64,
     pub status: String,
     pub members: Vec<u32>,
     pub entries: u32,
     pub total_bytes: u64,
+    pub on_disk_bytes: u64,
     pub transfer: Option<AppTransfer>,
     pub pending: Option<AppPending>,
 }
@@ -81,7 +83,10 @@ pub struct AppDetail {
     pub id: u32,
     pub entries: Vec<AppEntry>,
     pub pieces: Vec<u8>,
+    /// Fixed-width history rows; see `core::nexus::SAMPLE_ROW_BYTES`.
     pub samples: Vec<u8>,
+    /// Swarm addresses, which are not contacts. See `Detail::peers`.
+    pub peers: Vec<String>,
 }
 
 /// A selectable media entry in a collection detail projection.
@@ -92,6 +97,18 @@ pub struct AppEntry {
     pub bytes: u64,
     pub selected: bool,
     pub available: bool,
+    /// Where the bytes landed, once they have, so the interface can show a
+    /// preview rather than a filename.
+    pub path: Option<String>,
+}
+
+/// A native source selected by the app without copying its bytes through the
+/// bridge.
+#[derive(Clone, Debug)]
+pub struct AppSourceFile {
+    pub name: String,
+    pub path: String,
+    pub bytes: u64,
 }
 
 /// A request from the app. `kind` is explicit so this stays a single command
@@ -100,7 +117,7 @@ pub struct AppEntry {
 pub struct AppCommand {
     pub kind: String,
     pub name: Option<String>,
-    pub files: Vec<String>,
+    pub files: Vec<AppSourceFile>,
     pub collection: Option<u32>,
     pub label: Option<String>,
     pub delete_files: Option<bool>,
@@ -112,6 +129,7 @@ pub struct AppCommand {
     pub accept: Option<bool>,
     pub device: Option<u32>,
     pub active: Option<bool>,
+    pub paused: Option<bool>,
 }
 
 /// The local acceptance result returned before a command performs I/O.
@@ -136,11 +154,18 @@ fn locked_runtime() -> Result<std::sync::MutexGuard<'static, Option<Nexus>>, Str
 
 /// Opens the local Nexus runtime once. Calling it again is harmless.
 ///
+/// Async because opening supervises tasks, and those have to be spawned onto a
+/// runtime. flutter_rust_bridge runs a synchronous function on a worker thread
+/// that has none, where `spawn` panics rather than returning something a person
+/// could act on — the app reports "there is no reactor running" and stops.
+/// Anything the core starts eagerly at open belongs behind an async boundary
+/// for the same reason.
+///
 /// # Errors
 ///
 /// Returns a displayable reason when the device identity or local store cannot
 /// be opened.
-pub fn start() -> Result<(), String> {
+pub async fn start() -> Result<(), String> {
     let mut runtime = locked_runtime()?;
     if runtime.is_none() {
         *runtime = Some(Nexus::open_default().map_err(|error| error.to_string())?);
@@ -175,8 +200,10 @@ pub async fn watch_states(sink: StreamSink<AppSnapshot>) -> Result<(), String> {
         .watch();
 
     loop {
-        sink.add(snapshot(&states.borrow()))
-            .map_err(|error| error.to_string())?;
+        // See `watch_detail`: a subscriber that has gone is not an error.
+        if sink.add(snapshot(&states.borrow())).is_err() {
+            return Ok(());
+        }
         if states.changed().await.is_err() {
             return Ok(());
         }
@@ -194,8 +221,15 @@ pub async fn watch_detail(
         .watch_detail(collection.map(Handle));
 
     loop {
-        sink.add(detail.borrow().as_ref().map(detail_projection))
-            .map_err(|error| error.to_string())?;
+        // A closed sink is how a subscription ends, not a failure to report:
+        // the screen went away. Reporting it surfaced an alarming unhandled
+        // exception in Flutter for the ordinary act of closing a collection.
+        if sink
+            .add(detail.borrow().as_ref().map(detail_projection))
+            .is_err()
+        {
+            return Ok(());
+        }
         if detail.changed().await.is_err() {
             return Ok(());
         }
@@ -228,7 +262,16 @@ impl AppCommand {
         let text = |value: Option<String>, field: &str| {
             value.ok_or_else(|| format!("{field} is required for {}", self.kind))
         };
-        let files = || self.files.into_iter().map(PathBuf::from).collect();
+        let files = || {
+            self.files
+                .into_iter()
+                .map(|file| LocalFile {
+                    name: file.name,
+                    path: PathBuf::from(file.path),
+                    bytes: file.bytes,
+                })
+                .collect()
+        };
 
         match self.kind.as_str() {
             "createCollection" => Ok(Command::CreateCollection {
@@ -253,6 +296,18 @@ impl AppCommand {
                 entry: handle(self.entry, "entry")?,
             }),
             "retryTransfer" => Ok(Command::RetryTransfer {
+                collection: handle(self.collection, "collection")?,
+            }),
+            "setPaused" => Ok(Command::SetPaused {
+                collection: handle(self.collection, "collection")?,
+                // Required rather than defaulted: a pause command that
+                // silently means "resume" because a field was missed is the
+                // one mistake this crossing can make invisibly.
+                paused: self
+                    .paused
+                    .ok_or_else(|| "paused is required for setPaused".to_owned())?,
+            }),
+            "deleteFiles" => Ok(Command::DeleteFiles {
                 collection: handle(self.collection, "collection")?,
             }),
             "importTorrent" => Ok(Command::ImportTorrent {
@@ -325,12 +380,14 @@ fn snapshot(state: &PortalisState) -> AppSnapshot {
             .map(|collection| AppCollection {
                 id: collection.id.0,
                 name: collection.name.clone(),
+                nature: format!("{:?}", collection.nature),
                 role: format!("{:?}", collection.role),
                 revision: collection.revision,
                 status: format!("{:?}", collection.status),
                 members: collection.members.iter().map(|member| member.0).collect(),
                 entries: collection.entries,
                 total_bytes: collection.total_bytes,
+                on_disk_bytes: collection.on_disk_bytes,
                 transfer: collection.transfer.map(|transfer| AppTransfer {
                     progress: transfer.progress,
                     down_bytes_per_second: transfer.down_bytes_per_second,
@@ -364,10 +421,12 @@ fn detail_projection(detail: &Detail) -> AppDetail {
                 bytes: entry.bytes,
                 selected: entry.selected,
                 available: entry.available,
+                path: entry.path.clone(),
             })
             .collect(),
         pieces: detail.pieces.clone(),
         samples: detail.samples.clone(),
+        peers: detail.peers.clone(),
     }
 }
 
@@ -392,6 +451,7 @@ mod tests {
             accept: None,
             device: None,
             active: None,
+            paused: None,
         }
     }
 
@@ -404,6 +464,29 @@ mod tests {
             command.into_core(),
             Ok(Command::ImportTorrent {
                 source: "magnet:?xt=urn:btih:abc".to_owned()
+            })
+        );
+    }
+
+    #[test]
+    fn maps_source_metadata_without_moving_media_through_the_bridge() {
+        let mut command = command("createCollection");
+        command.name = Some("Episodes".to_owned());
+        command.files = vec![AppSourceFile {
+            name: "Episode 1.mp4".to_owned(),
+            path: "phasset://native-identifier".to_owned(),
+            bytes: 42,
+        }];
+
+        assert_eq!(
+            command.into_core(),
+            Ok(Command::CreateCollection {
+                name: "Episodes".to_owned(),
+                files: vec![LocalFile {
+                    name: "Episode 1.mp4".to_owned(),
+                    path: PathBuf::from("phasset://native-identifier"),
+                    bytes: 42,
+                }],
             })
         );
     }

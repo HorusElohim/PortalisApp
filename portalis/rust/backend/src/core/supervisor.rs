@@ -21,6 +21,7 @@
 
 use std::collections::HashMap;
 use std::future::Future;
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::watch;
@@ -78,7 +79,7 @@ pub enum Outcome {
 /// place for it is the sequence rather than a sleep.
 #[derive(Debug)]
 pub struct Supervisor {
-    bus: EventBus,
+    bus: Arc<EventBus>,
     tasks: JoinSet<()>,
     /// Which component each task is, so a panic can be attributed exactly
     /// rather than guessed at from what has not reported yet.
@@ -98,7 +99,7 @@ impl Supervisor {
     #[must_use]
     pub fn new(bus: EventBus, grace: Duration) -> Self {
         Self {
-            bus,
+            bus: Arc::new(bus),
             tasks: JoinSet::new(),
             names: HashMap::new(),
             order: Vec::new(),
@@ -109,8 +110,30 @@ impl Supervisor {
 
     /// The bus every component shares.
     #[must_use]
-    pub const fn bus(&self) -> &EventBus {
+    pub fn bus(&self) -> &EventBus {
         &self.bus
+    }
+
+    /// Starts a component from a synchronous acceptance boundary.
+    ///
+    /// The task still belongs to this supervisor and emits the same lifecycle
+    /// fact as [`Self::start`]; only the caller does not wait for that fact to
+    /// reach subscribers before returning.
+    pub fn start_now<F, Fut>(&mut self, component: &'static str, run: F)
+    where
+        F: FnOnce(Shutdown) -> Fut + Send + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        let shutdown = Shutdown {
+            signal: self.stop.subscribe(),
+        };
+        self.order.push(component);
+        let bus = Arc::clone(&self.bus);
+        let task = self.tasks.spawn(async move {
+            bus.emit(Event::ComponentStarted { component }).await;
+            run(shutdown).await;
+        });
+        self.names.insert(task.id(), component);
     }
 
     /// Starts one component and takes ownership of its task.

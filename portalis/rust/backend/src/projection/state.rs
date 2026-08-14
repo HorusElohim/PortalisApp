@@ -75,6 +75,13 @@ pub enum Role {
     Member,
 }
 
+/// How the collection's initial content entered Portalis.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Nature {
+    Native,
+    Torrent,
+}
+
 /// Why verification failed, in the terms §18 shows a person.
 pub use crate::core::events::VerifyFailure;
 
@@ -85,6 +92,10 @@ pub use crate::core::events::VerifyFailure;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
     Available,
+    /// This device was told to stop transferring it. A person's choice, so it
+    /// outranks what the numbers are doing — a paused collection that is still
+    /// draining a buffer is paused, not downloading.
+    Paused,
     /// A descriptor arrived; the transfer has not started.
     Preparing,
     Downloading,
@@ -125,12 +136,19 @@ pub struct Pending {
 pub struct CollectionState {
     pub id: Handle,
     pub name: String,
+    pub nature: Nature,
     pub role: Role,
     pub revision: u64,
     pub status: Status,
     pub members: Vec<Handle>,
     pub entries: u32,
     pub total_bytes: u64,
+    /// How much of it this device is actually holding.
+    ///
+    /// Carried in the snapshot rather than answered by a separate call: the
+    /// interface renders it beside `total_bytes`, and a size it has to ask for
+    /// is a size that is briefly wrong every time the list changes.
+    pub on_disk_bytes: u64,
     /// Progress tier: present only while something is moving.
     pub transfer: Option<Transfer>,
     pub pending: Option<Pending>,
@@ -172,6 +190,19 @@ pub struct EntryState {
     /// The local choice to include this file when the torrent is confirmed.
     pub selected: bool,
     pub available: bool,
+    /// How much of this entry is here, in bytes.
+    ///
+    /// Per entry rather than only per collection because several files
+    /// download at once and finish at different times — one collection-level
+    /// bar cannot say which of them is nearly done, which is exactly what a
+    /// person watching a multi-file torrent wants to know.
+    pub downloaded_bytes: u64,
+    /// Where the bytes actually landed, once they have.
+    ///
+    /// Resolved by the substrate rather than guessed from the media directory:
+    /// a multi-file torrent gets a subfolder nobody chose, and a preview built
+    /// on a guessed path is a preview that silently shows nothing.
+    pub path: Option<String>,
 }
 
 /// The expensive tier, delivered only while a collection's view is open.
@@ -187,6 +218,26 @@ pub struct Detail {
     pub pieces: Vec<u8>,
     /// Fixed-width `(t, down, up, progress)` rows.
     pub samples: Vec<u8>,
+    /// Who this collection is currently moving with, as `ip:port`.
+    ///
+    /// Addresses and nothing else, deliberately. A swarm peer carries no
+    /// signed identity — there is no name and no device id to correlate it
+    /// with a contact — so presenting one as a person would be a claim the
+    /// protocol cannot support. Contacts are `members`; these are not the same
+    /// thing and the interface must not merge them.
+    pub peers: Vec<String>,
+}
+
+/// One local source selected for a collection.
+///
+/// The display name and measured length cross the bridge with the opaque
+/// native location. Deriving either from the path would break PhotoKit and
+/// security-scoped Files sources, whose locations are not user-facing names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalFile {
+    pub name: String,
+    pub path: PathBuf,
+    pub bytes: u64,
 }
 
 /// What the interface may ask the core to do.
@@ -194,12 +245,12 @@ pub struct Detail {
 pub enum Command {
     CreateCollection {
         name: String,
-        files: Vec<PathBuf>,
+        files: Vec<LocalFile>,
     },
     AddMedia {
         collection: Handle,
         label: String,
-        files: Vec<PathBuf>,
+        files: Vec<LocalFile>,
     },
     RenameCollection {
         collection: Handle,
@@ -214,6 +265,24 @@ pub enum Command {
         entry: Handle,
     },
     RetryTransfer {
+        collection: Handle,
+    },
+    /// Stops or resumes transferring one collection on this device.
+    ///
+    /// One command with a boolean rather than pause, resume and stop as three
+    /// verbs. Three verbs is three chances for the interface and the core to
+    /// disagree about which one is in force; a boolean has one answer, and it
+    /// is the same answer `Status::Paused` reports back.
+    SetPaused {
+        collection: Handle,
+        paused: bool,
+    },
+    /// Removes the downloaded bytes and keeps the collection.
+    ///
+    /// Distinct from `DeleteCollection { delete_files: true }`, which removes
+    /// both. A person reclaiming disk space has not left the collection, and
+    /// conflating the two loses their membership along with the files.
+    DeleteFiles {
         collection: Handle,
     },
     /// Resolves a magnet URI or `.torrent` file into a shareable collection.
@@ -352,6 +421,11 @@ mod tests {
                 entry: Handle(3),
             },
             Command::RetryTransfer { collection },
+            Command::SetPaused {
+                collection,
+                paused: true,
+            },
+            Command::DeleteFiles { collection },
             Command::ImportTorrent {
                 source: "magnet:?xt=urn:btih:abc".to_owned(),
             },
@@ -407,6 +481,7 @@ mod tests {
     fn a_status_is_one_answer() {
         let statuses = [
             Status::Available,
+            Status::Paused,
             Status::Preparing,
             Status::Downloading,
             Status::Updating,

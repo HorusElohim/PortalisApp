@@ -187,6 +187,8 @@ fn state(handles: &mut Handles, progress: Option<Progress>) -> PortalisState {
                 members: Vec::new(),
                 progress,
                 failure: None,
+                paused: false,
+                on_disk_bytes: 0,
             },
         )],
     )
@@ -208,5 +210,6 @@ fn detail(id: Handle) -> Detail {
         entries: Vec::new(),
         pieces: vec![0b1010_1010; 1_024],
         samples: vec![0; 60 * 16],
+        peers: vec!["10.0.0.1:6881".to_owned(), "10.0.0.2:6881".to_owned()],
     }
 }

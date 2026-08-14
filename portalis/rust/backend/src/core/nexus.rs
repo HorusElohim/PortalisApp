@@ -26,15 +26,17 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use thiserror::Error;
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 
 use super::supervisor::Supervisor;
 use crate::projection::emit::Projector;
 use crate::projection::state::{
     Accepted, CollectionState, Command, CommandError, Connectivity, Detail, DeviceState, Handle,
-    PortalisState, Role, Status,
+    LocalFile, Nature, PortalisState, Role, Status,
 };
-use crate::store::records::{Role as StoredRole, StoredCollection, StoredImportEntry};
+use crate::store::records::{
+    Role as StoredRole, StoredCollection, StoredSourceFile,
+};
 use crate::store::{Store, StoreError};
 
 /// Where the core keeps its file, and who it is.
@@ -67,14 +69,175 @@ pub enum OpenError {
 pub struct Nexus {
     supervisor: Supervisor,
     states: watch::Sender<PortalisState>,
-    details: watch::Sender<Option<Detail>>,
+    /// One channel per collection anyone is currently watching.
+    ///
+    /// Deliberately not one shared slot. A single sender meant opening a
+    /// second collection replaced what the first one's subscriber received —
+    /// two screens could not be open at once, and even swapping between them
+    /// delivered one collection's contents to the other's stream for a frame.
+    /// Per-collection senders make that unrepresentable rather than merely
+    /// avoided.
+    details: Arc<Mutex<HashMap<Handle, watch::Sender<Option<Detail>>>>>,
     projector: Arc<Mutex<Projector>>,
     /// Names each accepted command, so the interface can match one to the
     /// `pending` field it appears in.
     next_command: AtomicU64,
     active: bool,
     store: Arc<Store>,
-    collections: Mutex<LocalCollections>,
+    collections: Arc<Mutex<LocalCollections>>,
+    /// The substrate's latest word on each collection, so the detail tier and
+    /// the progress tier answer from the same reading.
+    holdings: super::transfers::Holdings,
+    publisher: mpsc::Sender<()>,
+    /// Wakes the worker that resolves torrent sources and starts downloads.
+    torrents: mpsc::Sender<()>,
+}
+
+/// Everything the detail tier is assembled from.
+///
+/// Grouped because three different callers need exactly this set — the
+/// runtime answering a subscribe, the transfer poller refreshing an open
+/// collection, and the torrent worker publishing a freshly resolved file
+/// list — and passing four values around three times is how they drift.
+#[derive(Clone)]
+pub(crate) struct DetailSources {
+    pub(crate) store: Arc<Store>,
+    pub(crate) collections: Arc<Mutex<LocalCollections>>,
+    pub(crate) holdings: super::transfers::Holdings,
+    pub(crate) senders: Arc<Mutex<HashMap<Handle, watch::Sender<Option<Detail>>>>>,
+}
+
+impl std::fmt::Debug for DetailSources {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("DetailSources").finish_non_exhaustive()
+    }
+}
+
+impl DetailSources {
+    /// Recomputes and publishes one collection's detail, if anyone is
+    /// watching it.
+    ///
+    /// Nothing happens when nobody is subscribed, which is what keeps the
+    /// expensive tier free until it is asked for.
+    pub(crate) fn refresh(&self, collection: Handle) {
+        let watching = self
+            .senders()
+            .get(&collection)
+            .is_some_and(|sender| sender.receiver_count() > 0);
+        if !watching {
+            return;
+        }
+        let detail = self.build(collection);
+        if let Some(sender) = self.senders().get(&collection) {
+            sender.send_if_modified(|held| {
+                if *held == detail {
+                    return false;
+                }
+                *held = detail;
+                true
+            });
+        }
+    }
+
+    /// Every collection someone is currently subscribed to.
+    ///
+    /// Collected rather than iterated in place so the lock is released before
+    /// a caller rebuilds anything — building a detail reads the store, and
+    /// holding this while doing that would make an unrelated subscribe wait
+    /// on disk.
+    pub(crate) fn watched(&self) -> Vec<Handle> {
+        let mut senders = self.senders();
+        senders.retain(|_, sender| sender.receiver_count() > 0);
+        senders.keys().copied().collect()
+    }
+
+    pub(crate) fn senders(
+        &self,
+    ) -> std::sync::MutexGuard<'_, HashMap<Handle, watch::Sender<Option<Detail>>>> {
+        self.senders
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn key(&self, collection: Handle) -> Option<Vec<u8>> {
+        self.collections
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .key(collection)
+            .map(<[u8]>::to_vec)
+    }
+
+    fn build(&self, collection: Handle) -> Option<Detail> {
+        let key = self.key(collection)?;
+        let local_sources = self.store.collection(&key).ok()??.sources;
+        // What the substrate last said, if it is carrying this at all. It
+        // supplies what only it knows: where the bytes landed, which pieces
+        // are verified, and who they are coming from.
+        let held = self.holdings.get(&key);
+        let entries = if local_sources.is_empty() {
+            self.store
+                .torrent_import_entries(&key)
+                .ok()?
+                .into_iter()
+                .map(|entry| (entry.label, entry.bytes, entry.selected, false, None))
+                .collect::<Vec<_>>()
+        } else {
+            // This device's own files, referenced where they already are. The
+            // path is known without asking the substrate anything — it is the
+            // source the person picked — so an owner sees previews whether or
+            // not anything is currently seeding.
+            local_sources
+                .into_iter()
+                .map(|entry| (entry.label, entry.bytes, true, true, Some(entry.path)))
+                .collect()
+        };
+        Some(Detail {
+            id: collection,
+            entries: entries
+                .into_iter()
+                .enumerate()
+                .map(|(index, (label, bytes, selected, available, local_path))| {
+                    // Matched by name rather than by position: the substrate
+                    // orders a torrent's files its own way, and lining two
+                    // lists up by index would put one file's path beside
+                    // another file's name.
+                    let carried = held
+                        .as_ref()
+                        .and_then(|info| info.files.iter().find(|file| file.name == label));
+                    crate::projection::state::EntryState {
+                        id: Handle(u32::try_from(index).unwrap_or(u32::MAX).saturating_add(1)),
+                        label,
+                        bytes,
+                        selected,
+                        // Believe the substrate when it is carrying this, and
+                        // the store otherwise: a file is available when its
+                        // bytes are all present, not when a row says so.
+                        available: carried.map_or(available, |file| {
+                            file.downloaded_bytes >= file.length_bytes && file.length_bytes > 0
+                        }),
+                        // The substrate's own per-file count while it is
+                        // carrying this; otherwise all-or-nothing, which is
+                        // the truth for a file referenced where it already
+                        // sits.
+                        downloaded_bytes: carried
+                            .map_or(if available { bytes } else { 0 }, |file| {
+                                file.downloaded_bytes
+                            }),
+                        // The substrate's resolved location wins when it has
+                        // one — a multi-file torrent lands in a subfolder
+                        // nobody chose — and the person's own source stands in
+                        // otherwise.
+                        path: carried
+                            .map(|file| file.absolute_path.clone())
+                            .or(local_path),
+                    }
+                })
+                .collect(),
+            pieces: held.as_ref().map(pieces_of).unwrap_or_default(),
+            samples: recorded_samples(&self.store, &key),
+            peers: held.map(|info| info.live_peer_addrs).unwrap_or_default(),
+        })
+    }
 }
 
 /// The process-local handles for durable collection records.
@@ -83,7 +246,7 @@ pub struct Nexus {
 /// mapping beside the projection prevents either identifier becoming the
 /// other's accidental public API.
 #[derive(Debug, Default)]
-struct LocalCollections {
+pub struct LocalCollections {
     keys: HashMap<Handle, Vec<u8>>,
     next_handle: u32,
 }
@@ -94,18 +257,38 @@ impl LocalCollections {
         let mut projected = Vec::new();
         for (key, stored) in store.collections()? {
             let imported_entries = store.torrent_import_entries(&key)?;
+            let local_sources = &stored.sources;
             let handle = local.assign(key.clone());
             let revision = store
                 .current_revision(&key)?
                 .map_or(0, |(number, _)| number);
-            let status = if store.torrent_import(&key)?.is_some() {
+            let torrent_import = store.torrent_import(&key)?.is_some();
+            let status = if stored.paused {
+                Status::Paused
+            } else if torrent_import || (!local_sources.is_empty() && revision == 0) {
                 Status::Preparing
             } else {
                 Status::Available
             };
+            let (entries, total_bytes) = if local_sources.is_empty() {
+                (
+                    imported_entries.len(),
+                    imported_entries.iter().map(|entry| entry.bytes).sum(),
+                )
+            } else {
+                (
+                    local_sources.len(),
+                    local_sources.iter().map(|entry| entry.bytes).sum(),
+                )
+            };
             projected.push(CollectionState {
                 id: handle,
                 name: stored.name,
+                nature: if torrent_import {
+                    Nature::Torrent
+                } else {
+                    Nature::Native
+                },
                 role: match stored.role {
                     StoredRole::Owner => Role::Owner,
                     StoredRole::Member => Role::Member,
@@ -113,8 +296,9 @@ impl LocalCollections {
                 revision,
                 status,
                 members: Vec::new(),
-                entries: u32::try_from(imported_entries.len()).unwrap_or(u32::MAX),
-                total_bytes: imported_entries.iter().map(|entry| entry.bytes).sum(),
+                entries: u32::try_from(entries).unwrap_or(u32::MAX),
+                total_bytes,
+                on_disk_bytes: stored.on_disk_bytes,
                 transfer: None,
                 pending: None,
             });
@@ -131,6 +315,12 @@ impl LocalCollections {
 
     fn key(&self, handle: Handle) -> Option<&[u8]> {
         self.keys.get(&handle).map(Vec::as_slice)
+    }
+
+    pub(crate) fn handle(&self, key: &[u8]) -> Option<Handle> {
+        self.keys
+            .iter()
+            .find_map(|(handle, stored)| (stored == key).then_some(*handle))
     }
 
     fn forget(&mut self, handle: Handle) {
@@ -159,6 +349,14 @@ impl Nexus {
     }
 
     fn open_with_store(config: &Config, store: Arc<Store>) -> Result<Self, OpenError> {
+        Self::open_with_store_and_substrate(config, store, crate::substrate::current())
+    }
+
+    fn open_with_store_and_substrate(
+        config: &Config,
+        store: Arc<Store>,
+        substrate: Arc<dyn crate::substrate::Substrate>,
+    ) -> Result<Self, OpenError> {
         let (collections, collection_states) = LocalCollections::hydrate(&store)?;
         let device = DeviceState {
             name: config.device_name.clone(),
@@ -174,15 +372,99 @@ impl Nexus {
             alerts: Vec::new(),
         };
 
+        let states = watch::Sender::new(first);
+        let collections = Arc::new(Mutex::new(collections));
+        let (publisher, pending) = mpsc::channel(1);
+        let (torrents, torrent_wakes) = mpsc::channel(1);
+        let substrate_for_torrents = Arc::clone(&substrate);
+        let holdings = super::transfers::Holdings::default();
+        let details: Arc<Mutex<HashMap<Handle, watch::Sender<Option<Detail>>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let sources = DetailSources {
+            store: Arc::clone(&store),
+            collections: Arc::clone(&collections),
+            holdings: holdings.clone(),
+            senders: Arc::clone(&details),
+        };
+        let mut supervisor = Supervisor::default();
+        supervisor.start_now("collection publisher", {
+            let store = Arc::clone(&store);
+            let states = states.clone();
+            let collections = Arc::clone(&collections);
+            let substrate = Arc::clone(&substrate);
+            move |shutdown| {
+                publish_pending_collections(
+                    store,
+                    states,
+                    collections,
+                    substrate,
+                    pending,
+                    shutdown,
+                )
+            }
+        });
+        // Started here rather than when a screen opens: transfer history is
+        // recorded whether or not anybody is looking at it, which is the whole
+        // difference between a chart that survives a restart and one that
+        // begins when a person happens to navigate.
+        supervisor.start_now("transfer follower", {
+            let store = Arc::clone(&store);
+            let states = states.clone();
+            let collections = Arc::clone(&collections);
+            let holdings = holdings.clone();
+            let sources_for_transfers = sources.clone();
+            move |shutdown| {
+                super::transfers::follow_transfers(
+                    store,
+                    states,
+                    collections,
+                    substrate,
+                    holdings,
+                    shutdown,
+                    sources_for_transfers,
+                )
+            }
+        });
+        // Resolving a source and starting its download both wait on a
+        // network, which `command` promises not to do. Started here so an
+        // import interrupted by a restart resumes from the store rather than
+        // needing the person to ask again.
+        supervisor.start_now("torrent imports", {
+            let store = Arc::clone(&store);
+            let states = states.clone();
+            let collections = Arc::clone(&collections);
+            let substrate = Arc::clone(&substrate_for_torrents);
+            let sources = sources.clone();
+            move |shutdown| {
+                super::torrents::follow_torrent_imports(
+                    store,
+                    states,
+                    collections,
+                    substrate,
+                    torrent_wakes,
+                    shutdown,
+                    sources,
+                )
+            }
+        });
+        // One coalesced wake each is enough: both workers scan durable
+        // collection state, so restart recovery does not depend on an
+        // in-memory job.
+        let _ = publisher.try_send(());
+        let _ = torrents.try_send(());
+
         Ok(Self {
-            supervisor: Supervisor::default(),
-            states: watch::Sender::new(first),
-            details: watch::Sender::new(None),
+            supervisor,
+            states,
+            details,
             projector: Arc::new(Mutex::new(Projector::new())),
             next_command: AtomicU64::new(1),
             active: true,
             store,
-            collections: Mutex::new(collections),
+            collections,
+            holdings,
+            publisher,
+            torrents,
         })
     }
 
@@ -239,13 +521,43 @@ impl Nexus {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .watch_detail(collection);
-        if let Some(collection) = collection {
-            self.details.send_replace(self.import_detail(collection));
-        } else {
-            // Stop holding what nobody is looking at.
-            self.details.send_replace(None);
-        }
-        self.details.subscribe()
+        let Some(collection) = collection else {
+            // Nobody is looking. Anything whose screen has already gone is
+            // dropped here; a live subscription is left alone, because this
+            // caller does not say — and cannot know — whose it is.
+            self.detail_senders()
+                .retain(|_, sender| sender.receiver_count() > 0);
+            // A channel that answers `None` once and is never written again.
+            return watch::Sender::new(None).subscribe();
+        };
+        let detail = self.collection_detail(collection);
+        let mut senders = self.detail_senders();
+        // Dropped when the last receiver goes, so a closed screen stops
+        // costing anything without needing anyone to say so.
+        senders.retain(|_, sender| sender.receiver_count() > 0);
+        let sender = senders
+            .entry(collection)
+            .or_insert_with(|| watch::Sender::new(None));
+        sender.send_replace(detail);
+        sender.subscribe()
+    }
+
+    /// Recomputes and publishes one collection's detail, if anyone is
+    /// watching it.
+    ///
+    /// Called whenever something that shows up in the detail tier changes —
+    /// a resolved file list, a transfer reading — so an open collection is
+    /// live rather than a snapshot of the moment it was opened.
+    fn refresh_detail(&self, collection: Handle) {
+        self.detail_sources().refresh(collection);
+    }
+
+    fn detail_senders(
+        &self,
+    ) -> std::sync::MutexGuard<'_, HashMap<Handle, watch::Sender<Option<Detail>>>> {
+        self.details
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Accepts a command, or says why not.
@@ -265,6 +577,13 @@ impl Nexus {
         // survive a crash before it can be published. The database write is
         // the acceptance boundary; network work still happens later.
         let collection = self.apply_local(command)?;
+        if matches!(
+            command,
+            Command::CreateCollection { files, .. } if !files.is_empty()
+        ) {
+            // A full channel already contains the only wake the worker needs.
+            let _ = self.publisher.try_send(());
+        }
 
         // Deferrable commands are queued rather than refused, which is what
         // lets the interface accept one instantly with the network down.
@@ -281,13 +600,22 @@ impl Nexus {
 
     fn apply_local(&self, command: &Command) -> Result<Option<Handle>, CommandError> {
         match command {
-            Command::CreateCollection { name, .. } => self.create_collection(name).map(Some),
+            Command::CreateCollection { name, files } => {
+                self.create_collection(name, files).map(Some)
+            }
             Command::RenameCollection { collection, name } => {
                 self.rename_collection(*collection, name).map(|()| None)
             }
-            Command::DeleteCollection { collection, .. } => {
-                self.delete_collection(*collection).map(|()| None)
+            Command::DeleteCollection {
+                collection,
+                delete_files,
+            } => self
+                .delete_collection(*collection, *delete_files)
+                .map(|()| None),
+            Command::SetPaused { collection, paused } => {
+                self.set_paused(*collection, *paused).map(|()| None)
             }
+            Command::DeleteFiles { collection } => self.delete_files(*collection).map(|()| None),
             Command::ImportTorrent { source } => self.import_torrent(source).map(Some),
             Command::DownloadSelection {
                 collection,
@@ -299,13 +627,18 @@ impl Nexus {
         }
     }
 
-    fn create_collection(&self, name: &str) -> Result<Handle, CommandError> {
+    fn create_collection(&self, name: &str, files: &[LocalFile]) -> Result<Handle, CommandError> {
         let id = crate::collections::model::CollectionId::generate();
+        let sources = prepare_sources(files)?;
         let stored = StoredCollection {
             name: name.to_owned(),
             role: StoredRole::Owner,
             content_key: portalis_nexus_client::generate_content_key(),
             media_path: String::new(),
+            sources: sources.clone(),
+            paused: false,
+            on_disk_bytes: 0,
+            substrate_handle: None,
         };
         self.store
             .put_collection(id.as_bytes(), &stored)
@@ -320,12 +653,20 @@ impl Nexus {
         state.collections.push(CollectionState {
             id: handle,
             name: stored.name,
+            nature: Nature::Native,
             role: Role::Owner,
             revision: 0,
-            status: Status::Available,
+            status: if sources.is_empty() {
+                Status::Available
+            } else {
+                Status::Preparing
+            },
             members: Vec::new(),
-            entries: 0,
-            total_bytes: 0,
+            entries: u32::try_from(sources.len()).unwrap_or(u32::MAX),
+            total_bytes: sources.iter().map(|source| source.bytes).sum(),
+            // Nothing has been fetched: these are the person's own files,
+            // referenced where they already are rather than copied.
+            on_disk_bytes: 0,
             transfer: None,
             pending: None,
         });
@@ -333,21 +674,27 @@ impl Nexus {
         Ok(handle)
     }
 
+    /// Records a torrent source and hands back its collection at once.
+    ///
+    /// What the source *contains* is resolved afterwards by the torrent
+    /// worker, for a `.torrent` descriptor exactly as for a magnet. One path
+    /// rather than two: a magnet's file list can only come from the swarm, so
+    /// if the interface must handle "not known yet" for magnets it may as
+    /// well be the only case there is — and a command that promises not to
+    /// wait for a network cannot resolve one inline anyway.
     fn import_torrent(&self, source: &str) -> Result<Handle, CommandError> {
         let id = crate::collections::model::CollectionId::generate();
-        let metadata = is_torrent_path(source)
-            .then(|| crate::torrent::metadata_from_torrent_path(source))
-            .transpose()
-            .map_err(|error| {
-                CommandError::Invalid(format!("could not read the .torrent file: {error}"))
-            })?;
         let stored = StoredCollection {
-            name: metadata
-                .as_ref()
-                .map_or_else(|| torrent_name(source), |metadata| metadata.name.clone()),
+            // A placeholder until the source says its real name. Taken from
+            // the source itself so the row is never nameless on screen.
+            name: torrent_name(source),
             role: StoredRole::Owner,
             content_key: portalis_nexus_client::generate_content_key(),
             media_path: String::new(),
+            sources: Vec::new(),
+            paused: false,
+            on_disk_bytes: 0,
+            substrate_handle: None,
         };
         self.store
             .put_collection(id.as_bytes(), &stored)
@@ -358,29 +705,6 @@ impl Nexus {
             let _ = self.store.forget_collection(id.as_bytes());
             return Err(persistence(error));
         }
-        if let Some(metadata) = &metadata {
-            let entries = metadata
-                .files
-                .iter()
-                .map(|file| StoredImportEntry {
-                    label: file.label.clone(),
-                    bytes: file.bytes,
-                    selected: true,
-                })
-                .collect::<Vec<_>>();
-            if let Err(error) = self
-                .store
-                .put_torrent_import_entries(id.as_bytes(), &entries)
-                .and_then(|()| {
-                    self.store
-                        .put_torrent_import_descriptor(id.as_bytes(), &metadata.descriptor)
-                })
-            {
-                let _ = self.store.forget_torrent_import(id.as_bytes());
-                let _ = self.store.forget_collection(id.as_bytes());
-                return Err(persistence(error));
-            }
-        }
 
         let handle = self
             .collections
@@ -391,20 +715,23 @@ impl Nexus {
         state.collections.push(CollectionState {
             id: handle,
             name: stored.name,
+            nature: Nature::Torrent,
             role: Role::Owner,
             revision: 0,
             status: Status::Preparing,
             members: Vec::new(),
-            entries: metadata.as_ref().map_or(0, |metadata| {
-                u32::try_from(metadata.files.len()).unwrap_or(u32::MAX)
-            }),
-            total_bytes: metadata.as_ref().map_or(0, |metadata| {
-                metadata.files.iter().map(|file| file.bytes).sum()
-            }),
+            // Nothing is known about the contents until the worker has
+            // resolved the source. Zero here is honest rather than a guess:
+            // the interface shows "resolving" for exactly this.
+            entries: 0,
+            total_bytes: 0,
+            on_disk_bytes: 0,
             transfer: None,
             pending: None,
         });
         self.states.send_replace(state);
+        // A full channel already holds the one wake the worker needs.
+        let _ = self.torrents.try_send(());
         Ok(handle)
     }
 
@@ -431,8 +758,91 @@ impl Nexus {
         Ok(())
     }
 
-    fn delete_collection(&self, handle: Handle) -> Result<(), CommandError> {
+    /// Stops or resumes transferring one collection on this device.
+    ///
+    /// Durable before it is reported: a pause that a crash undoes would have
+    /// this device quietly resume a transfer the person stopped, which is the
+    /// one outcome the command exists to prevent.
+    fn set_paused(&self, handle: Handle, paused: bool) -> Result<(), CommandError> {
         let key = self.collection_key(handle)?;
+        let mut stored = self
+            .store
+            .collection(&key)
+            .map_err(persistence)?
+            .ok_or_else(|| missing_collection(handle))?;
+        stored.paused = paused;
+        self.store
+            .put_collection(&key, &stored)
+            .map_err(persistence)?;
+
+        self.update_collection(handle, |collection| {
+            // The status is the whole report: a paused collection shows one
+            // line, and resuming hands it back to whatever the numbers say.
+            collection.status = if paused {
+                Status::Paused
+            } else if collection.transfer.is_some() {
+                Status::Downloading
+            } else {
+                Status::Available
+            };
+        })
+    }
+
+    /// Removes the bytes this device holds and keeps the collection.
+    ///
+    /// The files go first and the count second. A crash between them leaves a
+    /// count that is too high, which a person can correct by asking again; the
+    /// other order leaves files nothing will ever account for.
+    fn delete_files(&self, handle: Handle) -> Result<(), CommandError> {
+        let key = self.collection_key(handle)?;
+        let mut stored = self
+            .store
+            .collection(&key)
+            .map_err(persistence)?
+            .ok_or_else(|| missing_collection(handle))?;
+
+        remove_media(&stored.media_path)?;
+        stored.on_disk_bytes = 0;
+        self.store
+            .put_collection(&key, &stored)
+            .map_err(persistence)?;
+
+        self.update_collection(handle, |collection| {
+            collection.on_disk_bytes = 0;
+        })
+    }
+
+    /// Applies one change to a projected collection and republishes the state.
+    fn update_collection(
+        &self,
+        handle: Handle,
+        change: impl FnOnce(&mut CollectionState),
+    ) -> Result<(), CommandError> {
+        let mut state = self.state();
+        let collection = state
+            .collections
+            .iter_mut()
+            .find(|collection| collection.id == handle)
+            .ok_or_else(|| missing_collection(handle))?;
+        change(collection);
+        self.states.send_replace(state);
+        Ok(())
+    }
+
+    fn delete_collection(&self, handle: Handle, delete_files: bool) -> Result<(), CommandError> {
+        let key = self.collection_key(handle)?;
+        if delete_files {
+            let media_path = self
+                .store
+                .collection(&key)
+                .map_err(persistence)?
+                .map(|stored| stored.media_path);
+            // Before the record goes, because afterwards there is nothing left
+            // that knows where the files were.
+            if let Some(media_path) = media_path {
+                remove_media(&media_path)?;
+            }
+        }
         self.store
             .forget_torrent_import(&key)
             .map_err(persistence)?;
@@ -506,7 +916,11 @@ impl Nexus {
         self.store
             .put_torrent_import_entries(&key, &entries)
             .map_err(persistence)?;
-        self.details.send_replace(self.import_detail(collection));
+        self.refresh_detail(collection);
+        // The worker is what actually starts the download; this only
+        // recorded the choice. A full channel already holds the one wake it
+        // needs.
+        let _ = self.torrents.try_send(());
         Ok(())
     }
 
@@ -519,28 +933,24 @@ impl Nexus {
             .ok_or_else(|| missing_collection(handle))
     }
 
-    fn import_detail(&self, collection: Handle) -> Option<Detail> {
-        let key = self.collection_key(collection).ok()?;
-        self.store.torrent_import(&key).ok().flatten()?;
-        let entries = self.store.torrent_import_entries(&key).ok()?;
-        Some(Detail {
-            id: collection,
-            entries: entries
-                .into_iter()
-                .enumerate()
-                .map(|(index, entry)| crate::projection::state::EntryState {
-                    id: Handle(u32::try_from(index).unwrap_or(u32::MAX).saturating_add(1)),
-                    label: entry.label,
-                    bytes: entry.bytes,
-                    selected: entry.selected,
-                    available: false,
-                })
-                .collect(),
-            pieces: Vec::new(),
-            samples: Vec::new(),
-        })
+    fn collection_detail(&self, collection: Handle) -> Option<Detail> {
+        self.detail_sources().build(collection)
     }
 
+    fn detail_sources(&self) -> DetailSources {
+        DetailSources {
+            store: Arc::clone(&self.store),
+            collections: Arc::clone(&self.collections),
+            holdings: self.holdings.clone(),
+            senders: Arc::clone(&self.details),
+        }
+    }
+
+    /// This collection's transfer history, packed for the bridge.
+    ///
+    /// Empty rather than absent when the history cannot be read: a chart with
+    /// no points is a truthful "nothing recorded yet", and refusing the whole
+    /// detail tier over it would blank a screen that has plenty else to show.
     /// Publishes a new snapshot, if it differs from the last one sent.
     ///
     /// The projector decides; this only carries the result. Called by whatever
@@ -562,13 +972,312 @@ impl Nexus {
             self.states.send_replace(state);
         }
         if let Some(detail) = emission.detail {
-            self.details.send_replace(Some(detail));
+            let id = detail.id;
+            if let Some(sender) = self.detail_senders().get(&id) {
+                sender.send_replace(Some(detail));
+            }
         }
     }
 
     /// Stops every component and returns when the runtime is quiet.
     pub async fn close(self) {
         self.supervisor.shutdown().await;
+    }
+}
+
+async fn publish_pending_collections(
+    store: Arc<Store>,
+    states: watch::Sender<PortalisState>,
+    collections: Arc<Mutex<LocalCollections>>,
+    substrate: Arc<dyn crate::substrate::Substrate>,
+    mut wakes: mpsc::Receiver<()>,
+    mut shutdown: super::supervisor::Shutdown,
+) {
+    loop {
+        tokio::select! {
+            () = shutdown.requested() => return,
+            wake = wakes.recv() => {
+                if wake.is_none() {
+                    return;
+                }
+            }
+        }
+
+        let pending = match store.collections() {
+            Ok(collections) => collections
+                .into_iter()
+                .filter(|(key, collection)| {
+                    !collection.sources.is_empty()
+                        && store
+                            .current_revision(key)
+                            .is_ok_and(|revision| revision.is_none())
+                })
+                .collect::<Vec<_>>(),
+            Err(error) => {
+                crate::log::clog!("nexus", "could not scan pending collections: {error}");
+                continue;
+            }
+        };
+
+        for (key, collection) in pending {
+            let total = collection.sources.iter().map(|source| source.bytes).sum();
+            let progress = crate::torrent::PublishProgress::new(total);
+            let publishing = publish_collection_sources(
+                &store,
+                substrate.as_ref(),
+                &key,
+                &collection,
+                progress.clone(),
+            );
+            tokio::pin!(publishing);
+            let result = tokio::select! {
+                () = shutdown.requested() => {
+                    progress.cancel();
+                    return;
+                }
+                result = &mut publishing => result,
+            };
+            match result {
+                Ok(revision) => {
+                    let handle = collections
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .handle(&key);
+                    if let Some(handle) = handle {
+                        states.send_modify(|state| {
+                            if let Some(projected) = state
+                                .collections
+                                .iter_mut()
+                                .find(|projected| projected.id == handle)
+                            {
+                                projected.revision = revision;
+                                projected.status = Status::Available;
+                            }
+                        });
+                    }
+                }
+                Err(error) => {
+                    crate::log::clog!("nexus", "could not publish collection {:?}: {error:#}", key)
+                }
+            }
+        }
+    }
+}
+
+async fn publish_collection_sources(
+    store: &Store,
+    substrate: &dyn crate::substrate::Substrate,
+    key: &[u8],
+    stored: &StoredCollection,
+    progress: crate::torrent::PublishProgress,
+) -> anyhow::Result<u64> {
+    use anyhow::Context;
+    use portalis_nexus_protocol::INFO_HASH_BYTES;
+
+    let files = stored
+        .sources
+        .iter()
+        .map(|source| crate::torrent::SourceFile {
+            name: source.label.clone(),
+            path: source.path.clone(),
+            length_bytes: Some(source.bytes),
+        })
+        .collect();
+    let published_torrent = substrate
+        .publish(stored.name.clone(), files, progress)
+        .await?;
+    let info_hash: [u8; INFO_HASH_BYTES] = hex::decode(&published_torrent.info.info_hash)?
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("published torrent returned an invalid info hash"))?;
+    let descriptor = published_torrent.descriptor;
+    let collection_id = <[u8; portalis_nexus_protocol::SHARE_ID_BYTES]>::try_from(key)
+        .map_err(|_| anyhow::anyhow!("stored collection key has the wrong length"))?;
+    let author = crate::device::current_nexus_identity()?;
+    let mut collection = crate::collections::model::Collection {
+        id: crate::collections::model::CollectionId(collection_id),
+        name: stored.name.clone(),
+        role: stored.role,
+        content_key: stored.content_key,
+        revision: None,
+        manifest: portalis_nexus_protocol::Manifest::default(),
+    };
+    crate::collections::publish::add_entry(
+        &mut collection,
+        &author,
+        info_hash,
+        stored.name.clone(),
+        None,
+        unix_time_ns(),
+    )?;
+    let (published, publication) = crate::collections::publish::publish(
+        &collection,
+        &author,
+        &[],
+        &[(info_hash, descriptor.clone())],
+        unix_time_ns(),
+    )?;
+    let manifest_hash = published.manifest.hash();
+    store
+        .put_manifest(&manifest_hash, &published.manifest.encode())
+        .context("persisting the initial Nexus manifest")?;
+    store
+        .put_entry(
+            &info_hash,
+            &crate::store::records::StoredEntry {
+                status: crate::store::records::EntryStatus::Available,
+                descriptor,
+            },
+        )
+        .context("persisting the initial Nexus descriptor")?;
+    store
+        .put_revision(
+            key,
+            publication.revision.number,
+            &publication.revision.encode(),
+        )
+        .context("persisting the initial Nexus revision")?;
+    // Recorded last, and only once the revision is durable: the handle is what
+    // attributes a holding back to this collection, and a handle pointing at a
+    // collection that failed to publish would attribute transfers to nothing.
+    store
+        .put_collection(
+            key,
+            &StoredCollection {
+                substrate_handle: Some(published_torrent.info.info_hash.clone()),
+                ..stored.clone()
+            },
+        )
+        .context("recording the collection's substrate handle")?;
+    Ok(publication.revision.number)
+}
+
+/// One collection's transfer history, packed for the bridge.
+///
+/// Empty rather than absent when the history cannot be read: a chart with no
+/// points is a truthful "nothing recorded yet", and refusing the whole detail
+/// tier over it would blank a screen that has plenty else to show.
+fn recorded_samples(store: &Store, key: &[u8]) -> Vec<u8> {
+    store
+        .samples(key)
+        .map(|samples| {
+            let mut packed = Vec::with_capacity(samples.len() * SAMPLE_ROW_BYTES);
+            for (at_unix_ns, sample) in samples {
+                packed.extend_from_slice(&at_unix_ns.to_be_bytes());
+                packed.extend_from_slice(&sample.down_bytes_per_second.to_be_bytes());
+                packed.extend_from_slice(&sample.up_bytes_per_second.to_be_bytes());
+                packed.extend_from_slice(&progress_permille(&sample).to_be_bytes());
+            }
+            packed
+        })
+        .unwrap_or_default()
+}
+
+/// One packed history row: `at_unix_ns ‖ down ‖ up ‖ progress`.
+///
+/// Fixed width so the far side reads it with an offset rather than a parser,
+/// and big-endian so it is read the same way everywhere.
+pub const SAMPLE_ROW_BYTES: usize = 8 + 4 + 4 + 2;
+
+/// Progress as thousandths, which is the resolution a chart can show.
+///
+/// Sent as an integer rather than a float because the bridge carries bytes:
+/// a `f32` would need its own encoding and would claim a precision no progress
+/// bar has pixels for.
+fn progress_permille(sample: &crate::store::records::StoredSample) -> u16 {
+    if sample.total == 0 {
+        return 0;
+    }
+    let permille = sample.done.saturating_mul(1000) / sample.total;
+    u16::try_from(permille).unwrap_or(1000).min(1000)
+}
+
+/// One bit per piece, packed, from the runs the substrate reports.
+///
+/// The substrate speaks in byte ranges per file; a person sees one bar for the
+/// whole collection. Verified runs become set bits and everything else stays
+/// clear, so a missing range needs no representation of its own.
+fn pieces_of(info: &crate::torrent::TorrentInfo) -> Vec<u8> {
+    const PIECES: usize = 512;
+    if info.total_bytes == 0 {
+        return Vec::new();
+    }
+    let mut bits = vec![0_u8; PIECES.div_ceil(8)];
+    let mut base = 0_u64;
+    for file in &info.files {
+        for run in &file.piece_runs {
+            if run.verified {
+                let from = span(base + run.offset_bytes, info.total_bytes, PIECES);
+                let to = span(
+                    base + run.offset_bytes + run.length_bytes,
+                    info.total_bytes,
+                    PIECES,
+                );
+                for piece in from..to.min(PIECES) {
+                    bits[piece / 8] |= 1 << (piece % 8);
+                }
+            }
+        }
+        base += file.length_bytes;
+    }
+    bits
+}
+
+/// Which of `pieces` bars a byte offset falls in.
+fn span(offset_bytes: u64, total_bytes: u64, pieces: usize) -> usize {
+    let pieces = pieces as u64;
+    usize::try_from(offset_bytes.saturating_mul(pieces) / total_bytes).unwrap_or(usize::MAX)
+}
+
+fn unix_time_ns() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| u64::try_from(duration.as_nanos()).ok())
+        .unwrap_or_default()
+}
+
+fn prepare_sources(files: &[LocalFile]) -> Result<Vec<StoredSourceFile>, CommandError> {
+    let mut sources = files
+        .iter()
+        .map(|file| crate::torrent::SourceFile {
+            name: file.name.clone(),
+            path: file.path.to_string_lossy().into_owned(),
+            length_bytes: Some(file.bytes),
+        })
+        .collect::<Vec<_>>();
+    crate::torrent::make_source_names_unique(&mut sources);
+    sources
+        .into_iter()
+        .map(|source| {
+            let location = crate::content_location::ContentLocation::from_source_path(&source.path)
+                .map_err(|error| CommandError::Invalid(error.to_string()))?;
+            let bytes = location
+                .length(source.length_bytes)
+                .map_err(|error| CommandError::Invalid(error.to_string()))?;
+            Ok(StoredSourceFile {
+                label: source.name,
+                path: source.path,
+                bytes,
+            })
+        })
+        .collect()
+}
+
+/// Removes a collection's downloaded bytes from this device.
+///
+/// An empty path is not an error: a collection whose media directory was never
+/// chosen has nothing to remove, and neither has one already emptied. Nor is a
+/// path that is not there — the outcome asked for is that the files are gone.
+fn remove_media(media_path: &str) -> Result<(), CommandError> {
+    if media_path.is_empty() {
+        return Ok(());
+    }
+    match std::fs::remove_dir_all(media_path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(CommandError::Persistence(format!(
+            "the downloaded files could not be removed: {error}"
+        ))),
     }
 }
 
@@ -600,7 +1309,8 @@ fn validate(command: &Command) -> Result<(), CommandError> {
             "choose a magnet URI or .torrent file"
         }
         Command::ImportTorrent { source }
-            if !source.starts_with("magnet:?") && !is_torrent_path(source) =>
+            if !crate::torrent::is_magnet(source)
+                && !crate::torrent::is_torrent_path(source) =>
         {
             "choose a magnet URI or a .torrent file"
         }
@@ -610,7 +1320,9 @@ fn validate(command: &Command) -> Result<(), CommandError> {
 }
 
 fn torrent_name(source: &str) -> String {
-    if source.starts_with("magnet:?") {
+    // A URL's tail is not a name: a magnet ends in whatever its last query
+    // parameter happens to be, which is frequently somebody else's filename.
+    if crate::torrent::is_remote_source(source) {
         return "Torrent import".to_owned();
     }
     std::path::Path::new(source)
@@ -618,13 +1330,6 @@ fn torrent_name(source: &str) -> String {
         .and_then(std::ffi::OsStr::to_str)
         .filter(|name| !name.is_empty())
         .map_or_else(|| "Torrent import".to_owned(), ToOwned::to_owned)
-}
-
-fn is_torrent_path(source: &str) -> bool {
-    std::path::Path::new(source)
-        .extension()
-        .and_then(std::ffi::OsStr::to_str)
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("torrent"))
 }
 
 #[cfg(test)]
@@ -657,11 +1362,48 @@ mod tests {
     }
 
     fn open(scratch: &Scratch) -> Nexus {
-        Nexus::open(&Config {
+        open_with_substrate(scratch, Arc::new(crate::substrate::Recorded::default()))
+    }
+
+    /// Waits for a background worker to reach `done`, or fails the test.
+    ///
+    /// Bounded and condition-driven rather than a fixed sleep: a worker that
+    /// never runs must fail loudly instead of passing on a slow machine and
+    /// failing on a fast one.
+    async fn settle(
+        _nexus: &Nexus,
+        watching: &mut watch::Receiver<Option<Detail>>,
+        done: impl Fn(Option<&Detail>) -> bool,
+    ) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            if done(watching.borrow().as_ref()) {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the worker never reached the expected state"
+            );
+            // Either the detail changed, or enough time passed to re-check a
+            // condition that does not depend on it.
+            let _ = tokio::time::timeout(Duration::from_millis(20), watching.changed()).await;
+        }
+    }
+
+    fn open_with_substrate(
+        scratch: &Scratch,
+        substrate: Arc<dyn crate::substrate::Substrate>,
+    ) -> Nexus {
+        let config = Config {
             data_dir: scratch.0.clone(),
             device_name: "Ada's laptop".to_owned(),
             fingerprint: "ada-fingerprint".to_owned(),
-        })
+        };
+        Nexus::open_with_store_and_substrate(
+            &config,
+            Arc::new(Store::open(scratch.0.join("portalis.redb")).expect("opens store")),
+            substrate,
+        )
         .expect("opens")
     }
 
@@ -669,12 +1411,14 @@ mod tests {
         CollectionState {
             id: Handle(1),
             name: name.to_owned(),
+            nature: Nature::Native,
             role: Role::Owner,
             revision: 1,
             status: Status::Available,
             members: Vec::new(),
             entries: 1,
             total_bytes: 10,
+            on_disk_bytes: 0,
             transfer: None,
             pending: None,
         }
@@ -693,6 +1437,256 @@ mod tests {
             collections,
             alerts: Vec::new(),
         }
+    }
+
+    /// A collection with a media directory holding one downloaded file.
+    fn with_media(nexus: &Nexus, scratch: &Scratch, bytes: u64) -> (Handle, std::path::PathBuf) {
+        nexus
+            .command(&Command::CreateCollection {
+                name: "Iceland".to_owned(),
+                files: Vec::new(),
+            })
+            .expect("creates locally");
+        let handle = nexus.state().collections[0].id;
+
+        let media = scratch.0.join("media");
+        std::fs::create_dir_all(&media).expect("a media directory");
+        std::fs::write(media.join("one.jpg"), vec![0_u8; 4]).expect("a downloaded file");
+
+        let key = nexus.collection_key(handle).expect("a known collection");
+        let mut stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads")
+            .expect("exists");
+        stored.media_path = media.to_string_lossy().into_owned();
+        stored.on_disk_bytes = bytes;
+        nexus.store.put_collection(&key, &stored).expect("writes");
+
+        (handle, media)
+    }
+
+    /// Pausing is a person's decision, so it has to outlast the process that
+    /// took it. A pause a crash undoes would have this device quietly resume a
+    /// transfer somebody stopped.
+    #[tokio::test]
+    async fn pausing_a_collection_is_reported_at_once_and_survives_a_restart() {
+        let scratch = Scratch::new("pause");
+        let nexus = open(&scratch);
+        nexus
+            .command(&Command::CreateCollection {
+                name: "Iceland".to_owned(),
+                files: Vec::new(),
+            })
+            .expect("creates locally");
+        let collection = nexus.state().collections[0].id;
+
+        nexus
+            .command(&Command::SetPaused {
+                collection,
+                paused: true,
+            })
+            .expect("pauses");
+        assert_eq!(nexus.state().collections[0].status, Status::Paused);
+        nexus.close().await;
+
+        let nexus = open(&scratch);
+        assert_eq!(
+            nexus.state().collections[0].status,
+            Status::Paused,
+            "a restart does not resume what a person stopped"
+        );
+
+        // And resuming hands it back to whatever the numbers say, rather than
+        // to a second flag that could disagree with them.
+        let collection = nexus.state().collections[0].id;
+        nexus
+            .command(&Command::SetPaused {
+                collection,
+                paused: false,
+            })
+            .expect("resumes");
+        assert_eq!(nexus.state().collections[0].status, Status::Available);
+        nexus.close().await;
+    }
+
+    /// Reclaiming disk space is not leaving the collection. Conflating the two
+    /// would lose a membership that cannot be recovered locally.
+    #[tokio::test]
+    async fn deleting_the_files_keeps_the_collection() {
+        let scratch = Scratch::new("delete-files");
+        let nexus = open(&scratch);
+        let (collection, media) = with_media(&nexus, &scratch, 4);
+
+        nexus
+            .command(&Command::DeleteFiles { collection })
+            .expect("deletes the files");
+
+        assert!(!media.exists(), "the downloaded bytes are gone");
+        let state = nexus.state();
+        assert_eq!(state.collections.len(), 1, "the collection is not");
+        assert_eq!(state.collections[0].on_disk_bytes, 0);
+
+        // Asking twice is not an error: the outcome asked for is that the
+        // files are gone, and they are.
+        nexus
+            .command(&Command::DeleteFiles { collection })
+            .expect("is content that they are already gone");
+        nexus.close().await;
+    }
+
+    /// The flag was parsed and ignored before this: deleting a collection left
+    /// its downloads behind with nothing left that knew where they were.
+    #[tokio::test]
+    async fn deleting_a_collection_with_its_files_removes_both() {
+        let scratch = Scratch::new("delete-both");
+        let nexus = open(&scratch);
+        let (collection, media) = with_media(&nexus, &scratch, 4);
+
+        nexus
+            .command(&Command::DeleteCollection {
+                collection,
+                delete_files: true,
+            })
+            .expect("deletes");
+
+        assert!(!media.exists(), "the downloaded bytes went with it");
+        assert!(nexus.state().collections.is_empty());
+        nexus.close().await;
+    }
+
+    /// The same command with the flag cleared keeps the bytes, which is what
+    /// makes the flag worth carrying.
+    #[tokio::test]
+    async fn deleting_a_collection_without_its_files_leaves_them() {
+        let scratch = Scratch::new("delete-record-only");
+        let nexus = open(&scratch);
+        let (collection, media) = with_media(&nexus, &scratch, 4);
+
+        nexus
+            .command(&Command::DeleteCollection {
+                collection,
+                delete_files: false,
+            })
+            .expect("deletes");
+
+        assert!(media.exists(), "the files are the person's to keep");
+        assert!(nexus.state().collections.is_empty());
+        nexus.close().await;
+    }
+
+    fn stored_sample(done: u64, total: u64) -> crate::store::records::StoredSample {
+        crate::store::records::StoredSample {
+            done,
+            total,
+            down_bytes_per_second: 1,
+            up_bytes_per_second: 2,
+            peers: 3,
+        }
+    }
+
+    /// Thousandths, because that is the resolution a progress bar has pixels
+    /// for, and an integer needs no encoding of its own to cross the bridge.
+    #[test]
+    fn progress_crosses_as_thousandths_and_never_exceeds_them() {
+        assert_eq!(progress_permille(&stored_sample(0, 100)), 0);
+        assert_eq!(progress_permille(&stored_sample(50, 100)), 500);
+        assert_eq!(progress_permille(&stored_sample(100, 100)), 1000);
+        // A total of zero is metadata that has not arrived, not a finished
+        // transfer, and dividing by it would be worse than saying nothing.
+        assert_eq!(progress_permille(&stored_sample(5, 0)), 0);
+        assert_eq!(
+            progress_permille(&stored_sample(u64::MAX, 1)),
+            1000,
+            "clamped rather than wrapped"
+        );
+    }
+
+    /// The substrate speaks in byte ranges per file and a person sees one bar
+    /// for the whole collection, so the runs are folded onto a fixed number of
+    /// bars rather than sent as they arrive.
+    #[test]
+    fn verified_runs_become_set_bits_and_everything_else_stays_clear() {
+        let mut info = crate::torrent::TorrentInfo {
+            id: 1,
+            info_hash: "a1".to_owned(),
+            name: "Iceland".to_owned(),
+            state: "live".to_owned(),
+            progress_bytes: 50,
+            total_bytes: 100,
+            uploaded_bytes: 0,
+            download_mbps: 0.0,
+            upload_mbps: 0.0,
+            finished: false,
+            error: None,
+            files: vec![crate::torrent::TorrentFile {
+                name: "one.jpg".to_owned(),
+                absolute_path: "/tmp/one.jpg".to_owned(),
+                length_bytes: 100,
+                downloaded_bytes: 50,
+                piece_runs: vec![crate::torrent::PieceRun {
+                    offset_bytes: 0,
+                    length_bytes: 50,
+                    verified: true,
+                    peers: Vec::new(),
+                }],
+            }],
+            live_peers: 0,
+            live_peer_addrs: Vec::new(),
+        };
+
+        let bits = pieces_of(&info);
+        assert_eq!(bits.len(), 64, "512 bars, packed");
+        let set = bits.iter().map(|byte| byte.count_ones()).sum::<u32>();
+        assert_eq!(set, 256, "the verified half, and only it");
+
+        // A collection whose size is not known yet has no bars to draw.
+        info.total_bytes = 0;
+        assert!(pieces_of(&info).is_empty());
+
+        // An unverified run is not a filled bar: having asked for bytes is not
+        // the same as holding them.
+        info.total_bytes = 100;
+        info.files[0].piece_runs[0].verified = false;
+        assert!(pieces_of(&info).iter().all(|byte| *byte == 0));
+    }
+
+    /// The history reaches the interface as fixed-width rows, so the far side
+    /// reads it with an offset rather than a parser.
+    #[tokio::test]
+    async fn the_transfer_history_crosses_as_fixed_width_rows() {
+        let scratch = Scratch::new("history");
+        let nexus = open(&scratch);
+        nexus
+            .command(&Command::CreateCollection {
+                name: "Iceland".to_owned(),
+                files: Vec::new(),
+            })
+            .expect("creates locally");
+        let collection = nexus.state().collections[0].id;
+        let key = nexus.collection_key(collection).expect("known");
+
+        assert!(
+            recorded_samples(&nexus.store, &key).is_empty(),
+            "nothing recorded yet is an empty chart, not a missing one"
+        );
+
+        for (at, done) in [(10_u64, 25_u64), (20, 50)] {
+            nexus
+                .store
+                .put_sample(&key, at, &stored_sample(done, 100))
+                .expect("records");
+        }
+
+        let packed = recorded_samples(&nexus.store, &key);
+        assert_eq!(packed.len(), 2 * SAMPLE_ROW_BYTES);
+        // The newest row last, and carrying what it was told.
+        let last = &packed[SAMPLE_ROW_BYTES..];
+        assert_eq!(u64::from_be_bytes(last[0..8].try_into().unwrap()), 20);
+        assert_eq!(u32::from_be_bytes(last[8..12].try_into().unwrap()), 1);
+        assert_eq!(u32::from_be_bytes(last[12..16].try_into().unwrap()), 2);
+        assert_eq!(u16::from_be_bytes(last[16..18].try_into().unwrap()), 500);
+        nexus.close().await;
     }
 
     /// The promise a restart depends on.
@@ -831,6 +1825,151 @@ mod tests {
         empty.close().await;
     }
 
+    /// Creating a share persists references to the originals, not their
+    /// contents, and reconstructs the same useful projection after restart.
+    #[tokio::test]
+    async fn selected_files_are_durable_zero_copy_collection_sources() {
+        let scratch = Scratch::new("durable-sources");
+        let first_path = scratch.0.join("episode-one.mp4");
+        let second_path = scratch.0.join("episode-two.mp4");
+        std::fs::write(&first_path, b"first").expect("writes first source");
+        std::fs::write(&second_path, b"second episode").expect("writes second source");
+        let nexus = open(&scratch);
+
+        let accepted = nexus
+            .command(&Command::CreateCollection {
+                name: "Episode archive".to_owned(),
+                files: vec![
+                    LocalFile {
+                        name: "Episode 1.mp4".to_owned(),
+                        path: first_path.clone(),
+                        bytes: 5,
+                    },
+                    LocalFile {
+                        name: "Episode 2.mp4".to_owned(),
+                        path: second_path.clone(),
+                        bytes: 14,
+                    },
+                ],
+            })
+            .expect("accepts original files");
+        let handle = accepted.collection.expect("names the collection");
+        let state = nexus.state();
+        assert_eq!(state.collections[0].nature, Nature::Native);
+        assert_eq!(state.collections[0].status, Status::Preparing);
+        assert_eq!(state.collections[0].entries, 2);
+        assert_eq!(state.collections[0].total_bytes, 19);
+        let detail = nexus
+            .watch_detail(Some(handle))
+            .borrow()
+            .clone()
+            .expect("projects local files");
+        assert_eq!(detail.entries[0].label, "Episode 1.mp4");
+        assert!(detail.entries.iter().all(|entry| entry.available));
+
+        let key = nexus.collection_key(handle).expect("has a durable key");
+        let stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("collection exists")
+            .sources;
+        assert_eq!(stored[0].path, first_path.to_string_lossy());
+        assert_eq!(
+            std::fs::read(&first_path).expect("original remains"),
+            b"first"
+        );
+        nexus.close().await;
+
+        let reopened = open(&scratch);
+        assert_eq!(reopened.state().collections[0].entries, 2);
+        assert_eq!(reopened.state().collections[0].total_bytes, 19);
+        let reopened_detail = reopened
+            .watch_detail(Some(reopened.state().collections[0].id))
+            .borrow()
+            .clone()
+            .expect("restores detail");
+        assert_eq!(reopened_detail.entries[1].label, "Episode 2.mp4");
+        assert_eq!(
+            std::fs::read(&second_path).expect("original remains"),
+            b"second episode"
+        );
+        reopened.close().await;
+    }
+
+    #[tokio::test]
+    async fn a_native_collection_publishes_through_the_injected_zero_copy_substrate() {
+        let _state = crate::paths::redirect_to_temp();
+        let scratch = Scratch::new("publish-sources");
+        let source = scratch.0.join("episode.mp4");
+        std::fs::write(&source, b"episode").expect("writes source");
+        let substrate = Arc::new(crate::substrate::Recorded::publishing(
+            "11".repeat(20),
+            b"torrent descriptor".to_vec(),
+        ));
+        let nexus = open_with_substrate(&scratch, substrate.clone());
+        let mut states = nexus.watch();
+
+        nexus
+            .command(&Command::CreateCollection {
+                name: "Episodes".to_owned(),
+                files: vec![LocalFile {
+                    name: "episode.mp4".to_owned(),
+                    path: source,
+                    bytes: 7,
+                }],
+            })
+            .expect("accepts source");
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if states
+                    .borrow()
+                    .collections
+                    .first()
+                    .is_some_and(|collection| {
+                        collection.status == Status::Available && collection.revision == 1
+                    })
+                {
+                    break;
+                }
+                states.changed().await.expect("runtime remains open");
+            }
+        })
+        .await
+        .expect("publisher settles");
+
+        assert_eq!(
+            substrate
+                .published
+                .lock()
+                .expect("publication log")
+                .as_slice(),
+            ["Episodes"]
+        );
+        let key = nexus
+            .collection_key(nexus.state().collections[0].id)
+            .expect("collection key");
+        assert_eq!(
+            nexus
+                .store
+                .current_revision(&key)
+                .expect("reads revision")
+                .expect("revision exists")
+                .0,
+            1
+        );
+        assert_eq!(
+            nexus
+                .store
+                .entry(&[0x11; 20])
+                .expect("reads descriptor")
+                .expect("descriptor exists")
+                .descriptor,
+            b"torrent descriptor"
+        );
+        nexus.close().await;
+    }
+
     /// Every refusal a command can earn without touching state.
     #[tokio::test]
     async fn a_malformed_command_is_refused_with_the_reason() {
@@ -902,6 +2041,7 @@ mod tests {
             entries: Vec::new(),
             pieces: vec![0xff; 8],
             samples: Vec::new(),
+            peers: Vec::new(),
         };
 
         nexus.publish(&quiet, Some(&detail), Duration::ZERO);
@@ -915,9 +2055,24 @@ mod tests {
         nexus.publish(&quiet, Some(&detail), Duration::from_secs(1));
         assert_eq!(watching.borrow().clone(), Some(detail));
 
-        // Closing the view stops it at once.
+        // Closing the view stops it — by dropping the receiver, which is
+        // what a closed screen actually does. There is no way to forget: a
+        // subscription that ends stops being refreshed whether or not anyone
+        // announces it.
+        drop(watching);
+        nexus.refresh_detail(Handle(1));
+        assert!(
+            nexus
+                .detail_senders()
+                .get(&Handle(1))
+                .is_some_and(|sender| sender.receiver_count() == 0),
+            "nothing is refreshed for a view nobody holds"
+        );
+
+        // The empty slot itself is swept the next time anyone asks, so a
+        // long session does not accumulate one per collection ever opened.
         nexus.watch_detail(None);
-        assert_eq!(*watching.borrow(), None);
+        assert!(nexus.detail_senders().is_empty());
         nexus.close().await;
     }
 
@@ -971,85 +2126,90 @@ mod tests {
         reopened.close().await;
     }
 
+    /// A source is recorded at once and resolved afterwards, whether it is a
+    /// local descriptor or a magnet. The interface sees "preparing" and then
+    /// a file list, and never a command that blocked on a swarm.
     #[tokio::test]
-    async fn a_local_torrent_resolves_a_durable_selection_without_downloading() {
-        let scratch = Scratch::new("local-torrent-import");
-        let source = scratch.0.join("fixture.torrent");
-        std::fs::write(
-            &source,
-            b"d4:infod5:filesld6:lengthi5e4:pathl5:a.txteed6:lengthi7e4:pathl5:b.txteee4:name6:Bundle12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaee",
-        )
-        .expect("writes descriptor");
-        let nexus = open(&scratch);
+    async fn a_torrent_source_resolves_into_a_selection_then_downloads_it() {
+        let scratch = Scratch::new("torrent-import");
+        let substrate = Arc::new(crate::substrate::Recorded::inspecting(
+            crate::substrate::Inspected {
+                info_hash: "abc123".to_owned(),
+                name: "Bundle".to_owned(),
+                files: vec![
+                    crate::torrent::TorrentMetadataFile {
+                        label: "a.txt".to_owned(),
+                        bytes: 5,
+                    },
+                    crate::torrent::TorrentMetadataFile {
+                        label: "b.txt".to_owned(),
+                        bytes: 7,
+                    },
+                ],
+                descriptor: b"descriptor".to_vec(),
+            },
+        ));
+        let nexus = open_with_substrate(&scratch, substrate.clone());
 
         let accepted = nexus
             .command(&Command::ImportTorrent {
-                source: source.display().to_string(),
+                source: "magnet:?xt=urn:btih:abc123".to_owned(),
             })
-            .expect("imports metadata only");
-        let imported = nexus.state().collections[0].clone();
-        assert_eq!(accepted.collection, Some(imported.id));
-        assert_eq!(imported.name, "Bundle");
-        assert_eq!(imported.status, Status::Preparing);
-        assert_eq!(imported.entries, 2);
-        assert_eq!(imported.total_bytes, 12);
+            .expect("records the source");
+        let handle = accepted.collection.expect("names its collection");
 
-        let detail = nexus.watch_detail(Some(imported.id));
-        let detail = detail.borrow().clone().expect("selection detail");
-        assert_eq!(detail.entries.len(), 2);
+        // Immediately: a row exists, and it does not pretend to know what is
+        // inside.
+        let imported = nexus.state().collections[0].clone();
+        assert_eq!(imported.status, Status::Preparing);
+        assert_eq!(imported.entries, 0, "nothing is known yet");
+
+        let mut watching = nexus.watch_detail(Some(handle));
+        settle(&nexus, &mut watching, |detail| {
+            detail.is_some_and(|detail| detail.entries.len() == 2)
+        })
+        .await;
+
+        // The worker resolved it: the real name, the real files, all chosen.
+        let resolved = nexus.state().collections[0].clone();
+        assert_eq!(resolved.name, "Bundle", "the source's own name replaces the placeholder");
+        assert_eq!(resolved.entries, 2);
+        assert_eq!(resolved.total_bytes, 12);
+        let detail = watching.borrow().clone().expect("a selection");
         assert_eq!(detail.entries[0].label, "a.txt");
-        assert_eq!(detail.entries[0].bytes, 5);
         assert!(
             detail.entries.iter().all(|entry| entry.selected),
             "everything starts selected"
         );
-        assert!(!detail.entries[0].available, "nothing was downloaded");
+        assert!(
+            substrate.selections.lock().unwrap().is_empty(),
+            "and nothing is downloaded before anyone chooses"
+        );
 
+        // Choosing one file starts exactly that download.
         assert!(matches!(
             nexus.command(&Command::DownloadSelection {
-                collection: imported.id,
+                collection: handle,
                 entries: Vec::new(),
             }),
             Err(CommandError::Invalid(message)) if message.contains("at least one")
         ));
         nexus
             .command(&Command::DownloadSelection {
-                collection: imported.id,
+                collection: handle,
                 entries: vec![Handle(2)],
             })
-            .expect("records a confirmed selection");
-        let detail = nexus.watch_detail(Some(imported.id));
-        assert_eq!(
-            detail.borrow().as_ref().map(|detail| detail
-                .entries
-                .iter()
-                .map(|entry| entry.selected)
-                .collect::<Vec<_>>()),
-            Some(vec![false, true]),
-            "only the confirmed file remains selected"
-        );
-        nexus.close().await;
+            .expect("confirms a selection");
 
-        std::fs::remove_file(source).expect("the original path is no longer needed");
-        let reopened = open(&scratch);
-        let restored = reopened.state().collections[0].clone();
-        assert_eq!(restored.entries, 2);
-        let detail = reopened.watch_detail(Some(restored.id));
-        assert_eq!(
-            detail.borrow().as_ref().map(|detail| {
-                (
-                    detail.entries.len(),
-                    detail
-                        .entries
-                        .iter()
-                        .map(|entry| entry.selected)
-                        .collect::<Vec<_>>(),
-                )
-            }),
-            Some((2, vec![false, true])),
-            "the selection was persisted with the collection"
-        );
-        reopened.close().await;
+        settle(&nexus, &mut watching, |_| {
+            !substrate.selections.lock().unwrap().is_empty()
+        })
+        .await;
+        let selections = substrate.selections.lock().unwrap().clone();
+        let (source, files, _) = selections.first().expect("one download started");
+        assert_eq!(source, "magnet:?xt=urn:btih:abc123");
+        assert_eq!(files, &[1], "only the confirmed file, by its index");
+        nexus.close().await;
     }
 
     #[tokio::test]

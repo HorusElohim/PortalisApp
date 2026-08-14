@@ -703,6 +703,10 @@ mod tests {
             role: Role::Owner,
             content_key: [7; CONTENT_KEY_BYTES],
             media_path: "/media".to_owned(),
+            sources: Vec::new(),
+            paused: false,
+            on_disk_bytes: 0,
+            substrate_handle: None,
         }
     }
 
