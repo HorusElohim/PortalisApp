@@ -3,7 +3,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 import '../../../design/toast.dart';
 import '../domain/paste.dart';
 

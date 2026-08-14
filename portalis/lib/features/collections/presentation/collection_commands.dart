@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 
 /// Lifecycle and destructive actions reserved for a collection command API.
 enum CollectionCommand { restart, pause, delete }

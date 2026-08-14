@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
+import 'theme.dart';
 
 /// A fixed-height, drag-to-resize frame around a media grid.
 ///

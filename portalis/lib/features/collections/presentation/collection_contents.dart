@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 import '../../media/domain/media_item.dart';
 import '../../media/presentation/media_grid.dart';
 import '../domain/collection.dart';

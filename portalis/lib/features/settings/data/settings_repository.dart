@@ -1,6 +1,6 @@
-import '../../../bridge_generated/portalis_api.dart' as nexus_bridge;
-import '../../../bridge_generated/settings.dart' as settings_bridge;
-import '../../../bridge_generated/torrent.dart' as torrent_bridge;
+import '../../../nexus/bridge/portalis_api.dart' as nexus_bridge;
+import '../../../nexus/bridge/settings.dart' as settings_bridge;
+import '../../../nexus/bridge/torrent.dart' as torrent_bridge;
 import '../domain/engine_settings.dart';
 import '../domain/storage_entry.dart';
 

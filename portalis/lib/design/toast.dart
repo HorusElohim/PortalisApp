@@ -4,7 +4,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
+import 'theme.dart';
 import 'identity.dart';
 
 /// How much the message matters, which is the only thing that decides its

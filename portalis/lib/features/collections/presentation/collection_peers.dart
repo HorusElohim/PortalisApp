@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/peer_chip.dart';
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 import '../domain/collection.dart';
 import '../domain/peer_observation.dart';
 import 'collection_presentation.dart';

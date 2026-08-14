@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 import '../domain/collection_import.dart';
 
 /// Real-time local publication progress reported by the Rust backend.

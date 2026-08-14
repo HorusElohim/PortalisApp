@@ -3,7 +3,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
+import 'theme.dart';
 import 'formatters.dart';
 
 /// Pulsing "live copies" indicator dot, used next to a copies label.

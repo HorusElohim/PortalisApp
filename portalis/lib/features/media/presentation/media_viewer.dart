@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../design/design.dart';
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 import '../../collections/domain/collection.dart';
 import '../../collections/presentation/collection_presentation.dart';
 import '../domain/media_item.dart';

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'design.dart';
-import '../theme.dart';
+import 'theme.dart';
 
 /// One peer, named or anonymous.
 ///

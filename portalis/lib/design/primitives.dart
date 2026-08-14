@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
+import 'theme.dart';
 import 'window.dart';
 
 /// The horizontal gutter every screen's content sits inside.

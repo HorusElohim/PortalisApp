@@ -6,12 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/features/collections/domain/picked_file.dart';
 import 'package:portalis/features/collections/presentation/collection_overview.dart';
 import 'package:portalis/features/collections/presentation/collection_share.dart';
-import 'package:portalis/features/nexus/application/nexus_app_controller.dart';
-import 'package:portalis/features/nexus/data/nexus_app_repository.dart';
-import 'package:portalis/features/nexus/data/nexus_collection_source.dart';
-import 'package:portalis/features/nexus/domain/nexus_app_state.dart';
-import 'package:portalis/features/nexus/presentation/nexus_collection_detail.dart';
-import 'package:portalis/features/nexus/presentation/nexus_home_library.dart';
+import 'package:portalis/nexus/application/nexus_app_controller.dart';
+import 'package:portalis/nexus/data/nexus_app_repository.dart';
+import 'package:portalis/nexus/data/nexus_collection_source.dart';
+import 'package:portalis/nexus/domain/nexus_app_state.dart';
+import 'package:portalis/features/collections/presentation/nexus_collection_detail.dart';
+import 'package:portalis/features/collections/presentation/nexus_home_library.dart';
 
 void main() {
   test('owns one state subscription and forwards lifecycle changes', () async {

@@ -8,10 +8,10 @@ import 'package:image_picker/image_picker.dart' hide PickedFile;
 
 import '../../../app/app_controllers.dart';
 import '../../../design/design.dart';
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 import '../../media/application/media_formats.dart';
-import '../../nexus/application/nexus_app_controller.dart';
-import '../../nexus/domain/nexus_app_state.dart';
+import '../../../nexus/application/nexus_app_controller.dart';
+import '../../../nexus/domain/nexus_app_state.dart';
 import '../domain/picked_file.dart';
 import '../platform/no_copy_source_picker.dart';
 import '../platform/photo_library_picker.dart';

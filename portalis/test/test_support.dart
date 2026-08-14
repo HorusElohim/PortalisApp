@@ -6,10 +6,10 @@ import 'package:portalis/app/app_controllers.dart';
 import 'package:portalis/features/collections/domain/collection.dart';
 import 'package:portalis/features/collections/domain/collection_import.dart';
 import 'package:portalis/features/media/domain/media_item.dart';
-import 'package:portalis/features/nexus/domain/nexus_app_state.dart';
+import 'package:portalis/nexus/domain/nexus_app_state.dart';
 import 'package:portalis/features/settings/domain/engine_settings.dart';
 import 'package:portalis/main.dart';
-import 'package:portalis/services/navigation.dart';
+import 'package:portalis/shell/navigation.dart';
 
 export 'package:flutter/material.dart';
 export 'package:flutter_test/flutter_test.dart';
@@ -23,16 +23,16 @@ export 'package:portalis/features/collections/presentation/collection_share.dart
 export 'package:portalis/features/collections/presentation/command_bar.dart';
 export 'package:portalis/features/media/domain/media_item.dart';
 export 'package:portalis/features/media/presentation/media_viewer_screen.dart';
-export 'package:portalis/features/nexus/domain/nexus_app_state.dart';
-export 'package:portalis/features/nexus/presentation/nexus_collection_detail.dart';
+export 'package:portalis/nexus/domain/nexus_app_state.dart';
+export 'package:portalis/features/collections/presentation/nexus_collection_detail.dart';
 export 'package:portalis/features/settings/domain/engine_settings.dart';
 export 'package:portalis/main.dart';
-export 'package:portalis/screens/people.dart';
-export 'package:portalis/screens/root_shell.dart';
-export 'package:portalis/screens/settings.dart';
-export 'package:portalis/screens/user.dart';
-export 'package:portalis/services/navigation.dart';
-export 'package:portalis/theme.dart';
+export 'package:portalis/features/people/presentation/people_screen.dart';
+export 'package:portalis/shell/root_shell.dart';
+export 'package:portalis/features/settings/presentation/settings_screen.dart';
+export 'package:portalis/features/identity/presentation/user_screen.dart';
+export 'package:portalis/shell/navigation.dart';
+export 'package:portalis/design/theme.dart';
 
 const phoneSize = Size(390, 844);
 const desktopSize = Size(1280, 800);

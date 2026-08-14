@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 import '../../identity/domain/device_profile.dart';
 
 /// Device identity, session totals, and identity-related destinations.

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 import '../application/efficiency_benchmark.dart';
 
 /// A quiet, animated proof that the local settings surface is responsive.

@@ -36,7 +36,7 @@ function maybe_codegen() {
   flutter_rust_bridge_codegen generate \
     --rust-root "$CRATE" \
     --rust-input crate::bridge,crate::portalis_api,crate::torrent,crate::device,crate::settings,crate::nexus_settings \
-    --dart-output "lib/bridge_generated" \
+    --dart-output "lib/nexus/bridge" \
     --rust-output "$CRATE/src/api.rs" \
     --no-add-mod-to-lib
 }

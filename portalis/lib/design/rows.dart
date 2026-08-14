@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../theme.dart';
+import 'theme.dart';
 import 'primitives.dart';
 import 'toast.dart';
 

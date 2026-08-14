@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
+import 'theme.dart';
 
 /// The semantic accent applied to an [ActionButton].
 enum ActionButtonTone { signal, ember, neutral }

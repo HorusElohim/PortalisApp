@@ -1,4 +1,4 @@
-import '../../../bridge_generated/device.dart' as bridge;
+import '../../../nexus/bridge/device.dart' as bridge;
 import '../domain/device_profile.dart';
 
 abstract interface class IdentityRepository {

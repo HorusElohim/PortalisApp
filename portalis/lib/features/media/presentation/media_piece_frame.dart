@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 import '../domain/media_item.dart';
 
 /// Paints only piece state supplied by the backend. When older/unavailable

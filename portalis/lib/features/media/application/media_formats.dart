@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 
 /// What the app can actually do with a file of a given type, in the app.
 ///

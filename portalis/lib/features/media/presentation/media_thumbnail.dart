@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 import '../application/media_formats.dart';
 import '../domain/media_item.dart';
 import '../platform/heic_preview.dart';

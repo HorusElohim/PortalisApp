@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
+import 'theme.dart';
 
 /// Prompts for a single text value.
 ///

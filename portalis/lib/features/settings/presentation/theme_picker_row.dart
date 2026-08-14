@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
-import '../../../theme.dart';
-import '../../../theme_palette.dart';
-import '../../appearance/application/theme_controller.dart';
+import '../../../design/theme.dart';
+import '../../../design/palette.dart';
+import '../../../design/theme_controller.dart';
 
 /// Two tappable swatches — Nature and Future — for the Settings appearance
 /// section. Each shows the palette's own `signal → ember` gradient rather

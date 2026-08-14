@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../design/design.dart';
-import '../features/appearance/application/theme_controller.dart';
-import '../screens/root_shell.dart';
-import '../services/navigation.dart';
-import '../theme.dart';
+import '../design/theme_controller.dart';
+import '../shell/root_shell.dart';
+import '../shell/navigation.dart';
+import '../design/theme.dart';
 
 /// Flutter composition. Native startup lives in the bootstrap module.
 class MyApp extends StatelessWidget {

@@ -20,7 +20,7 @@ import 'collection_contents.dart';
 import 'collection_commands.dart';
 import 'collection_overview.dart';
 import 'collection_source.dart';
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 
 /// Shows one collection and coordinates user actions with whichever
 /// [CollectionSource] backs it. Collection-specific rendering lives in the

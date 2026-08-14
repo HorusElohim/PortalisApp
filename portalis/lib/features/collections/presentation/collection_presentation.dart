@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 import '../../../design/formatters.dart';
 import '../domain/collection.dart';
 

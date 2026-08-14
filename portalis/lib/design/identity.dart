@@ -2,8 +2,8 @@
 
 import 'package:flutter/material.dart';
 
-import '../features/appearance/application/theme_controller.dart';
-import '../theme.dart';
+import 'theme_controller.dart';
+import 'theme.dart';
 import 'indicators.dart';
 
 /// Portalis mark used in persistent chrome and transient event feedback.

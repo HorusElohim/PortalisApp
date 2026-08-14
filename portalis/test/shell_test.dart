@@ -1,5 +1,5 @@
 import 'test_support.dart';
-import 'package:portalis/screens/mobile_shell_layout.dart';
+import 'package:portalis/shell/mobile/bottom_nav.dart';
 
 void main() {
   tearDown(resetTestState);

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
-import '../../../theme.dart' show AppColors, AppRadius, monoLabel;
+import '../../../design/theme.dart' show AppColors, AppRadius, monoLabel;
 
 /// The single entry point for creating a collection from the library.
 class ShareCollectionAction extends StatelessWidget {

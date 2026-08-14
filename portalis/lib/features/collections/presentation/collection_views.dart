@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../../../theme.dart';
+import '../../../design/theme.dart';
 import '../../../design/formatters.dart';
 import '../../media/presentation/media_thumbnail.dart';
 import '../domain/collection.dart';

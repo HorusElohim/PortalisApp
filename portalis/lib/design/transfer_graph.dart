@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:portalis/design/formatters.dart';
-import 'package:portalis/theme.dart';
+import 'package:portalis/design/theme.dart';
 
 /// A point in the transfer history shown by [TransferGraph].
 class TransferPoint {

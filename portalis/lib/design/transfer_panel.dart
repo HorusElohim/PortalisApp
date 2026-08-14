@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
+import 'theme.dart';
 import 'formatters.dart';
 import 'transfer_graph.dart';
 

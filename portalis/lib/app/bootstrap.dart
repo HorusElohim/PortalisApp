@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:video_player_media_kit/video_player_media_kit.dart';
 
-import '../bridge_generated/bridge.dart';
-import '../bridge_generated/frb_generated.dart';
-import '../features/appearance/application/theme_controller.dart';
+import '../nexus/bridge/bridge.dart';
+import '../nexus/bridge/frb_generated.dart';
+import '../design/theme_controller.dart';
 import '../version.dart';
 import 'app_controllers.dart';
 import 'portalis_app.dart';

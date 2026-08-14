@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
+import 'theme.dart';
 import 'controls.dart';
 import 'primitives.dart';
 import 'window.dart';
