@@ -24,7 +24,7 @@ export 'package:portalis/features/collections/presentation/command_bar.dart';
 export 'package:portalis/features/media/domain/media_item.dart';
 export 'package:portalis/features/media/presentation/media_viewer_screen.dart';
 export 'package:portalis/features/nexus/domain/nexus_app_state.dart';
-export 'package:portalis/features/nexus/presentation/nexus_torrent_preparation.dart';
+export 'package:portalis/features/nexus/presentation/nexus_collection_detail.dart';
 export 'package:portalis/features/settings/domain/engine_settings.dart';
 export 'package:portalis/main.dart';
 export 'package:portalis/screens/people.dart';

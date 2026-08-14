@@ -13,10 +13,15 @@ class CollectionContents extends StatelessWidget {
     super.key,
     required this.collection,
     required this.onOpenMedia,
+    this.onToggleWanted,
   });
 
   final Collection collection;
   final ValueChanged<MediaItem> onOpenMedia;
+
+  /// Passed straight to the grids. `null` where the collection's files are
+  /// not a choice — see [MediaGrid.onToggleWanted].
+  final ValueChanged<MediaItem>? onToggleWanted;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +31,7 @@ class CollectionContents extends StatelessWidget {
         media: collection.media,
         color: collection.hue,
         onOpenMedia: onOpenMedia,
+        onToggleWanted: onToggleWanted,
       );
     }
     return Column(
@@ -38,6 +44,7 @@ class CollectionContents extends StatelessWidget {
             color: collection.hue,
             media: entry.media,
             onOpenMedia: onOpenMedia,
+            onToggleWanted: onToggleWanted,
           ),
           const SizedBox(height: 18),
         ],

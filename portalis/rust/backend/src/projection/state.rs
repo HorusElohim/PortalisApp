@@ -296,7 +296,12 @@ pub enum Command {
     ImportTorrent {
         source: String,
     },
-    /// Starts only the entries selected after torrent metadata is available.
+    /// Says which entries of a torrent import are wanted.
+    ///
+    /// The same command before and after the download starts: it records the
+    /// choice, and the worker asserts it against the engine either by starting
+    /// a download or by revising one already running. Choosing was once a gate
+    /// you passed through exactly once, which left the first answer permanent.
     DownloadSelection {
         collection: Handle,
         entries: Vec<Handle>,

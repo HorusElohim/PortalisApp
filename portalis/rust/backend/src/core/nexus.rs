@@ -920,9 +920,10 @@ impl Nexus {
             .put_torrent_import_entries(&key, &entries)
             .map_err(persistence)?;
         self.refresh_detail(collection);
-        // The worker is what actually starts the download; this only
-        // recorded the choice. A full channel already holds the one wake it
-        // needs.
+        // The worker is what tells the engine; this only recorded the choice.
+        // It starts the download the first time and revises a running one
+        // afterwards, so this path does not need to know which case it is in.
+        // A full channel already holds the one wake it needs.
         let _ = self.torrents.try_send(());
         Ok(())
     }

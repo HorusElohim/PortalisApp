@@ -12,6 +12,8 @@ class MediaItem {
     this.pieceRuns = const [],
     this.fetched = true,
     this.addedBy,
+    this.entryId,
+    this.selected = true,
   }) : _entryLabel = entryLabel;
 
   final String label;
@@ -24,6 +26,17 @@ class MediaItem {
   final List<MediaPieceRun> pieceRuns;
   final bool fetched;
   final String? addedBy;
+
+  /// How the backend addresses this file when it is asked to fetch or drop
+  /// it. `null` where files are not individually addressable, which is what
+  /// makes them unselectable rather than selectable-and-broken.
+  final int? entryId;
+
+  /// Whether this file is one the collection is set to fetch.
+  ///
+  /// Only meaningful where a source offers the choice at all; everywhere else
+  /// every file is simply wanted, which is the default.
+  final bool selected;
 
   /// The signed name of the collection entry that introduced this file.
   String get entryLabel => _entryLabel ?? label;

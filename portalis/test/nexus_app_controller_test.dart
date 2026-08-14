@@ -12,7 +12,6 @@ import 'package:portalis/features/nexus/data/nexus_collection_source.dart';
 import 'package:portalis/features/nexus/domain/nexus_app_state.dart';
 import 'package:portalis/features/nexus/presentation/nexus_collection_detail.dart';
 import 'package:portalis/features/nexus/presentation/nexus_home_library.dart';
-import 'package:portalis/features/nexus/presentation/nexus_torrent_preparation.dart';
 
 void main() {
   test('owns one state subscription and forwards lifecycle changes', () async {
@@ -64,15 +63,23 @@ void main() {
     expect(repository.detailCollections, [9]);
   });
 
-  testWidgets('a torrent preparation edits and confirms only selected files',
-      (tester) async {
+  /// Choosing files happens on the collection itself, for as long as the
+  /// collection exists — not on a preparation screen passed through once. The
+  /// whole selection is sent each time, so the backend never has to reconcile
+  /// a delta against what a screen believed it last saw.
+  testWidgets('a torrent collection deselects a file in place', (tester) async {
     final repository = _Repository();
     final controller = NexusAppController(repository: repository);
+    await controller.start();
+    await tester.binding.setSurfaceSize(const Size(420, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
-        home: NexusTorrentPreparation(collection: 9, controller: controller),
+        home: NexusCollectionDetail(collection: 9, controller: controller),
       ),
     );
+    repository.states.add(_torrentState());
+    await tester.pump();
     repository.details.add(
       NexusDetail(
         id: 9,
@@ -98,18 +105,59 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('trailer.mp4'), findsOneWidget);
     expect(find.text('feature.mp4'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('nexusTorrentEntry:1')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('nexusConfirmSelection')));
+    await tester.tap(find.byKey(const Key('mediaWanted:1')));
     await tester.pump();
 
     expect(repository.commands, hasLength(1));
     expect(repository.commands.single.kind, 'downloadSelection');
     expect(repository.commands.single.collection, 9);
     expect(repository.commands.single.entries, [2]);
+  });
+
+  /// Deselecting the last file would ask the engine to fetch nothing, which
+  /// is a collection that exists and does nothing — deleting it is what a
+  /// person means by that, so the command is refused rather than sent.
+  testWidgets('the last wanted file cannot be deselected', (tester) async {
+    final repository = _Repository();
+    final controller = NexusAppController(repository: repository);
+    await controller.start();
+    await tester.binding.setSurfaceSize(const Size(420, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NexusCollectionDetail(collection: 9, controller: controller),
+      ),
+    );
+    repository.states.add(_torrentState());
+    await tester.pump();
+    repository.details.add(
+      NexusDetail(
+        id: 9,
+        entries: [
+          NexusEntry(
+            id: 1,
+            label: 'only.mp4',
+            bytes: BigInt.from(5),
+            selected: true,
+            available: false,
+          ),
+        ],
+        pieces: const [],
+        samples: const [],
+        peers: const [],
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(find.byKey(const Key('mediaWanted:1')));
+    await tester.pump();
+
+    expect(repository.commands, isEmpty);
   });
 
   /// Sharing local files needs a no-copy picker, which Android and iOS do
@@ -495,6 +543,37 @@ NexusAppState _state(String name) => NexusAppState(
       connectivity: 'LocalOnly',
       contacts: const [],
       collections: const [],
+      alerts: const [],
+    );
+
+/// One torrent import, downloading. `Torrent` is what makes its files a
+/// choice at all — see `NexusCollectionSource.supportsSelection`.
+NexusAppState _torrentState() => NexusAppState(
+      device: const NexusDevice(
+        name: 'Mina',
+        handle: null,
+        fingerprint: 'fingerprint',
+        devices: 1,
+      ),
+      connectivity: 'LocalOnly',
+      contacts: const [],
+      collections: [
+        NexusCollection(
+          id: 9,
+          name: 'Big Buck Bunny',
+          nature: 'Torrent',
+          role: 'Owner',
+          revision: BigInt.one,
+          status: 'Downloading',
+          members: const [],
+          entries: 2,
+          totalBytes: BigInt.from(39),
+          onDiskBytes: BigInt.zero,
+          uploadedBytes: BigInt.zero,
+          transfer: null,
+          pending: null,
+        ),
+      ],
       alerts: const [],
     );
 

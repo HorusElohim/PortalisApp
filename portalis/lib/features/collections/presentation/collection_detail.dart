@@ -321,7 +321,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
 
   @override
   void dispose() {
-    widget.source.dispose();
+    // The source is not disposed here. Whoever constructed it owns it, and
+    // some of them — the wide Home, which keeps one source for whichever row
+    // is open — outlive any single detail. Disposing a borrowed source is how
+    // an expanded row left the next one reading a dead subscription.
     super.dispose();
   }
 
@@ -366,7 +369,12 @@ class _CollectionDetailState extends State<CollectionDetail> {
               padding: const EdgeInsets.symmetric(vertical: 22),
               child: Center(
                 child: Text(
-                  'Nothing in this collection yet.',
+                  // An import with no file list yet is still being answered —
+                  // by a descriptor on disk or by the swarm. Saying it holds
+                  // nothing would be the screen guessing, and guessing wrong.
+                  collection.state == 'importing'
+                      ? 'Looking up what this torrent contains…'
+                      : 'Nothing in this collection yet.',
                   style: AppText.secondary(color: AppColors.textDim),
                 ),
               ),
@@ -376,11 +384,36 @@ class _CollectionDetailState extends State<CollectionDetail> {
               child: CollectionContents(
                 collection: collection,
                 onOpenMedia: (media) => _openMedia(collection, media),
+                onToggleWanted: widget.source.supportsSelection
+                    ? (media) => _toggleWanted(collection, media)
+                    : null,
               ),
             ),
         ],
       ],
     );
+  }
+
+  /// Adds or removes one file from what the collection is fetching.
+  ///
+  /// The whole selection is sent every time rather than a delta: the backend
+  /// stores a set, and a delta would need this screen to agree about what it
+  /// last saw. Nothing is kept here — the answer comes back through the
+  /// source like every other fact, so a rejected change simply never appears
+  /// rather than leaving a checkbox saying something untrue.
+  void _toggleWanted(Collection collection, MediaItem media) {
+    final entry = media.entryId;
+    if (entry == null) return;
+    final wanted = {
+      for (final item in collection.media)
+        if (item.entryId != null && item.selected) item.entryId!,
+    };
+    if (!wanted.remove(entry)) wanted.add(entry);
+    if (wanted.isEmpty) {
+      _toast('Keep at least one file, or delete the collection');
+      return;
+    }
+    unawaited(_run(() => widget.source.setSelection(collection.id, wanted)));
   }
 
   void _command(CollectionCommand command) {

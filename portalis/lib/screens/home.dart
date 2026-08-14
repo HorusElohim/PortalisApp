@@ -13,7 +13,6 @@ import '../features/nexus/data/nexus_collection_source.dart';
 import '../features/nexus/domain/nexus_app_state.dart';
 import '../features/nexus/presentation/nexus_collection_detail.dart';
 import '../features/nexus/presentation/nexus_home_library.dart';
-import '../features/nexus/presentation/nexus_torrent_preparation.dart';
 
 /// App-shell adapter for the Nexus collection library. It coordinates routes
 /// and desktop file drops; collection state stays in the Nexus feature.
@@ -95,9 +94,7 @@ class _HomeState extends State<Home> {
 
 
   void _openCollection(NexusCollection collection) {
-    // Every collection but one defers to `onOpen` when the wide shell
-    // supplied one; see `nexusCollectionNeedsSelection`.
-    if (widget.onOpen != null && !nexusCollectionNeedsSelection(collection)) {
+    if (widget.onOpen != null) {
       widget.onOpen!(collection.id);
       return;
     }
@@ -171,7 +168,7 @@ class _HomeState extends State<Home> {
         if (mounted) {
           showToast(
             context,
-            'Torrent prepared — choose files next',
+            'Torrent added — choose files on the collection',
             severity: ToastSeverity.success,
           );
         }
@@ -204,12 +201,12 @@ class _HomeState extends State<Home> {
     if (collection == null) {
       throw StateError('Nexus did not identify the imported torrent');
     }
-    // Magnet metadata is not resolved by the current substrate yet, so there
-    // is no real file selection to present. Local .torrent imports resolve
-    // their descriptor immediately and can enter the preparation flow.
-    if (!source.toLowerCase().endsWith('.torrent')) return;
+    // Straight to the collection, whether the source was a magnet or a
+    // descriptor. A magnet's file list arrives from the swarm a moment later
+    // and the screen fills in; a descriptor's is already there. Waiting for
+    // the difference used to mean a magnet import landed nowhere at all.
     if (!mounted) return;
-    _push(NexusTorrentPreparation(
+    _push(NexusCollectionDetail(
       collection: collection,
       controller: AppControllers.nexusApp,
     ));

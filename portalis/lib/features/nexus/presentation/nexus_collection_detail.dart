@@ -7,28 +7,20 @@ import '../application/nexus_app_controller.dart';
 import '../data/nexus_collection_source.dart';
 import '../data/nexus_collection_view.dart';
 import '../domain/nexus_app_state.dart';
-import 'nexus_torrent_preparation.dart';
-
-/// A torrent still waiting for file selection: there is nothing to grow a
-/// row into yet, only a choice to make, so it always gets a dedicated screen
-/// rather than ever becoming the row a list's `openId` names.
-///
-/// One decision, shared by every caller that has to make it — the wide list
-/// (which needs it to keep such a row from trying to expand inline; see
-/// `NexusHomeLibrary`), [Home]'s own push fallback, and the desktop shell's
-/// inline-toggle path. A second copy of this branch is exactly the kind of
-/// drift that made the pushed screen and the inline one disagree before.
-bool nexusCollectionNeedsSelection(NexusCollection collection) =>
-    collection.nature == 'Torrent' && collection.status == 'Preparing';
 
 /// Which screen represents [collection] when it is opened as its own route.
+///
+/// One answer for every collection. A torrent waiting to be chosen from used
+/// to get a screen of its own, which made choosing a gate passed through
+/// exactly once: afterwards there was nowhere to change your mind, and no
+/// screen could show a half-fetched collection alongside the files it had
+/// skipped. Choosing now happens on the collection itself, where it stays
+/// available for as long as the collection does.
 Widget nexusCollectionScreen(
   NexusCollection collection,
   NexusAppController controller,
 ) =>
-    nexusCollectionNeedsSelection(collection)
-        ? NexusTorrentPreparation(collection: collection.id, controller: controller)
-        : NexusCollectionDetail(collection: collection.id, controller: controller);
+    NexusCollectionDetail(collection: collection.id, controller: controller);
 
 /// One Nexus collection, on its own screen.
 ///
@@ -54,13 +46,25 @@ class NexusCollectionDetail extends StatefulWidget {
 
 class _NexusCollectionDetailState extends State<NexusCollectionDetail> {
   // Constructed once, here, so its subscription survives every rebuild this
-  // wrapper goes through. `CollectionDetail`'s own state is what disposes
-  // it — see `NexusCollectionSource`'s doc comment for why this widget must
-  // not also dispose it.
-  late final NexusCollectionSource _source = NexusCollectionSource(
-    controller: widget.controller,
-    collectionId: widget.collection,
-  );
+  // wrapper goes through — and disposed here too, because whoever constructs
+  // a source owns it. Built in `initState` rather than lazily so that
+  // disposing never has to first create the thing it is disposing.
+  late final NexusCollectionSource _source;
+
+  @override
+  void initState() {
+    super.initState();
+    _source = NexusCollectionSource(
+      controller: widget.controller,
+      collectionId: widget.collection,
+    );
+  }
+
+  @override
+  void dispose() {
+    _source.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(

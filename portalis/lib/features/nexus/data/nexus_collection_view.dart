@@ -159,6 +159,8 @@ List<PeerObservation> nexusPeerObservations({
 }
 
 MediaItem _media(NexusEntry entry) => MediaItem(
+      entryId: entry.id,
+      selected: entry.selected,
       label: entry.label,
       // A Nexus entry is addressed by its collection and handle. The torrent
       // hash is the substrate's business and does not belong in the interface.

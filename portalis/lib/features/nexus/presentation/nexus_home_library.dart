@@ -11,7 +11,6 @@ import '../../collections/presentation/collections_list.dart';
 import '../../collections/presentation/command_bar.dart';
 import '../../collections/presentation/share_collection_action.dart';
 import '../data/nexus_collection_view.dart';
-import 'nexus_collection_detail.dart' show nexusCollectionNeedsSelection;
 import '../domain/nexus_app_state.dart';
 
 /// The Home collection projection, drawn by the same row and list widgets the
@@ -145,14 +144,10 @@ class NexusHomeLibrary extends StatelessWidget {
       onOpen: (row) => onOpen(byRowId[row.id]!),
       onCommand: (action) =>
           onCommand((byRowId[action.$1.id]!, action.$2)),
-      // A torrent still waiting for file selection has nowhere to grow into —
-      // only a screen to go to (see `Home._openCollection`) — so it keeps
-      // `CollectionRow`'s plain-tap behaviour rather than the accordion's.
-      // Without this, the row's own optimistic "I might be opening" state
-      // still fires on the first tap regardless of what `onOpen` decides to
-      // do with it, and tries to build a detail for a row that will never
-      // actually become the open one.
-      canExpand: (row) => !nexusCollectionNeedsSelection(byRowId[row.id]!),
+      // Every row expands now. A torrent waiting to be chosen from used to be
+      // the exception, because choosing happened on a screen of its own; it
+      // happens on the collection itself, so there is nothing left that a row
+      // cannot grow into.
       detailFor: (row, level, inlineHeader, inlineStatus) => CollectionDetail(
         key: ValueKey(row.id),
         collection: row,

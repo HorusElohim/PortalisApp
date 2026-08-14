@@ -34,6 +34,24 @@ abstract class CollectionSource {
   Future<void> delete(String id);
   Future<void> deleteWithFiles(String id);
 
+  /// Whether the files of this collection can be chosen individually.
+  ///
+  /// False for a collection that owns its files — there is nothing to choose,
+  /// and offering a checkbox that cannot mean anything is worse than offering
+  /// none. Where it is true, [setSelection] is what a choice goes through.
+  bool get supportsSelection => false;
+
+  /// Records which entries the collection should fetch, by [MediaItem.entryId].
+  ///
+  /// A statement of intent, not an action: what the engine does about it is
+  /// the backend's business, and the answer arrives back through [resolve]
+  /// like every other fact. Sources that do not support selection never have
+  /// this called, so the default simply says so.
+  Future<void> setSelection(String id, Set<int> entries) async =>
+      throw const SourceUnsupported(
+        'this collection has no files to choose between',
+      );
+
   /// Replaces the QR-code invite dialog for a source with no invite-code
   /// concept of its own. `null` keeps the default: the dialog every source
   /// showed before a second one existed, driven by [Collection.inviteCode].

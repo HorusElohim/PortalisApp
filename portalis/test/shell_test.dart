@@ -76,8 +76,11 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('a Nexus collection opens its streamed detail route',
+    testWidgets('a torrent still being prepared expands inline like any other',
         (tester) async {
+      // It used to be the one row that could not expand, because choosing its
+      // files happened on a screen of its own. Choosing happens on the
+      // collection now, so there is nothing left for a row to defer to.
       await pumpApp(tester, size: desktopSize, nexusCollections: [
         buildNexusCollection(id: 1, name: 'Iceland'),
         buildNexusCollection(
@@ -91,7 +94,7 @@ void main() {
       await tester.tap(find.text('Studio').first);
       await pumpTransition(tester);
 
-      expect(find.byType(NexusTorrentPreparation), findsOneWidget);
+      expect(find.byType(CollectionDetail), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -231,7 +234,7 @@ void main() {
       ]);
       await tester.tap(find.text('Episode'));
       await pumpTransition(tester);
-      expect(find.byType(NexusTorrentPreparation), findsOneWidget);
+      expect(find.byType(NexusCollectionDetail), findsOneWidget);
       expect(AppNavigation.depth.value, greaterThan(0));
 
       AppNavigation.goHome();
@@ -241,7 +244,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
       }
 
-      expect(find.byType(NexusTorrentPreparation), findsNothing);
+      expect(find.byType(NexusCollectionDetail), findsNothing);
       expect(AppNavigation.depth.value, 0);
       expect(tester.takeException(), isNull);
     });

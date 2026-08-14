@@ -77,6 +77,9 @@ pub(crate) async fn follow_transfers(
 ) {
     let mut tick = tokio::time::interval(POLL_INTERVAL);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // The last reading written for each collection, so an unchanged one can be
+    // recognised without reading back what was just stored.
+    let mut written: HashMap<Vec<u8>, StoredSample> = HashMap::new();
     loop {
         tokio::select! {
             () = shutdown.requested() => return,
@@ -120,7 +123,8 @@ pub(crate) async fn follow_transfers(
             let Some(info) = by_handle.get(handle.as_str()) else {
                 continue;
             };
-            record(&store, &key, info);
+            let sample = record(&store, &key, info, written.get(&key));
+            written.insert(key.clone(), sample);
             current.insert(key.clone(), (*info).clone());
 
             let projected = collections
@@ -131,6 +135,10 @@ pub(crate) async fn follow_transfers(
                 publish(&states, projected, info, paused);
             }
         }
+        // A collection that stopped being carried must not keep its last
+        // reading here, or re-adding it would compare against a stale one and
+        // drop the first sample of the new transfer.
+        written.retain(|key, _| current.contains_key(key));
         // Replaced before refreshing, so a detail rebuilt below reads this
         // tick's holdings rather than the last one's.
         holdings.replace(current);
@@ -161,9 +169,16 @@ fn carried_collections(
 
 /// Writes one reading to the ring, trimming it back to its bound.
 ///
+/// A reading identical to the one before it is dropped rather than written. A
+/// finished collection reports the same numbers every second forever, and
+/// recording them extended its chart for as long as the app stayed open — the
+/// transfer was over, the graph kept growing. Writing only what changed keeps
+/// the final zero (so a chart shows the transfer ramp down and stop) without
+/// keeping the silence after it.
+///
 /// A failure is logged and dropped rather than propagated: losing a point of a
 /// chart is not a reason to stop reporting the transfer it describes.
-fn record(store: &Store, key: &[u8], info: &TorrentInfo) {
+fn record(store: &Store, key: &[u8], info: &TorrentInfo, last: Option<&StoredSample>) -> StoredSample {
     let sample = StoredSample {
         done: info.progress_bytes,
         total: info.total_bytes,
@@ -171,13 +186,17 @@ fn record(store: &Store, key: &[u8], info: &TorrentInfo) {
         up_bytes_per_second: per_second(info.upload_mbps),
         peers: u16::try_from(info.live_peers).unwrap_or(u16::MAX),
     };
+    if last == Some(&sample) {
+        return sample;
+    }
     if let Err(error) = store.put_sample(key, unix_time_ns(), &sample) {
         crate::log::clog!("nexus", "could not record a transfer sample: {error}");
-        return;
+        return sample;
     }
     if let Err(error) = store.trim_samples(key, HISTORY_LENGTH) {
         crate::log::clog!("nexus", "could not trim the transfer history: {error}");
     }
+    sample
 }
 
 /// Updates one collection's progress tier from one reading.
@@ -307,6 +326,40 @@ mod tests {
             live_peers: 3,
             live_peer_addrs: vec!["10.0.0.1:6881".to_owned()],
         }
+    }
+
+    /// A finished collection reports identical numbers every second for as
+    /// long as the app stays open. Recording them grew the chart of a transfer
+    /// that had already ended, so a reading equal to the one before it is
+    /// dropped — while the first reading that differs is always kept, which is
+    /// what leaves the ramp down to zero visible.
+    #[test]
+    fn an_unchanged_reading_is_not_recorded_again() {
+        let dir = std::env::temp_dir().join(format!(
+            "portalis-samples-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let store = Store::open(dir.join("portalis.redb")).expect("opens");
+
+        let moving = info(10, 100, false);
+        let first = record(&store, b"a", &moving, None);
+        assert_eq!(store.samples(b"a").expect("reads").len(), 1);
+
+        // The same reading again says nothing the first one did not.
+        let second = record(&store, b"a", &moving, Some(&first));
+        assert_eq!(store.samples(b"a").expect("reads").len(), 1);
+
+        // A reading that differs is written, so the chart still shows the
+        // transfer finishing rather than stopping mid-flight.
+        let mut done = info(100, 100, true);
+        done.download_mbps = 0.0;
+        record(&store, b"a", &done, Some(&second));
+        assert_eq!(store.samples(b"a").expect("reads").len(), 2);
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// Megabits are what the substrate reports and bytes are what everything

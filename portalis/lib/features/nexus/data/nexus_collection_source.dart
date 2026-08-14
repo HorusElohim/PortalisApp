@@ -132,6 +132,23 @@ class NexusCollectionSource extends CollectionSource with ChangeNotifier {
   Future<void> pause(String id) =>
       sendSetPaused(controller, collectionId, paused: true);
 
+  /// Only a torrent import has files to choose between: a collection this
+  /// device published owns all of them, and there is nothing to fetch.
+  @override
+  bool get supportsSelection => _nexusCollection?.nature == 'Torrent';
+
+  /// The same command whether or not the download has started. The core
+  /// records the choice and its worker states it to the engine — beginning a
+  /// download the first time, revising a running one afterwards.
+  @override
+  Future<void> setSelection(String id, Set<int> entries) => controller.send(
+        NexusCommand(
+          kind: 'downloadSelection',
+          collection: collectionId,
+          entries: entries.toList()..sort(),
+        ),
+      );
+
   @override
   Future<void> delete(String id) =>
       sendDeleteCollection(controller, collectionId, deleteFiles: false);

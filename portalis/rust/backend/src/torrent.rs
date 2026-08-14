@@ -528,6 +528,22 @@ pub(crate) async fn forget_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Revises what an already-running torrent is fetching.
+///
+/// Doing nothing when the engine already agrees is what makes this safe to
+/// assert on every reconcile pass: librqbit refuses the update while a torrent
+/// is still initializing, and a no-op comparison never reaches that refusal
+/// for the overwhelmingly common case of nothing having changed.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) async fn set_selection(info_hash_hex: &str, files: &[usize]) -> anyhow::Result<()> {
+    native::set_selection(info_hash_hex, files).await
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) async fn set_selection(_info_hash_hex: &str, _files: &[usize]) -> anyhow::Result<()> {
+    anyhow::bail!("torrent downloads are unavailable on web")
+}
+
 pub(crate) async fn pause_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
     native::pause_torrent(info_hash_hex).await
 }
@@ -1555,6 +1571,18 @@ mod native {
             )
             .await
             .with_context(|| format!("starting the download of {source:?}"))?;
+        // An `AlreadyManaged` answer means the engine still carries this info
+        // hash from an earlier attempt — carrying that attempt's selection with
+        // it. `add_torrent` does not revise it, so deleting a collection and
+        // adding it back silently kept whatever was chosen the first time. The
+        // requested selection is applied here so that the answer describes what
+        // was actually asked for.
+        if let AddTorrentResponse::AlreadyManaged(_, handle) = &response {
+            session
+                .update_only_files(handle, &files.iter().copied().collect())
+                .await
+                .context("applying the selection to a torrent already being carried")?;
+        }
         response_to_info(&api(session), response)
     }
 
@@ -1719,6 +1747,29 @@ mod native {
             .await
             .context("forgetting torrent")?;
         Ok(())
+    }
+
+    pub(super) async fn set_selection(
+        info_hash_hex: &str,
+        files: &[usize],
+    ) -> anyhow::Result<()> {
+        let session = session().await?;
+        let id = TorrentIdOrHash::try_from(info_hash_hex)
+            .map_err(|e| anyhow::anyhow!("{info_hash_hex} isn't a valid info hash: {e}"))?;
+        let Some(handle) = session.get(id) else {
+            return Ok(());
+        };
+        let wanted: std::collections::HashSet<usize> = files.iter().copied().collect();
+        let current = handle
+            .only_files()
+            .map(|only| only.into_iter().collect::<std::collections::HashSet<_>>());
+        if current.as_ref() == Some(&wanted) {
+            return Ok(());
+        }
+        session
+            .update_only_files(&handle, &wanted)
+            .await
+            .context("applying the file selection")
     }
 
     pub(super) async fn pause_torrent(info_hash_hex: &str) -> anyhow::Result<()> {

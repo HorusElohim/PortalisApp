@@ -75,6 +75,18 @@ pub(crate) trait Substrate: Send + Sync {
     /// intent on every pass rather than tracking what it last applied.
     async fn set_paused(&self, handle: &str, paused: bool) -> anyhow::Result<()>;
 
+    /// Narrow or widen what this handle is fetching, after it started.
+    ///
+    /// The counterpart to [`Self::acquire_selection`], which can only say what
+    /// to fetch at the moment a download begins. Without this the first choice
+    /// was permanent: deselecting a file did nothing, and reselecting one
+    /// could not be expressed at all.
+    ///
+    /// Idempotent for the same reason as [`Self::set_paused`] — the reconciler
+    /// asserts the stored selection every pass rather than remembering which
+    /// one it last sent.
+    async fn set_selection(&self, handle: &str, files: &[usize]) -> anyhow::Result<()>;
+
     /// Stop carrying it. Files already on disk stay there.
     async fn release(&self, handle: &str) -> anyhow::Result<()>;
 
@@ -120,6 +132,10 @@ impl Substrate for Torrents {
         }
     }
 
+    async fn set_selection(&self, handle: &str, files: &[usize]) -> anyhow::Result<()> {
+        crate::torrent::set_selection(handle, files).await
+    }
+
     async fn release(&self, handle: &str) -> anyhow::Result<()> {
         crate::torrent::forget_torrent(handle).await
     }
@@ -155,6 +171,8 @@ pub(crate) struct Recorded {
     pub(crate) inspected: Mutex<Vec<String>>,
     /// Every `(handle, paused)` the engine was told to apply.
     pub(crate) paused: Mutex<Vec<(String, bool)>>,
+    /// Every `(handle, files)` the engine was told to fetch after starting.
+    pub(crate) reselected: Mutex<Vec<(String, Vec<usize>)>>,
     publication: Mutex<Option<(String, Vec<u8>)>>,
     inspection: Mutex<Option<Inspected>>,
 }
@@ -228,6 +246,14 @@ impl Substrate for Recorded {
             .lock()
             .unwrap()
             .push((handle.to_string(), paused));
+        Ok(())
+    }
+
+    async fn set_selection(&self, handle: &str, files: &[usize]) -> anyhow::Result<()> {
+        self.reselected
+            .lock()
+            .unwrap()
+            .push((handle.to_string(), files.to_vec()));
         Ok(())
     }
 

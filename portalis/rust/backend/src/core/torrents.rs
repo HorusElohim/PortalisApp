@@ -10,6 +10,15 @@
 //!    something to choose from.
 //! 2. **Acquire.** A collection whose files have been chosen, and which
 //!    nothing is carrying yet, starts downloading them.
+//! 3. **Reconcile.** A collection something is already carrying has the
+//!    stored intent — which files, and whether to move at all — asserted
+//!    against the engine. Both verbs are idempotent, so this is safe to
+//!    repeat and is the only thing that keeps the two from drifting apart.
+//!
+//! The third is what makes a choice revisable. Told once at the moment a
+//! download starts and never corrected, the engine kept the first answer
+//! forever: deselecting a file did nothing and reselecting one could not be
+//! said at all.
 //!
 //! Neither step is reached by a command directly: `Nexus::command` promises
 //! not to wait for a network, and both of these do. A command records the
@@ -35,12 +44,12 @@ enum Pending {
         source: String,
         files: Vec<usize>,
     },
-    /// Something is carrying it: make the engine agree with the stored
-    /// pause flag.
+    /// Something is carrying it: make the engine agree with what is stored.
     Reconcile {
         key: Vec<u8>,
         handle: String,
         paused: bool,
+        files: Vec<usize>,
     },
 }
 
@@ -116,24 +125,27 @@ fn pending_work(store: &Store) -> Result<Vec<Pending>, crate::store::StoreError>
             pending.push(Pending::Resolve { key, source });
             continue;
         }
-        // Already carried: nothing left to start, but the engine still has
-        // to be told what the person last chose. Asserted rather than
-        // remembered — `set_paused` is idempotent, so re-stating the stored
-        // intent costs nothing and cannot drift.
-        if let Some(handle) = stored.substrate_handle {
-            pending.push(Pending::Reconcile {
-                key,
-                handle,
-                paused: stored.paused,
-            });
-            continue;
-        }
         let files = entries
             .iter()
             .enumerate()
             .filter(|(_, entry)| entry.selected)
             .map(|(index, _)| index)
             .collect::<Vec<_>>();
+        // Already carried: nothing left to start, but the engine still has
+        // to be told what the person last chose — both which files and
+        // whether to move at all. Asserted rather than remembered: both verbs
+        // are idempotent, so re-stating the stored intent costs nothing and
+        // cannot drift. This is also the only path by which a selection can
+        // change after a download begins.
+        if let Some(handle) = stored.substrate_handle {
+            pending.push(Pending::Reconcile {
+                key,
+                handle,
+                paused: stored.paused,
+                files,
+            });
+            continue;
+        }
         // Resolved, but nobody has chosen yet. The interface is showing the
         // list; waiting is the correct state, not a stalled one.
         if files.is_empty() {
@@ -154,7 +166,16 @@ async fn perform(
         Pending::Acquire { key, source, files } => {
             acquire(store, substrate, key, source, files).await
         }
-        Pending::Reconcile { handle, paused, .. } => {
+        Pending::Reconcile {
+            handle,
+            paused,
+            files,
+            ..
+        } => {
+            // Selection before pause: a paused torrent accepts the update, and
+            // applying it first means resuming never briefly fetches a file
+            // that was deselected while it was stopped.
+            substrate.set_selection(handle, files).await?;
             substrate.set_paused(handle, *paused).await
         }
     }
@@ -387,8 +408,67 @@ mod tests {
             .expect("writes");
         assert!(matches!(
             pending_work(&store).expect("scans").as_slice(),
-            [Pending::Reconcile { handle, paused: false, .. }] if handle == "abc"
+            [Pending::Reconcile { handle, paused: false, files, .. }]
+                if handle == "abc" && files == &[1]
         ));
+
+        // Changing the choice on a collection that is already downloading is
+        // ordinary reconcile work rather than nothing at all, which is what
+        // made a selection permanent once the first byte moved.
+        store
+            .put_torrent_import_entries(
+                b"a",
+                &[
+                    StoredImportEntry {
+                        label: "one.mkv".to_owned(),
+                        bytes: 10,
+                        selected: true,
+                    },
+                    StoredImportEntry {
+                        label: "two.mkv".to_owned(),
+                        bytes: 20,
+                        selected: true,
+                    },
+                ],
+            )
+            .expect("writes");
+        assert!(matches!(
+            pending_work(&store).expect("scans").as_slice(),
+            [Pending::Reconcile { files, .. }] if files == &[0, 1]
+        ));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Reconciling states both halves of the stored intent, and states the
+    /// selection first: a resume must never briefly fetch a file that was
+    /// deselected while the transfer was stopped.
+    #[tokio::test]
+    async fn reconciling_states_the_selection_and_then_the_pause() {
+        let (store, dir) = store();
+        let substrate = crate::substrate::Recorded::default();
+
+        perform(
+            &store,
+            &substrate,
+            &Pending::Reconcile {
+                key: b"a".to_vec(),
+                handle: "abc".to_owned(),
+                paused: true,
+                files: vec![0, 2],
+            },
+        )
+        .await
+        .expect("reconciles");
+
+        assert_eq!(
+            substrate.reselected.lock().unwrap().as_slice(),
+            [("abc".to_owned(), vec![0, 2])]
+        );
+        assert_eq!(
+            substrate.paused.lock().unwrap().as_slice(),
+            [("abc".to_owned(), true)]
+        );
 
         let _ = std::fs::remove_dir_all(dir);
     }
