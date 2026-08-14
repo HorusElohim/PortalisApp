@@ -19,6 +19,7 @@ class NexusHomeLibrary extends StatelessWidget {
     required this.onSearch,
     required this.onFilterChanged,
     required this.onImportTorrent,
+    required this.onCreateCollection,
     required this.onJoin,
     required this.onOpen,
   });
@@ -31,6 +32,7 @@ class NexusHomeLibrary extends StatelessWidget {
   final ValueChanged<String> onSearch;
   final ValueChanged<NexusCollectionFilter> onFilterChanged;
   final Future<void> Function(String source) onImportTorrent;
+  final VoidCallback onCreateCollection;
   final ValueChanged<String> onJoin;
   final ValueChanged<NexusCollection> onOpen;
 
@@ -55,6 +57,17 @@ class NexusHomeLibrary extends StatelessWidget {
             onSearch: onSearch,
             onInvite: onJoin,
             onImportTorrent: onImportTorrent,
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlineActionButton(
+              key: const Key('nexusCreateCollection'),
+              label: 'Create collection',
+              icon: Icons.create_new_folder_outlined,
+              compact: true,
+              onTap: onCreateCollection,
+            ),
           ),
           if (showFilters) ...[
             const SizedBox(height: 14),

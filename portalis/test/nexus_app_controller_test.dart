@@ -108,6 +108,7 @@ void main() {
   testWidgets('Home renders Nexus collections without a legacy projection',
       (tester) async {
     NexusCollection? opened;
+    var created = false;
     final collection = NexusCollection(
       id: 9,
       name: 'Episode archive',
@@ -143,6 +144,7 @@ void main() {
             onSearch: (_) {},
             onFilterChanged: (_) {},
             onImportTorrent: (_) async {},
+            onCreateCollection: () => created = true,
             onJoin: (_) {},
             onOpen: (value) => opened = value,
           ),
@@ -154,6 +156,8 @@ void main() {
     expect(find.text('PREPARING'), findsOneWidget);
     await tester.tap(find.text('Episode archive'));
     expect(opened, same(collection));
+    await tester.tap(find.byKey(const Key('nexusCreateCollection')));
+    expect(created, isTrue);
   });
 
   testWidgets('collection detail sends its delete through Nexus',

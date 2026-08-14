@@ -67,6 +67,32 @@ class _HomeState extends State<Home> {
     _push(screen);
   }
 
+  Future<void> _createCollection() async {
+    final name = await promptForText(
+      context,
+      title: 'Create collection',
+      hint: 'Collection name',
+      confirmLabel: 'Create',
+    );
+    if (name == null || name.isEmpty || !mounted) return;
+    try {
+      final accepted = await AppControllers.nexusApp.send(
+        NexusCommand(kind: 'createCollection', name: name),
+      );
+      final collection = accepted.collection;
+      if (collection == null) {
+        throw StateError('Nexus did not identify the new collection');
+      }
+      if (!mounted) return;
+      _push(NexusCollectionDetail(
+        collection: collection,
+        controller: AppControllers.nexusApp,
+      ));
+    } catch (error) {
+      if (mounted) showToast(context, '$error', severity: ToastSeverity.error);
+    }
+  }
+
   Future<void> _handleDrop(DropDoneDetails details) async {
     final files = details.files;
     if (files.isEmpty) return;
@@ -139,6 +165,7 @@ class _HomeState extends State<Home> {
           onFilterChanged: (filter) => setState(() => _filter = filter),
           onJoin: _openJoin,
           onImportTorrent: _importTorrent,
+          onCreateCollection: _createCollection,
         );
         if (!widget.embedded) return library;
         return DropTarget(

@@ -30,6 +30,9 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Home now offers **Create collection**. It creates the collection through
+  Nexus and opens its Nexus detail route immediately.
+
 - Nexus collection detail now supports renaming and safe collection-only
   deletion through the same command boundary as the Home library.
 
