@@ -1,5 +1,5 @@
 import '../bridge/nexus_settings.dart' as bridge;
-import '../domain/nexus_endpoint_config.dart';
+import '../domain/endpoint_config.dart';
 
 /// Native persistence for the trusted Nexus service endpoint.
 abstract interface class NexusSettingsRepository {

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:portalis/nexus/application/nexus_settings_controller.dart';
-import 'package:portalis/nexus/data/nexus_settings_repository.dart';
-import 'package:portalis/nexus/domain/nexus_endpoint_config.dart';
+import 'package:portalis/nexus/application/settings_controller.dart';
+import 'package:portalis/nexus/data/settings_repository.dart';
+import 'package:portalis/nexus/domain/endpoint_config.dart';
 
 void main() {
   test('Nexus settings load and save one trusted endpoint', () async {

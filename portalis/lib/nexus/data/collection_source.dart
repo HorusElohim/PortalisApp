@@ -7,9 +7,9 @@ import '../../features/collections/domain/peer_observation.dart';
 import '../../features/collections/domain/picked_file.dart';
 import '../../features/collections/domain/transfer_history.dart';
 import '../../features/collections/presentation/collection_source.dart';
-import '../application/nexus_app_controller.dart';
-import '../domain/nexus_app_state.dart';
-import 'nexus_collection_view.dart';
+import '../application/app_controller.dart';
+import '../domain/app_state.dart';
+import 'collection_view.dart';
 
 /// Pauses or resumes one collection.
 ///
@@ -69,13 +69,13 @@ class NexusCollectionSource extends CollectionSource with ChangeNotifier {
   final NexusAppController controller;
   final int collectionId;
 
-  NexusDetail? _detail;
-  late final StreamSubscription<NexusDetail?> _detailSubscription;
+  AppDetail? _detail;
+  late final StreamSubscription<AppDetail?> _detailSubscription;
 
   @override
   Listenable get listenable => this;
 
-  NexusCollection? get _nexusCollection => controller.state?.collections
+  AppCollection? get _nexusCollection => controller.state?.collections
       .where((item) => item.id == collectionId)
       .firstOrNull;
 
@@ -109,7 +109,7 @@ class NexusCollectionSource extends CollectionSource with ChangeNotifier {
           label: label,
           files: [
             for (final file in files)
-              NexusSourceFile(
+              AppSourceFile(
                 name: file.name,
                 path: file.path,
                 bytes: BigInt.from(file.lengthBytes),

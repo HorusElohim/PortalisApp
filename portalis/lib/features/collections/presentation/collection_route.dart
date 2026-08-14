@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
 import 'collection_detail.dart';
-import '../../../nexus/application/nexus_app_controller.dart';
-import '../../../nexus/data/nexus_collection_source.dart';
-import '../../../nexus/data/nexus_collection_view.dart';
-import '../../../nexus/domain/nexus_app_state.dart';
+import '../../../nexus/application/app_controller.dart';
+import '../../../nexus/data/collection_source.dart';
+import '../../../nexus/data/collection_view.dart';
+import '../../../nexus/domain/app_state.dart';
 
 /// Which screen represents [collection] when it is opened as its own route.
 ///
@@ -17,7 +17,7 @@ import '../../../nexus/domain/nexus_app_state.dart';
 /// skipped. Choosing now happens on the collection itself, where it stays
 /// available for as long as the collection does.
 Widget nexusCollectionScreen(
-  NexusCollection collection,
+  AppCollection collection,
   NexusAppController controller,
 ) =>
     NexusCollectionDetail(collection: collection.id, controller: controller);

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
-import '../../../nexus/application/nexus_app_controller.dart';
+import '../../../nexus/application/app_controller.dart';
 import '../../../design/theme.dart';
 import '../domain/engine_settings.dart';
 

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-import '../data/nexus_settings_repository.dart';
-import '../domain/nexus_endpoint_config.dart';
+import '../data/settings_repository.dart';
+import '../domain/endpoint_config.dart';
 
 /// UI state for the saved Nexus service, independent of its live connection.
 class NexusSettingsController extends ChangeNotifier {

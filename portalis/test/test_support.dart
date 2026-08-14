@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,7 @@ import 'package:portalis/app/app_controllers.dart';
 import 'package:portalis/features/collections/domain/collection.dart';
 import 'package:portalis/features/collections/domain/collection_import.dart';
 import 'package:portalis/features/media/domain/media_item.dart';
-import 'package:portalis/nexus/domain/nexus_app_state.dart';
+import 'package:portalis/nexus/domain/app_state.dart';
 import 'package:portalis/features/settings/domain/engine_settings.dart';
 import 'package:portalis/main.dart';
 import 'package:portalis/shell/navigation.dart';
@@ -23,8 +24,8 @@ export 'package:portalis/features/collections/presentation/collection_share.dart
 export 'package:portalis/features/collections/presentation/command_bar.dart';
 export 'package:portalis/features/media/domain/media_item.dart';
 export 'package:portalis/features/media/presentation/media_viewer_screen.dart';
-export 'package:portalis/nexus/domain/nexus_app_state.dart';
-export 'package:portalis/features/collections/presentation/nexus_collection_detail.dart';
+export 'package:portalis/nexus/domain/app_state.dart';
+export 'package:portalis/features/collections/presentation/collection_route.dart';
 export 'package:portalis/features/settings/domain/engine_settings.dart';
 export 'package:portalis/main.dart';
 export 'package:portalis/features/people/presentation/people_screen.dart';
@@ -73,7 +74,7 @@ Collection buildCollection({
       ingestion: ingestion,
     );
 
-NexusCollection buildNexusCollection({
+AppCollection buildNexusCollection({
   int id = 1,
   String name = 'Iceland trip',
   String nature = 'Native',
@@ -81,17 +82,17 @@ NexusCollection buildNexusCollection({
   String status = 'Available',
   int entries = 0,
   int totalBytes = 0,
-  List<int> members = const [],
-  NexusTransfer? transfer,
+  Uint32List? members,
+  AppTransfer? transfer,
 }) =>
-    NexusCollection(
+    AppCollection(
       id: id,
       name: name,
       nature: nature,
       role: role,
       revision: BigInt.one,
       status: status,
-      members: members,
+      members: members ?? Uint32List(0),
       entries: entries,
       totalBytes: BigInt.from(totalBytes),
       onDiskBytes: BigInt.zero,
@@ -100,9 +101,9 @@ NexusCollection buildNexusCollection({
       pending: null,
     );
 
-NexusAppState buildNexusState(List<NexusCollection> collections) =>
-    NexusAppState(
-      device: const NexusDevice(
+AppSnapshot buildNexusState(List<AppCollection> collections) =>
+    AppSnapshot(
+      device: const AppDevice(
         name: 'Portalis',
         handle: null,
         fingerprint: 'test-fingerprint',
@@ -128,7 +129,7 @@ EngineSettings buildEngineSettings() => const EngineSettings(
 Future<void> pumpApp(
   WidgetTester tester, {
   Size size = phoneSize,
-  List<NexusCollection> nexusCollections = const [],
+  List<AppCollection> nexusCollections = const [],
   String? error,
 }) async {
   await tester.binding.setSurfaceSize(size);
@@ -137,7 +138,7 @@ Future<void> pumpApp(
   await tester.pump();
   AppControllers.nexusApp.debugSeed(
     buildNexusState(nexusCollections),
-    details: const Stream<NexusDetail?>.empty(),
+    details: const Stream<AppDetail?>.empty(),
     error: error,
   );
   await tester.pump();

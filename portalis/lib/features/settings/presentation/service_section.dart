@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import '../../../nexus/domain/nexus_endpoint_config.dart';
+import '../../../nexus/domain/endpoint_config.dart';
 
 /// The configuration state of the authenticated Nexus service.
 class NexusServiceSection extends StatelessWidget {

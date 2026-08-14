@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/app_controllers.dart';
-import '../../../nexus/domain/nexus_app_state.dart';
+import '../../../nexus/domain/app_state.dart';
 import '../../../design/design.dart';
 import '../../settings/presentation/device_profile_section.dart';
 import '../../../shell/navigation.dart';
@@ -34,7 +34,7 @@ class _UserScreenState extends State<UserScreen> {
 
   int get _totalOnDisk => _sum((c) => c.onDiskBytes.toInt());
 
-  int _sum(int Function(NexusCollection) of) =>
+  int _sum(int Function(AppCollection) of) =>
       AppControllers.nexusApp.state?.collections
           .fold<int>(0, (total, collection) => total + of(collection)) ??
       0;

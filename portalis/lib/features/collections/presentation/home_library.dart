@@ -10,8 +10,8 @@ import 'collection_views.dart';
 import 'collections_list.dart';
 import 'command_bar.dart';
 import 'share_collection_action.dart';
-import '../../../nexus/data/nexus_collection_view.dart';
-import '../../../nexus/domain/nexus_app_state.dart';
+import '../../../nexus/data/collection_view.dart';
+import '../../../nexus/domain/app_state.dart';
 
 /// The Home collection projection, drawn by the same row and list widgets the
 /// legacy collections library always used.
@@ -42,14 +42,14 @@ class NexusHomeLibrary extends StatelessWidget {
   });
 
   final bool wide;
-  final NexusAppState? state;
+  final AppSnapshot? state;
   final String? error;
   final String query;
   final ValueChanged<String> onSearch;
   final Future<void> Function(String source) onImportTorrent;
   final VoidCallback onCreateCollection;
-  final ValueChanged<NexusCollection> onOpen;
-  final ValueChanged<(NexusCollection, CollectionCommand)> onCommand;
+  final ValueChanged<AppCollection> onOpen;
+  final ValueChanged<(AppCollection, CollectionCommand)> onCommand;
 
   /// The one collection currently grown into its own detail. Only meaningful
   /// wide — a narrow list has nowhere to grow a row into, so nothing here is
@@ -61,19 +61,19 @@ class NexusHomeLibrary extends StatelessWidget {
   /// it, matching how [CollectionSource] itself is owned.
   final CollectionSource? openSource;
 
-  List<NexusCollection> get _collections => state?.collections ?? const [];
+  List<AppCollection> get _collections => state?.collections ?? const [];
 
-  List<NexusCollection> get _shown => _collections
+  List<AppCollection> get _shown => _collections
       .where((collection) => _matchesQuery(collection))
       .toList(growable: false);
 
-  bool _matchesQuery(NexusCollection collection) =>
+  bool _matchesQuery(AppCollection collection) =>
       query.isEmpty ||
       collection.name.toLowerCase().contains(query.toLowerCase());
 
   /// The row summary for one collection — cheap, and never a subscription:
   /// see [nexusCollectionView]'s own doc for what a missing detail costs it.
-  Collection _rowView(NexusCollection collection) => nexusCollectionView(
+  Collection _rowView(AppCollection collection) => nexusCollectionView(
         collection: collection,
         detail: null,
         contacts: state?.contacts ?? const [],
@@ -132,7 +132,7 @@ class NexusHomeLibrary extends StatelessWidget {
     if (_shown.isEmpty) return _emptyState();
 
     // Rows are built from the summary view, and matched back to their
-    // originating [NexusCollection] by id — `CollectionsList`/`CollectionRow`
+    // originating [AppCollection] by id — `CollectionsList`/`CollectionRow`
     // speak only the legacy `Collection`, so this map is what lets their
     // callbacks hand a real Nexus collection back to this widget's own.
     final byRowId = {
@@ -280,7 +280,7 @@ class NexusHomeLibrary extends StatelessWidget {
   String get _summary {
     final transfers = _collections
         .map((collection) => collection.transfer)
-        .whereType<NexusTransfer>()
+        .whereType<AppTransfer>()
         .toList(growable: false);
     if (transfers.isEmpty) return plural(_collections.length, 'collection');
     final down = transfers.fold<int>(

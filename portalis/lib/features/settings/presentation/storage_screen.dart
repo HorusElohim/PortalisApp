@@ -7,7 +7,7 @@ import '../../../app/app_controllers.dart';
 import '../../../design/design.dart';
 import '../domain/storage_entry.dart';
 import '../../../design/theme.dart';
-import '../../collections/presentation/nexus_collection_detail.dart';
+import '../../collections/presentation/collection_route.dart';
 
 /// What's actually on disk under the download directory, joined against the
 /// collections the app knows about — not just the raw filesystem, and not

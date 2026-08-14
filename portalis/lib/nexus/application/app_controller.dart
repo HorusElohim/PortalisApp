@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../data/nexus_app_repository.dart';
-import '../domain/nexus_app_state.dart';
+import '../data/app_repository.dart';
+import '../domain/app_state.dart';
 
 /// Owns Portalis's one app-level Nexus state subscription.
 class NexusAppController extends ChangeNotifier {
@@ -15,12 +15,12 @@ class NexusAppController extends ChangeNotifier {
       );
 
   final NexusAppRepository _repository;
-  StreamSubscription<NexusAppState>? _subscription;
+  StreamSubscription<AppSnapshot>? _subscription;
   Future<void>? _starting;
 
-  NexusAppState? _state;
-  Stream<NexusDetail?>? _debugDetails;
-  NexusAppState? get state => _state;
+  AppSnapshot? _state;
+  Stream<AppDetail?>? _debugDetails;
+  AppSnapshot? get state => _state;
 
   /// What the engine is doing, derived from the one state this controller
   /// owns. Every piece of chrome reads this rather than counting for itself
@@ -86,21 +86,21 @@ class NexusAppController extends ChangeNotifier {
     }
   }
 
-  Future<NexusAccepted> send(NexusCommand command) => _repository.send(command);
+  Future<AppAccepted> send(NexusCommand command) => _repository.send(command);
 
   /// Selects the one collection whose expensive detail projection is needed.
   /// Widgets consume this stream directly; it deliberately does not become a
   /// second app-level cache beside [state].
-  Stream<NexusDetail?> watchDetail(int? collection) =>
+  Stream<AppDetail?> watchDetail(int? collection) =>
       _debugDetails ?? _repository.watchDetail(collection);
 
   /// Seeds the projection for widgets that exercise app composition without a
   /// native runtime. Production state always arrives through [watchStates].
   @visibleForTesting
   void debugSeed(
-    NexusAppState? state, {
+    AppSnapshot? state, {
     String? error,
-    Stream<NexusDetail?>? details,
+    Stream<AppDetail?>? details,
   }) {
     _state = state;
     lastError = error;

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'test_support.dart';
 
 
@@ -15,8 +17,8 @@ void main() {
         const MaterialApp(home: PeopleScreen()),
       );
       AppControllers.nexusApp.debugSeed(
-        NexusAppState(
-          device: const NexusDevice(
+        AppSnapshot(
+          device: const AppDevice(
             name: 'Portalis',
             handle: null,
             fingerprint: 'test-fingerprint',
@@ -24,7 +26,7 @@ void main() {
           ),
           connectivity: 'LocalOnly',
           contacts: const [
-            NexusContact(
+            AppContact(
               id: 7,
               displayName: 'Ana',
               handle: 'ana#7Q2XZ',
@@ -35,7 +37,7 @@ void main() {
             ),
           ],
           collections: [
-            buildNexusCollection(id: 1, name: 'Iceland trip', members: const [7]),
+            buildNexusCollection(id: 1, name: 'Iceland trip', members: Uint32List.fromList(const [7])),
           ],
           alerts: const [],
         ),

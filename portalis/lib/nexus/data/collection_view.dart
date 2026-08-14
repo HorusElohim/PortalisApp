@@ -2,7 +2,7 @@ import '../../features/collections/domain/collection.dart';
 import '../../features/collections/domain/peer_observation.dart';
 import '../../features/collections/domain/transfer_history.dart';
 import '../../features/media/domain/media_item.dart';
-import '../domain/nexus_app_state.dart';
+import '../domain/app_state.dart';
 
 /// The Nexus projection, in the shape the collection screen already draws.
 ///
@@ -21,13 +21,13 @@ import '../domain/nexus_app_state.dart';
 /// per-collection detail stream just to draw a summary line — Nexus's own
 /// design is that detail costs nothing until something asks for it. Without
 /// one, entries are honestly unknown rather than guessed: [Collection.media]
-/// becomes a stand-in list whose length is [NexusCollection.entries] and
+/// becomes a stand-in list whose length is [AppCollection.entries] and
 /// whose items claim nothing else, which is exactly as much as a row without
 /// a subscription is entitled to say.
 Collection nexusCollectionView({
-  required NexusCollection collection,
-  required NexusDetail? detail,
-  required List<NexusContact> contacts,
+  required AppCollection collection,
+  required AppDetail? detail,
+  required List<AppContact> contacts,
 }) {
   final entries = detail?.entries;
   final swarm = detail?.peers ?? const <String>[];
@@ -83,7 +83,7 @@ Collection nexusCollectionView({
 /// behaviour matches an unrecognised string, so a status not translated here
 /// still shows correctly — as a plain, uppercase badge — a fallback the
 /// legacy backend's own `CollectionRow` already relied on.
-String _legacyState(NexusCollection collection, NexusTransfer? transfer) {
+String _legacyState(AppCollection collection, AppTransfer? transfer) {
   switch (collection.status) {
     case 'Downloading':
       return 'downloading';
@@ -119,7 +119,7 @@ List<MediaItem> _placeholderMedia(int count) => List.generate(
 ///
 /// `null` when nothing has been recorded, so the overview hides the panel
 /// rather than drawing an empty chart.
-TransferHistory? nexusTransferHistory(NexusDetail? detail) {
+TransferHistory? nexusTransferHistory(AppDetail? detail) {
   final readings = detail?.readings ?? const [];
   if (readings.isEmpty) return null;
   return TransferHistory.restore(
@@ -143,8 +143,8 @@ TransferHistory? nexusTransferHistory(NexusDetail? detail) {
 /// live, and inventing a history of departed addresses would be the interface
 /// keeping state the core deliberately does not.
 List<PeerObservation> nexusPeerObservations({
-  required NexusCollection collection,
-  required NexusDetail? detail,
+  required AppCollection collection,
+  required AppDetail? detail,
 }) {
   final now = DateTime.now();
   return [
@@ -158,7 +158,7 @@ List<PeerObservation> nexusPeerObservations({
   ];
 }
 
-MediaItem _media(NexusEntry entry) => MediaItem(
+MediaItem _media(AppEntry entry) => MediaItem(
       entryId: entry.id,
       selected: entry.selected,
       label: entry.label,

@@ -9,10 +9,10 @@ import '../../../design/design.dart';
 import '../domain/picked_file.dart';
 import 'collection_commands.dart';
 import 'collection_share.dart';
-import '../../../nexus/data/nexus_collection_source.dart';
-import '../../../nexus/domain/nexus_app_state.dart';
-import 'nexus_collection_detail.dart';
-import 'nexus_home_library.dart';
+import '../../../nexus/data/collection_source.dart';
+import '../../../nexus/domain/app_state.dart';
+import 'collection_route.dart';
+import 'home_library.dart';
 
 /// App-shell adapter for the Nexus collection library. It coordinates routes
 /// and desktop file drops; collection state stays in the Nexus feature.
@@ -93,7 +93,7 @@ class _HomeState extends State<Home> {
   }
 
 
-  void _openCollection(NexusCollection collection) {
+  void _openCollection(AppCollection collection) {
     if (widget.onOpen != null) {
       widget.onOpen!(collection.id);
       return;
@@ -101,7 +101,7 @@ class _HomeState extends State<Home> {
     _push(nexusCollectionScreen(collection, AppControllers.nexusApp));
   }
 
-  void _handleCommand((NexusCollection, CollectionCommand) action) {
+  void _handleCommand((AppCollection, CollectionCommand) action) {
     final (collection, command) = action;
     if (command == CollectionCommand.delete) {
       unawaited(_delete(collection));
@@ -111,7 +111,7 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> _runCommand(
-    NexusCollection collection,
+    AppCollection collection,
     CollectionCommand command,
   ) async {
     try {
@@ -131,7 +131,7 @@ class _HomeState extends State<Home> {
     }
   }
 
-  Future<void> _delete(NexusCollection collection) async {
+  Future<void> _delete(AppCollection collection) async {
     final choice = await confirmCollectionDeletion(
       context,
       collectionName: collection.name,

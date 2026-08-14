@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -6,12 +7,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/features/collections/domain/picked_file.dart';
 import 'package:portalis/features/collections/presentation/collection_overview.dart';
 import 'package:portalis/features/collections/presentation/collection_share.dart';
-import 'package:portalis/nexus/application/nexus_app_controller.dart';
-import 'package:portalis/nexus/data/nexus_app_repository.dart';
-import 'package:portalis/nexus/data/nexus_collection_source.dart';
-import 'package:portalis/nexus/domain/nexus_app_state.dart';
-import 'package:portalis/features/collections/presentation/nexus_collection_detail.dart';
-import 'package:portalis/features/collections/presentation/nexus_home_library.dart';
+import 'package:portalis/nexus/application/app_controller.dart';
+import 'package:portalis/nexus/data/app_repository.dart';
+import 'package:portalis/nexus/data/collection_source.dart';
+import 'package:portalis/nexus/domain/app_state.dart';
+import 'package:portalis/features/collections/presentation/collection_route.dart';
+import 'package:portalis/features/collections/presentation/home_library.dart';
 
 void main() {
   test('owns one state subscription and forwards lifecycle changes', () async {
@@ -40,10 +41,10 @@ void main() {
   test('forwards the selected detail stream without caching it', () async {
     final repository = _Repository();
     final controller = NexusAppController(repository: repository);
-    final detail = NexusDetail(
+    final detail = AppDetail(
       id: 9,
       entries: [
-        NexusEntry(
+        AppEntry(
           id: 2,
           label: 'episode.mp4',
           bytes: BigInt.from(34),
@@ -51,8 +52,8 @@ void main() {
           available: false,
         ),
       ],
-      pieces: const [],
-      samples: const [],
+      pieces: Uint8List(0),
+      samples: Uint8List(0),
       peers: const [],
     );
 
@@ -81,17 +82,17 @@ void main() {
     repository.states.add(_torrentState());
     await tester.pump();
     repository.details.add(
-      NexusDetail(
+      AppDetail(
         id: 9,
         entries: [
-          NexusEntry(
+          AppEntry(
             id: 1,
             label: 'trailer.mp4',
             bytes: BigInt.from(5),
             selected: true,
             available: false,
           ),
-          NexusEntry(
+          AppEntry(
             id: 2,
             label: 'feature.mp4',
             bytes: BigInt.from(34),
@@ -99,8 +100,8 @@ void main() {
             available: false,
           ),
         ],
-        pieces: const [],
-        samples: const [],
+        pieces: Uint8List(0),
+        samples: Uint8List(0),
         peers: const [],
       ),
     );
@@ -135,10 +136,10 @@ void main() {
     repository.states.add(_torrentState());
     await tester.pump();
     repository.details.add(
-      NexusDetail(
+      AppDetail(
         id: 9,
         entries: [
-          NexusEntry(
+          AppEntry(
             id: 1,
             label: 'only.mp4',
             bytes: BigInt.from(5),
@@ -146,8 +147,8 @@ void main() {
             available: false,
           ),
         ],
-        pieces: const [],
-        samples: const [],
+        pieces: Uint8List(0),
+        samples: Uint8List(0),
         peers: const [],
       ),
     );
@@ -210,16 +211,16 @@ void main() {
   testWidgets(
       'Home renders Nexus collections through the shared legacy row, '
       'translated rather than reimplemented', (tester) async {
-    NexusCollection? opened;
+    AppCollection? opened;
     var created = false;
-    final collection = NexusCollection(
+    final collection = AppCollection(
       id: 9,
       name: 'Episode archive',
       nature: 'Torrent',
       role: 'Owner',
       revision: BigInt.one,
       status: 'Preparing',
-      members: const [],
+      members: Uint32List(0),
       entries: 2,
       totalBytes: BigInt.from(39),
       onDiskBytes: BigInt.zero,
@@ -232,8 +233,8 @@ void main() {
         home: Scaffold(
           body: NexusHomeLibrary(
             wide: false,
-            state: NexusAppState(
-              device: const NexusDevice(
+            state: AppSnapshot(
+              device: const AppDevice(
                 name: 'Mina',
                 handle: null,
                 fingerprint: 'fingerprint',
@@ -317,8 +318,8 @@ void main() {
     final controller = NexusAppController(repository: _Repository());
     final idle = _collectionState().collections.single;
     controller.debugSeed(
-      NexusAppState(
-        device: const NexusDevice(
+      AppSnapshot(
+        device: const AppDevice(
           name: 'Mina',
           handle: null,
           fingerprint: 'fingerprint',
@@ -328,19 +329,19 @@ void main() {
         contacts: const [],
         collections: [
           idle,
-          NexusCollection(
+          AppCollection(
             id: 10,
             name: 'Moving',
             nature: 'Torrent',
             role: 'Owner',
             revision: BigInt.one,
             status: 'Downloading',
-            members: const [],
+            members: Uint32List(0),
             entries: 1,
             totalBytes: BigInt.from(100),
             onDiskBytes: BigInt.from(50),
             uploadedBytes: BigInt.zero,
-            transfer: const NexusTransfer(
+            transfer: const AppTransfer(
               progress: 0.5,
               downBytesPerSecond: 125000,
               upBytesPerSecond: 250000,
@@ -381,7 +382,7 @@ void main() {
     final controller = NexusAppController(repository: repository);
     controller.debugSeed(
       _collectionState(),
-      details: const Stream<NexusDetail?>.empty(),
+      details: const Stream<AppDetail?>.empty(),
     );
 
     int? openId;
@@ -436,7 +437,7 @@ void main() {
     final controller = NexusAppController(repository: repository);
     controller.debugSeed(
       _collectionState(),
-      details: const Stream<NexusDetail?>.empty(),
+      details: const Stream<AppDetail?>.empty(),
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -461,7 +462,7 @@ void main() {
     final controller = NexusAppController(repository: repository);
     controller.debugSeed(
       _collectionState(),
-      details: const Stream<NexusDetail?>.empty(),
+      details: const Stream<AppDetail?>.empty(),
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -484,7 +485,7 @@ void main() {
     final controller = NexusAppController(repository: repository);
     controller.debugSeed(
       _collectionState(),
-      details: const Stream<NexusDetail?>.empty(),
+      details: const Stream<AppDetail?>.empty(),
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -504,8 +505,8 @@ void main() {
   });
 }
 
-NexusAppState _collectionState() => NexusAppState(
-      device: const NexusDevice(
+AppSnapshot _collectionState() => AppSnapshot(
+      device: const AppDevice(
         name: 'Mina',
         handle: null,
         fingerprint: 'fingerprint',
@@ -514,14 +515,14 @@ NexusAppState _collectionState() => NexusAppState(
       connectivity: 'LocalOnly',
       contacts: const [],
       collections: [
-        NexusCollection(
+        AppCollection(
           id: 9,
           name: 'Episode archive',
           nature: 'Native',
           role: 'Owner',
           revision: BigInt.one,
           status: 'Available',
-          members: const [],
+          members: Uint32List(0),
           entries: 0,
           totalBytes: BigInt.zero,
           onDiskBytes: BigInt.zero,
@@ -533,8 +534,8 @@ NexusAppState _collectionState() => NexusAppState(
       alerts: const [],
     );
 
-NexusAppState _state(String name) => NexusAppState(
-      device: NexusDevice(
+AppSnapshot _state(String name) => AppSnapshot(
+      device: AppDevice(
         name: name,
         handle: null,
         fingerprint: 'fingerprint',
@@ -548,8 +549,8 @@ NexusAppState _state(String name) => NexusAppState(
 
 /// One torrent import, downloading. `Torrent` is what makes its files a
 /// choice at all — see `NexusCollectionSource.supportsSelection`.
-NexusAppState _torrentState() => NexusAppState(
-      device: const NexusDevice(
+AppSnapshot _torrentState() => AppSnapshot(
+      device: const AppDevice(
         name: 'Mina',
         handle: null,
         fingerprint: 'fingerprint',
@@ -558,14 +559,14 @@ NexusAppState _torrentState() => NexusAppState(
       connectivity: 'LocalOnly',
       contacts: const [],
       collections: [
-        NexusCollection(
+        AppCollection(
           id: 9,
           name: 'Big Buck Bunny',
           nature: 'Torrent',
           role: 'Owner',
           revision: BigInt.one,
           status: 'Downloading',
-          members: const [],
+          members: Uint32List(0),
           entries: 2,
           totalBytes: BigInt.from(39),
           onDiskBytes: BigInt.zero,
@@ -578,8 +579,8 @@ NexusAppState _torrentState() => NexusAppState(
     );
 
 class _Repository implements NexusAppRepository {
-  final states = StreamController<NexusAppState>.broadcast();
-  final details = StreamController<NexusDetail?>.broadcast();
+  final states = StreamController<AppSnapshot>.broadcast();
+  final details = StreamController<AppDetail?>.broadcast();
   final active = <bool>[];
   final detailCollections = <int?>[];
   final commands = <NexusCommand>[];
@@ -587,9 +588,9 @@ class _Repository implements NexusAppRepository {
   var stops = 0;
 
   @override
-  Future<NexusAccepted> send(NexusCommand command) async {
+  Future<AppAccepted> send(NexusCommand command) async {
     commands.add(command);
-    return NexusAccepted(id: BigInt.zero, collection: null, queued: false);
+    return AppAccepted(id: BigInt.zero, collection: null, queued: false);
   }
 
   @override
@@ -606,11 +607,11 @@ class _Repository implements NexusAppRepository {
   }
 
   @override
-  Stream<NexusDetail?> watchDetail(int? collection) {
+  Stream<AppDetail?> watchDetail(int? collection) {
     detailCollections.add(collection);
     return details.stream;
   }
 
   @override
-  Stream<NexusAppState> watchStates() => states.stream;
+  Stream<AppSnapshot> watchStates() => states.stream;
 }

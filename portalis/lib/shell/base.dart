@@ -8,7 +8,7 @@ import '../features/collections/domain/picked_file.dart';
 import 'navigation.dart';
 import 'desktop/pane.dart';
 import '../features/collections/presentation/collection_share.dart';
-import '../features/collections/presentation/nexus_collection_detail.dart';
+import '../features/collections/presentation/collection_route.dart';
 
 /// The one stateful shell for every window size.
 ///

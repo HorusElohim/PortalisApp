@@ -40,7 +40,7 @@ void main() {
       await pumpApp(tester, nexusCollections: [
         buildNexusCollection(
           status: 'Downloading',
-          transfer: const NexusTransfer(
+          transfer: const AppTransfer(
             progress: 0.4,
             downBytesPerSecond: 1500000,
             upBytesPerSecond: 500000,

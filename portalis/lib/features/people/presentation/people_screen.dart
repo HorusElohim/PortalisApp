@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/app_controllers.dart';
 import '../../../design/design.dart';
-import '../../../nexus/domain/nexus_app_state.dart';
+import '../../../nexus/domain/app_state.dart';
 import '../../../design/theme.dart';
 
 /// The people this device knows, from Nexus.
@@ -26,8 +26,8 @@ class PeopleScreen extends StatelessWidget {
 
   Widget _build(BuildContext context) {
     final state = AppControllers.nexusApp.state;
-    final contacts = state?.contacts ?? const <NexusContact>[];
-    final collections = state?.collections ?? const <NexusCollection>[];
+    final contacts = state?.contacts ?? const <AppContact>[];
+    final collections = state?.collections ?? const <AppCollection>[];
 
     // Where each contact actually appears, so a card can say more than that
     // they exist.
@@ -98,7 +98,7 @@ class ContactCard extends StatelessWidget {
     required this.collections,
   });
 
-  final NexusContact contact;
+  final AppContact contact;
   final List<String> collections;
 
   bool get _reachable => contact.reachable != null;

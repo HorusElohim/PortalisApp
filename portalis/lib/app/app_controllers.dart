@@ -1,7 +1,7 @@
 import '../design/theme_controller.dart';
 import '../features/identity/application/identity_controller.dart';
-import '../nexus/application/nexus_app_controller.dart';
-import '../nexus/application/nexus_settings_controller.dart';
+import '../nexus/application/app_controller.dart';
+import '../nexus/application/settings_controller.dart';
 import '../features/settings/application/settings_controller.dart';
 
 /// Application-owned controller instances shared by the widget tree.
