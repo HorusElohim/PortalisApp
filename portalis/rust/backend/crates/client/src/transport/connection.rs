@@ -22,6 +22,9 @@ pub(crate) struct Shared {
     pub(crate) events: mpsc::Sender<Envelope>,
     pub(crate) protocol: ClientProtocol,
     pub(crate) request_timeout: Duration,
+    /// Bounds each reconnect attempt, which is a different question from how
+    /// long a command waits on a connection that already exists.
+    pub(crate) handshake_timeout: Duration,
     pub(crate) shutdown: watch::Sender<bool>,
     pub(crate) server_identity: String,
     live: Mutex<Option<Live>>,
@@ -37,6 +40,7 @@ impl Shared {
     pub(crate) fn new(
         events: mpsc::Sender<Envelope>,
         request_timeout: Duration,
+        handshake_timeout: Duration,
         server_identity: String,
     ) -> Self {
         Self {
@@ -44,6 +48,7 @@ impl Shared {
             events,
             protocol: ClientProtocol::default(),
             request_timeout,
+            handshake_timeout,
             shutdown: watch::Sender::new(false),
             server_identity,
             live: Mutex::new(None),
@@ -127,7 +132,7 @@ pub(crate) async fn supervise(
         } else {
             let attempt = tokio::select! {
                 _ = shutdown.changed() => return,
-                attempt = handshake_with_retry(endpoint.clone(), &policy, shared.request_timeout) => attempt,
+                attempt = handshake_with_retry(endpoint.clone(), &policy, shared.handshake_timeout) => attempt,
             };
             match attempt {
                 Ok(connection) => start_connection(&shared, connection),

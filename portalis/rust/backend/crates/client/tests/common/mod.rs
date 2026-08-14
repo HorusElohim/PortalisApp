@@ -193,6 +193,11 @@ pub fn brisk_policy(maximum_attempts: u32) -> ReconnectPolicy {
 pub fn brisk_config(maximum_attempts: u32) -> ClientConfig {
     ClientConfig {
         reconnect: brisk_policy(maximum_attempts),
+        // Brisk about the dial as well as the backoff. A QUIC dial to a node
+        // that is not there is not refused by anybody, so every attempt runs
+        // to its bound; with the default one a three-attempt test waits half a
+        // minute to learn what it learns in a fraction of a second.
+        handshake_timeout: Duration::from_millis(250),
         ..ClientConfig::default()
     }
 }

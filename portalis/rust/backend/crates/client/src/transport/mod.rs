@@ -72,7 +72,7 @@ impl NexusClient {
         let endpoint = endpoint.borrow().clone();
         let config = ClientConfig::default();
         let local = bind_endpoint().await?;
-        let connection = handshake(&local, endpoint.clone(), config.request_timeout).await?;
+        let connection = handshake(&local, endpoint.clone(), config.handshake_timeout).await?;
         Ok(Self::supervised(endpoint, connection, config))
     }
 
@@ -87,9 +87,12 @@ impl NexusClient {
         config: &ClientConfig,
     ) -> Result<Self, TransportError> {
         let endpoint = endpoint.borrow().clone();
-        let connection =
-            handshake_with_retry(endpoint.clone(), &config.reconnect, config.request_timeout)
-                .await?;
+        let connection = handshake_with_retry(
+            endpoint.clone(),
+            &config.reconnect,
+            config.handshake_timeout,
+        )
+        .await?;
         Ok(Self::supervised(endpoint, connection, config.clone()))
     }
 
@@ -104,6 +107,7 @@ impl NexusClient {
         let shared = Arc::new(Shared::new(
             events,
             config.request_timeout,
+            config.handshake_timeout,
             identity_of(&endpoint),
         ));
         // Subscribed here, not inside the task: a caller may shut down before

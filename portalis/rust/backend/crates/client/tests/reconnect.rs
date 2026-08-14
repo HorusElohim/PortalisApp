@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant};
 
-use portalis_nexus_client::{ClientConfig, DEFAULT_REQUEST_TIMEOUT, NexusClient, TransportError};
+use portalis_nexus_client::{ClientConfig, DEFAULT_HANDSHAKE_TIMEOUT, NexusClient, TransportError};
 use portalis_nexus_protocol::v1::Pong;
 use portalis_nexus_protocol::v1::envelope::Payload;
 use tokio::time::{sleep, timeout};
@@ -43,7 +43,7 @@ async fn connect_stops_after_one_bounded_attempt_on_an_unreachable_endpoint() {
         "connect makes a single attempt, got {error:?}"
     );
     assert!(
-        started.elapsed() < DEFAULT_REQUEST_TIMEOUT + Duration::from_secs(1),
+        started.elapsed() < DEFAULT_HANDSHAKE_TIMEOUT + Duration::from_secs(1),
         "connect should stop after one handshake timeout"
     );
 }
@@ -170,6 +170,7 @@ async fn in_flight_requests_fail_as_soon_as_the_connection_drops() {
         // by timing out.
         request_timeout: Duration::from_secs(120),
         reconnect: brisk_policy(u32::MAX),
+        ..brisk_config(u32::MAX)
     };
     let client = NexusClient::connect_with_config(peer_endpoint(address), &config)
         .await

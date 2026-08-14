@@ -31,7 +31,7 @@ mod transport;
 mod verify;
 
 pub use candidates::{CandidateSource, PeerCandidate, merge_candidates};
-pub use config::{ClientConfig, DEFAULT_REQUEST_TIMEOUT};
+pub use config::{ClientConfig, DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_REQUEST_TIMEOUT};
 pub use endpoint::{ConnectionPath, NEXUS_ALPN, NexusEndpoint};
 pub use error::ClientError;
 pub use iroh::RelayMode;
