@@ -2,8 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:portalis/features/collections/domain/picked_file.dart';
+import 'package:portalis/features/collections/presentation/collection_overview.dart';
+import 'package:portalis/features/collections/presentation/collection_share.dart';
 import 'package:portalis/features/nexus/application/nexus_app_controller.dart';
 import 'package:portalis/features/nexus/data/nexus_app_repository.dart';
+import 'package:portalis/features/nexus/data/nexus_collection_source.dart';
 import 'package:portalis/features/nexus/domain/nexus_app_state.dart';
 import 'package:portalis/features/nexus/presentation/nexus_collection_detail.dart';
 import 'package:portalis/features/nexus/presentation/nexus_home_library.dart';
@@ -49,6 +53,7 @@ void main() {
       ],
       pieces: const [],
       samples: const [],
+      peers: const [],
     );
 
     final seen = controller.watchDetail(9).first;
@@ -88,6 +93,7 @@ void main() {
         ],
         pieces: const [],
         samples: const [],
+        peers: const [],
       ),
     );
     await tester.pump();
@@ -105,19 +111,60 @@ void main() {
     expect(repository.commands.single.entries, [2]);
   });
 
-  testWidgets('Home renders Nexus collections without a legacy projection',
+  testWidgets('the existing New share page creates a Nexus collection',
       (tester) async {
+    final repository = _Repository();
+    final controller = NexusAppController(repository: repository);
+    var closed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShareScreen(
+          controller: controller,
+          onClose: () => closed = true,
+          initialFiles: const [
+            PickedFile(
+              name: 'episode.mp4',
+              path: '/media/episode.mp4',
+              lengthBytes: 42,
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const Key('collectionNameField')),
+      'Episode archive',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('createShareButton')));
+    await tester.pump();
+
+    expect(repository.commands, hasLength(1));
+    final command = repository.commands.single;
+    expect(command.kind, 'createCollection');
+    expect(command.name, 'Episode archive');
+    expect(command.files.single.name, 'episode.mp4');
+    expect(command.files.single.path, '/media/episode.mp4');
+    expect(command.files.single.bytes, BigInt.from(42));
+    expect(closed, isTrue);
+  });
+
+  testWidgets(
+      'Home renders Nexus collections through the shared legacy row, '
+      'translated rather than reimplemented', (tester) async {
     NexusCollection? opened;
     var created = false;
     final collection = NexusCollection(
       id: 9,
       name: 'Episode archive',
+      nature: 'Torrent',
       role: 'Owner',
       revision: BigInt.one,
       status: 'Preparing',
       members: const [],
       entries: 2,
       totalBytes: BigInt.from(39),
+      onDiskBytes: BigInt.zero,
       transfer: null,
       pending: null,
     );
@@ -140,28 +187,193 @@ void main() {
             ),
             error: null,
             query: '',
-            filter: NexusCollectionFilter.all,
             onSearch: (_) {},
-            onFilterChanged: (_) {},
             onImportTorrent: (_) async {},
             onCreateCollection: () => created = true,
             onJoin: (_) {},
             onOpen: (value) => opened = value,
+            onCommand: (_) {},
           ),
         ),
       ),
     );
 
     expect(find.text('Episode archive'), findsOneWidget);
-    expect(find.text('PREPARING'), findsOneWidget);
+    // Preparing maps onto the legacy backend's own "importing" vocabulary —
+    // the same word `CollectionRow`'s badge has always shown for it.
+    expect(find.text('IMPORTING'), findsOneWidget);
     await tester.tap(find.text('Episode archive'));
     expect(opened, same(collection));
-    await tester.tap(find.byKey(const Key('nexusCreateCollection')));
+    await tester.tap(find.byKey(const Key('shareCollectionAction')));
     expect(created, isTrue);
   });
 
-  testWidgets('collection detail sends its delete through Nexus',
+  testWidgets('New share imports a magnet without needing a name or files',
       (tester) async {
+    final repository = _Repository();
+    final controller = NexusAppController(repository: repository);
+    var closed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShareScreen(controller: controller, onClose: () => closed = true),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('shareAddTorrent')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sharePasteMagnet')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'magnet:?xt=urn:btih:abc');
+    await tester.tap(find.text('Add').last);
+    await tester.pumpAndSettle();
+
+    // A torrent is fetched rather than shared, so it needs neither the
+    // collection name nor a file list this screen otherwise insists on.
+    expect(repository.commands, hasLength(1));
+    expect(repository.commands.single.kind, 'importTorrent');
+    expect(repository.commands.single.source, 'magnet:?xt=urn:btih:abc');
+    expect(closed, isTrue, reason: 'and it hands over to the selection step');
+  });
+
+  /// The bug this exists to prevent: the shell reported "1 ACTIVE TRANSFER"
+  /// above a Home showing no collections, because the chrome counted from the
+  /// legacy collections controller while the list came from Nexus. Status
+  /// chrome that contradicts the list beside it makes a person distrust what
+  /// they can see, so activity has exactly one derivation.
+  test('activity is idle when Nexus holds nothing, whatever else is running',
+      () {
+    final controller = NexusAppController(repository: _Repository());
+
+    // Before any state has arrived at all.
+    expect(controller.activity.isMoving, isFalse);
+    expect(controller.activity.transfers, 0);
+    expect(controller.activity.peers, 0);
+
+    // And with a collection that is not transferring.
+    controller.debugSeed(_collectionState());
+    expect(controller.activity.isMoving, isFalse);
+    expect(controller.activity.transfers, 0);
+  });
+
+  test('activity sums only what is actually moving', () {
+    final controller = NexusAppController(repository: _Repository());
+    final idle = _collectionState().collections.single;
+    controller.debugSeed(
+      NexusAppState(
+        device: const NexusDevice(
+          name: 'Mina',
+          handle: null,
+          fingerprint: 'fingerprint',
+          devices: 1,
+        ),
+        connectivity: 'LocalOnly',
+        contacts: const [],
+        collections: [
+          idle,
+          NexusCollection(
+            id: 10,
+            name: 'Moving',
+            nature: 'Torrent',
+            role: 'Owner',
+            revision: BigInt.one,
+            status: 'Downloading',
+            members: const [],
+            entries: 1,
+            totalBytes: BigInt.from(100),
+            onDiskBytes: BigInt.from(50),
+            transfer: const NexusTransfer(
+              progress: 0.5,
+              downBytesPerSecond: 125000,
+              upBytesPerSecond: 250000,
+              peers: 3,
+              etaSecs: 4,
+            ),
+            pending: null,
+          ),
+        ],
+        alerts: const [],
+      ),
+    );
+
+    final activity = controller.activity;
+    expect(activity.transfers, 1, reason: 'the idle collection is not counted');
+    expect(activity.peers, 3);
+    expect(activity.downMbps, 1.0);
+    expect(activity.upMbps, 2.0);
+    expect(activity.rateMbps, 3.0);
+  });
+
+  /// The wide layout's whole point: opening a collection grows its row into
+  /// its own detail in place, rather than covering the shell with a pushed
+  /// screen. This is the exact behaviour that went missing when Home was
+  /// rewritten for Nexus.
+  ///
+  /// Drives it the way a person actually does — a tap, which is what
+  /// `CollectionRow` needs to escalate past collapsed — rather than starting
+  /// the tree already "open", which even the legacy row has never supported.
+  /// A small stateful harness stands in for `Home`, which owns `openId` and
+  /// the source that follows it; `Home` itself reaches a global singleton
+  /// controller a unit test cannot substitute, so this proves the contract
+  /// `Home` relies on instead of `Home`'s own wiring.
+  testWidgets(
+      'the wide layout grows the open row into its own detail instead of '
+      'pushing a screen', (tester) async {
+    final repository = _Repository();
+    final controller = NexusAppController(repository: repository);
+    controller.debugSeed(
+      _collectionState(),
+      details: const Stream<NexusDetail?>.empty(),
+    );
+
+    int? openId;
+    NexusCollectionSource? source;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => NexusHomeLibrary(
+              wide: true,
+              state: controller.state,
+              error: null,
+              query: '',
+              openId: openId,
+              openSource: source,
+              onSearch: (_) {},
+              onImportTorrent: (_) async {},
+              onCreateCollection: () {},
+              onJoin: (_) {},
+              // No addTearDown here: once this is handed to
+              // `NexusHomeLibrary`, `CollectionDetail`'s own state is its
+              // sole owner and disposes it when the row collapses or the
+              // tree tears down — a second dispose call is the bug this
+              // ownership rule exists to prevent.
+              onOpen: (collection) => setState(() {
+                openId = collection.id;
+                source = NexusCollectionSource(
+                  controller: controller,
+                  collectionId: collection.id,
+                );
+              }),
+              onCommand: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(CollectionOverview), findsNothing);
+    await tester.tap(find.text('Episode archive'));
+    await tester.pump();
+
+    // No route was pushed — the detail is right here, grown out of the row.
+    expect(find.byType(CollectionOverview), findsOneWidget);
+    expect(find.byKey(const Key('collectionCommandrestart')), findsOneWidget);
+  });
+
+  testWidgets(
+      'collection detail deletes through the same command bar and dialog '
+      'the legacy screen uses', (tester) async {
     final repository = _Repository();
     final controller = NexusAppController(repository: repository);
     controller.debugSeed(
@@ -174,9 +386,10 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const Key('nexusDeleteCollection')));
+    await tester.tap(find.byKey(const Key('collectionCommanddelete')));
     await tester.pump();
-    await tester.tap(find.text('Delete collection'));
+    expect(find.text('Delete "Episode archive"?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('deleteCollectionOnly')));
     await tester.pump();
 
     expect(repository.commands, hasLength(1));
@@ -185,27 +398,51 @@ void main() {
     expect(repository.commands.single.deleteFiles, isFalse);
   });
 
-  testWidgets('collection detail sends its rename through Nexus',
-      (tester) async {
+  testWidgets('choosing "delete with files" carries the flag', (tester) async {
     final repository = _Repository();
     final controller = NexusAppController(repository: repository);
-    controller.debugSeed(_collectionState());
+    controller.debugSeed(
+      _collectionState(),
+      details: const Stream<NexusDetail?>.empty(),
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: NexusCollectionDetail(collection: 9, controller: controller),
       ),
     );
 
-    await tester.tap(find.byKey(const Key('nexusRenameCollection')));
+    await tester.tap(find.byKey(const Key('collectionCommanddelete')));
     await tester.pump();
-    await tester.enterText(find.byType(TextField), 'Renamed archive');
-    await tester.tap(find.text('Rename').last);
+    await tester.tap(find.byKey(const Key('deleteCollectionWithFiles')));
     await tester.pump();
 
-    expect(repository.commands, hasLength(1));
-    expect(repository.commands.single.kind, 'renameCollection');
-    expect(repository.commands.single.collection, 9);
-    expect(repository.commands.single.name, 'Renamed archive');
+    expect(repository.commands.single.deleteFiles, isTrue);
+  });
+
+  testWidgets(
+      'restart resumes and pause pauses, both through the one setPaused '
+      'command', (tester) async {
+    final repository = _Repository();
+    final controller = NexusAppController(repository: repository);
+    controller.debugSeed(
+      _collectionState(),
+      details: const Stream<NexusDetail?>.empty(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NexusCollectionDetail(collection: 9, controller: controller),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('collectionCommandrestart')));
+    await tester.pump();
+    expect(repository.commands.last.kind, 'setPaused');
+    expect(repository.commands.last.paused, isFalse);
+
+    await tester.tap(find.byKey(const Key('collectionCommandpause')));
+    await tester.pump();
+    expect(repository.commands.last.kind, 'setPaused');
+    expect(repository.commands.last.paused, isTrue);
   });
 }
 
@@ -222,12 +459,14 @@ NexusAppState _collectionState() => NexusAppState(
         NexusCollection(
           id: 9,
           name: 'Episode archive',
+          nature: 'Native',
           role: 'Owner',
           revision: BigInt.one,
           status: 'Available',
           members: const [],
           entries: 0,
           totalBytes: BigInt.zero,
+          onDiskBytes: BigInt.zero,
           transfer: null,
           pending: null,
         ),

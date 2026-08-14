@@ -79,12 +79,14 @@ class FrbNexusAppRepository implements NexusAppRepository {
       NexusCollection(
         id: collection.id,
         name: collection.name,
+        nature: collection.nature,
         role: collection.role,
         revision: collection.revision,
         status: collection.status,
         members: List.unmodifiable(collection.members),
         entries: collection.entries,
         totalBytes: collection.totalBytes,
+        onDiskBytes: collection.onDiskBytes,
         transfer: collection.transfer == null
             ? null
             : NexusTransfer(
@@ -112,21 +114,32 @@ class FrbNexusAppRepository implements NexusAppRepository {
                 bytes: entry.bytes,
                 selected: entry.selected,
                 available: entry.available,
+                path: entry.path,
               ),
             )
             .toList(growable: false),
         pieces: List.unmodifiable(detail.pieces),
         samples: List.unmodifiable(detail.samples),
+        peers: List.unmodifiable(detail.peers),
       );
 
   static bridge.AppCommand _commandToBridge(NexusCommand command) =>
       bridge.AppCommand(
         kind: command.kind,
         name: command.name,
-        files: command.files,
+        files: command.files
+            .map(
+              (file) => bridge.AppSourceFile(
+                name: file.name,
+                path: file.path,
+                bytes: file.bytes,
+              ),
+            )
+            .toList(growable: false),
         collection: command.collection,
         label: command.label,
         deleteFiles: command.deleteFiles,
+        paused: command.paused,
         entry: command.entry,
         source: command.source,
         entries: Uint32List.fromList(command.entries),

@@ -66,6 +66,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppSnapshot dco_decode_app_snapshot(dynamic raw);
 
   @protected
+  AppSourceFile dco_decode_app_source_file(dynamic raw);
+
+  @protected
   AppTransfer dco_decode_app_transfer(dynamic raw);
 
   @protected
@@ -139,6 +142,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AppEntry> dco_decode_list_app_entry(dynamic raw);
+
+  @protected
+  List<AppSourceFile> dco_decode_list_app_source_file(dynamic raw);
 
   @protected
   List<CollaboratorInfo> dco_decode_list_collaborator_info(dynamic raw);
@@ -276,6 +282,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppSnapshot sse_decode_app_snapshot(SseDeserializer deserializer);
 
   @protected
+  AppSourceFile sse_decode_app_source_file(SseDeserializer deserializer);
+
+  @protected
   AppTransfer sse_decode_app_transfer(SseDeserializer deserializer);
 
   @protected
@@ -353,6 +362,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AppEntry> sse_decode_list_app_entry(SseDeserializer deserializer);
+
+  @protected
+  List<AppSourceFile> sse_decode_list_app_source_file(
+      SseDeserializer deserializer);
 
   @protected
   List<CollaboratorInfo> sse_decode_list_collaborator_info(
@@ -498,6 +511,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_app_snapshot(AppSnapshot self, SseSerializer serializer);
 
   @protected
+  void sse_encode_app_source_file(AppSourceFile self, SseSerializer serializer);
+
+  @protected
   void sse_encode_app_transfer(AppTransfer self, SseSerializer serializer);
 
   @protected
@@ -585,6 +601,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_app_entry(List<AppEntry> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_app_source_file(
+      List<AppSourceFile> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_collaborator_info(

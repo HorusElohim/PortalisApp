@@ -4,26 +4,22 @@ import '../app/app_controllers.dart';
 import '../design/design.dart';
 import '../theme.dart';
 
-/// A quiet rail that appears only while a collection is actively transferring.
+/// A quiet rail that appears only while something is actually transferring.
+///
+/// Reads Nexus, which is the engine. It used to read the legacy collections
+/// controller — a second engine polling the same torrent session — and so
+/// could report "1 ACTIVE TRANSFER" above a Home showing no collections at
+/// all. Status chrome that disagrees with the list beside it is worse than no
+/// chrome: it makes a person doubt the thing they can see.
 class DesktopEventRail extends StatelessWidget {
   const DesktopEventRail({super.key});
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: AppControllers.collections,
+        listenable: AppControllers.nexusApp,
         builder: (context, _) {
-          final collections = AppControllers.collections.collections;
-          final active = collections.where((collection) => collection.isMoving).toList();
-          if (active.isEmpty) return const SizedBox.shrink();
-
-          final down = active.fold<double>(
-            0,
-            (sum, collection) => sum + collection.downloadMbps,
-          );
-          final up = active.fold<double>(
-            0,
-            (sum, collection) => sum + collection.uploadMbps,
-          );
+          final activity = AppControllers.nexusApp.activity;
+          if (!activity.isMoving) return const SizedBox.shrink();
 
           return Row(
             mainAxisSize: MainAxisSize.min,
@@ -31,16 +27,22 @@ class DesktopEventRail extends StatelessWidget {
               LiveDot(color: AppColors.signal, size: 7),
               const SizedBox(width: 8),
               Text(
-                plural(active.length, 'active transfer').toUpperCase(),
+                plural(activity.transfers, 'active transfer').toUpperCase(),
                 style: monoLabel(size: 10, color: AppColors.signal),
               ),
-              if (down > 0) ...[
+              if (activity.downMbps > 0) ...[
                 const SizedBox(width: 12),
-                Text('↓ ${formatRate(down)}', style: monoLabel(size: 10)),
+                Text(
+                  '↓ ${formatRate(activity.downMbps)}',
+                  style: monoLabel(size: 10),
+                ),
               ],
-              if (up > 0) ...[
+              if (activity.upMbps > 0) ...[
                 const SizedBox(width: 12),
-                Text('↑ ${formatRate(up)}', style: monoLabel(size: 10)),
+                Text(
+                  '↑ ${formatRate(activity.upMbps)}',
+                  style: monoLabel(size: 10),
+                ),
               ],
             ],
           );

@@ -77,6 +77,7 @@ Collection buildCollection({
 NexusCollection buildNexusCollection({
   int id = 1,
   String name = 'Iceland trip',
+  String nature = 'Native',
   String role = 'Owner',
   String status = 'Available',
   int entries = 0,
@@ -86,12 +87,14 @@ NexusCollection buildNexusCollection({
     NexusCollection(
       id: id,
       name: name,
+      nature: nature,
       role: role,
       revision: BigInt.one,
       status: status,
       members: const [],
       entries: entries,
       totalBytes: BigInt.from(totalBytes),
+      onDiskBytes: BigInt.zero,
       transfer: transfer,
       pending: null,
     );

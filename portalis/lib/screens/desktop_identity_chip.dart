@@ -30,12 +30,11 @@ class _DesktopIdentityChipState extends State<DesktopIdentityChip> {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: Listenable.merge([
           AppControllers.identity,
-          AppControllers.collections,
+          AppControllers.nexusApp,
         ]),
         builder: (context, _) {
           final name = AppControllers.identity.info?.nickname;
-          final peers = AppControllers.collections.collections
-              .fold<int>(0, (sum, collection) => sum + collection.livePeers);
+          final peers = AppControllers.nexusApp.activity.peers;
           final initials = name == null || name.isEmpty ? '-' : name[0].toUpperCase();
 
           return Material(

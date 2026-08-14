@@ -17,10 +17,9 @@ class DesktopTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: AppControllers.collections,
+        listenable: AppControllers.nexusApp,
         builder: (context, _) {
-          final active = AppControllers.collections.collections
-              .any((collection) => collection.isMoving);
+          final active = AppControllers.nexusApp.activity.isMoving;
           return Container(
             decoration: BoxDecoration(
               color: AppColors.surfaceSunken,

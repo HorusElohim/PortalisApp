@@ -21,6 +21,32 @@ class NexusAppController extends ChangeNotifier {
   NexusAppState? _state;
   Stream<NexusDetail?>? _debugDetails;
   NexusAppState? get state => _state;
+
+  /// What the engine is doing, derived from the one state this controller
+  /// owns. Every piece of chrome reads this rather than counting for itself
+  /// — see [NexusActivity] for why that matters.
+  NexusActivity get activity {
+    final collections = _state?.collections;
+    if (collections == null || collections.isEmpty) return NexusActivity.idle;
+    var transfers = 0;
+    var down = 0;
+    var up = 0;
+    var peers = 0;
+    for (final collection in collections) {
+      final transfer = collection.transfer;
+      if (transfer == null) continue;
+      transfers++;
+      down += transfer.downBytesPerSecond;
+      up += transfer.upBytesPerSecond;
+      peers += transfer.peers;
+    }
+    return NexusActivity(
+      transfers: transfers,
+      downBytesPerSecond: down,
+      upBytesPerSecond: up,
+      peers: peers,
+    );
+  }
   String? lastError;
   bool get started => _starting != null;
 

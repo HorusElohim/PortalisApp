@@ -29,7 +29,7 @@ class MobileShellLayout extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: AppColors.surfaceDeep,
         body: AmbientBackground(
-          intensity: Glow.intensityForRate(AppControllers.collections.liveRate),
+          intensity: Glow.intensityForRate(AppControllers.nexusApp.activity.rateMbps),
           child: SafeArea(
             bottom: false,
             child: IndexedStack(

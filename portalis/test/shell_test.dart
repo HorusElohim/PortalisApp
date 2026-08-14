@@ -80,7 +80,12 @@ void main() {
         (tester) async {
       await pumpApp(tester, size: desktopSize, nexusCollections: [
         buildNexusCollection(id: 1, name: 'Iceland'),
-        buildNexusCollection(id: 2, name: 'Studio', status: 'Preparing'),
+        buildNexusCollection(
+          id: 2,
+          name: 'Studio',
+          nature: 'Torrent',
+          status: 'Preparing',
+        ),
       ]);
 
       await tester.tap(find.text('Studio').first);
@@ -237,7 +242,11 @@ void main() {
       // The distinction that makes it a Home button and not just a tab: one
       // tap lands you at the start, not one screen shallower.
       await pumpApp(tester, nexusCollections: [
-        buildNexusCollection(name: 'Episode', status: 'Preparing'),
+        buildNexusCollection(
+          name: 'Episode',
+          nature: 'Torrent',
+          status: 'Preparing',
+        ),
       ]);
       await tester.tap(find.text('Episode'));
       await pumpTransition(tester);

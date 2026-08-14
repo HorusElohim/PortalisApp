@@ -49,9 +49,11 @@ class _RootShellState extends AdaptiveShellState<RootShell> {
   Widget buildWideLayout(BuildContext context) => DesktopShellLayout(
         pane: pane,
         onPane: selectPane,
-        liveRate: AppControllers.collections.liveRate,
+        liveRate: AppControllers.nexusApp.activity.rateMbps,
         home: Home(
           embedded: true,
+          openId: openId,
+          onOpen: (id) => openCollection(id, inline: true),
           onShare: ([files]) => openShare(files, true),
           onJoin: openJoinInline,
         ),

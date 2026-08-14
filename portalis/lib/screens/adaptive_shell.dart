@@ -9,6 +9,7 @@ import '../services/navigation.dart';
 import 'desktop_pane.dart';
 import '../features/collections/presentation/collection_join.dart';
 import '../features/collections/presentation/collection_share.dart';
+import '../features/nexus/presentation/nexus_collection_detail.dart';
 
 /// The one stateful shell for every window size.
 ///
@@ -23,10 +24,12 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     with WidgetsBindingObserver {
   int get tab => AppNavigation.tab.value;
   DesktopPane get pane => _pane;
+  int? get openId => _openId;
   String? get pendingInvite => _pendingInvite;
   List<PickedFile>? get pendingShareFiles => _pendingShareFiles;
 
   DesktopPane _pane = DesktopPane.home;
+  int? _openId;
   String? _pendingInvite;
   List<PickedFile>? _pendingShareFiles;
 
@@ -35,14 +38,18 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     AppNavigation.tab.addListener(_onTabChanged);
-    AppControllers.collections.start();
+    // The legacy collections engine is deliberately not started. It restored
+    // its own collections into the same torrent session Nexus uses and ran a
+    // second listener beside it, so the shell could report a transfer that
+    // belonged to no collection Nexus knew about — chrome reading one engine
+    // above a list drawn from another. Nexus owns the engine; a second one
+    // running quietly is how the interface ends up lying.
     AppControllers.settings.load();
     AppControllers.identity.load();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    AppControllers.collections.setPaused(state != AppLifecycleState.resumed);
     unawaited(
         AppControllers.nexusApp.setActive(state == AppLifecycleState.resumed));
   }
@@ -66,6 +73,31 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     setState(() => _pane = next);
     final tab = _tabForPane(next);
     if (tab != null) AppNavigation.tab.value = tab;
+  }
+
+  /// Opens one collection.
+  ///
+  /// `inline: false` pushes it as its own route — the compact layout, and
+  /// anywhere else with no list to grow a row into. `inline: true` toggles
+  /// which id [openId] names instead: a wide window grows the matching row
+  /// into its own detail rather than covering the whole shell, which is what
+  /// pushing from an embedded pane would otherwise do.
+  void openCollection(int id, {required bool inline}) {
+    if (!inline) {
+      final collection = AppControllers.nexusApp.state?.collections
+          .where((item) => item.id == id)
+          .firstOrNull;
+      if (collection == null) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              nexusCollectionScreen(collection, AppControllers.nexusApp),
+        ),
+      );
+      return;
+    }
+    setState(() => _openId = _openId == id ? null : id);
+    selectPane(DesktopPane.home);
   }
 
   void openShare([List<PickedFile>? initialFiles, bool inline = false]) {
@@ -113,7 +145,7 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
   @override
   Widget build(BuildContext context) => WindowBuilder(
         builder: (context, window) => ListenableBuilder(
-          listenable: AppControllers.collections,
+          listenable: AppControllers.nexusApp,
           builder: (context, _) => KeyedSubtree(
             // Desktop and compact layouts have incompatible parent chains.
             // Make a breakpoint crossing an explicit replacement rather than
@@ -132,7 +164,6 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
   void dispose() {
     AppNavigation.tab.removeListener(_onTabChanged);
     WidgetsBinding.instance.removeObserver(this);
-    AppControllers.collections.stop();
     unawaited(AppControllers.nexusApp.stop());
     super.dispose();
   }

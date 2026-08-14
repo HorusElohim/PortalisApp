@@ -30,8 +30,12 @@
 
 <!-- New user-visible features go here before the next release. -->
 
-- Home now offers **Create collection**. It creates the collection through
-  Nexus and opens its Nexus detail route immediately.
+- Restored Home's prominent **Share files** action and the complete existing
+  New Share flow on top of Nexus. Selected native files retain their names,
+  measured sizes, and stable locations inside the collection aggregate;
+  Nexus hashes and seeds them through the existing zero-copy substrate,
+  persists the initial signed descriptor/revision, resumes preparation after
+  restart, and streams honest file totals and detail without legacy polling.
 
 - Nexus collection detail now supports renaming and safe collection-only
   deletion through the same command boundary as the Home library.

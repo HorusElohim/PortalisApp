@@ -7,9 +7,16 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `detail_projection`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Opens the local Nexus runtime once. Calling it again is harmless.
+///
+/// Async because opening supervises tasks, and those have to be spawned onto a
+/// runtime. flutter_rust_bridge runs a synchronous function on a worker thread
+/// that has none, where `spawn` panics rather than returning something a person
+/// could act on — the app reports "there is no reactor running" and stops.
+/// Anything the core starts eagerly at open belongs behind an async boundary
+/// for the same reason.
 ///
 /// # Errors
 ///
@@ -65,24 +72,28 @@ class AppAccepted {
 class AppCollection {
   final int id;
   final String name;
+  final String nature;
   final String role;
   final BigInt revision;
   final String status;
   final Uint32List members;
   final int entries;
   final BigInt totalBytes;
+  final BigInt onDiskBytes;
   final AppTransfer? transfer;
   final AppPending? pending;
 
   const AppCollection({
     required this.id,
     required this.name,
+    required this.nature,
     required this.role,
     required this.revision,
     required this.status,
     required this.members,
     required this.entries,
     required this.totalBytes,
+    required this.onDiskBytes,
     this.transfer,
     this.pending,
   });
@@ -91,12 +102,14 @@ class AppCollection {
   int get hashCode =>
       id.hashCode ^
       name.hashCode ^
+      nature.hashCode ^
       role.hashCode ^
       revision.hashCode ^
       status.hashCode ^
       members.hashCode ^
       entries.hashCode ^
       totalBytes.hashCode ^
+      onDiskBytes.hashCode ^
       transfer.hashCode ^
       pending.hashCode;
 
@@ -107,12 +120,14 @@ class AppCollection {
           runtimeType == other.runtimeType &&
           id == other.id &&
           name == other.name &&
+          nature == other.nature &&
           role == other.role &&
           revision == other.revision &&
           status == other.status &&
           members == other.members &&
           entries == other.entries &&
           totalBytes == other.totalBytes &&
+          onDiskBytes == other.onDiskBytes &&
           transfer == other.transfer &&
           pending == other.pending;
 }
@@ -122,7 +137,7 @@ class AppCollection {
 class AppCommand {
   final String kind;
   final String? name;
-  final List<String> files;
+  final List<AppSourceFile> files;
   final int? collection;
   final String? label;
   final bool? deleteFiles;
@@ -134,6 +149,7 @@ class AppCommand {
   final bool? accept;
   final int? device;
   final bool? active;
+  final bool? paused;
 
   const AppCommand({
     required this.kind,
@@ -150,6 +166,7 @@ class AppCommand {
     this.accept,
     this.device,
     this.active,
+    this.paused,
   });
 
   @override
@@ -167,7 +184,8 @@ class AppCommand {
       handle.hashCode ^
       accept.hashCode ^
       device.hashCode ^
-      active.hashCode;
+      active.hashCode ^
+      paused.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -187,7 +205,8 @@ class AppCommand {
           handle == other.handle &&
           accept == other.accept &&
           device == other.device &&
-          active == other.active;
+          active == other.active &&
+          paused == other.paused;
 }
 
 /// A contact and the trust information needed to render it.
@@ -239,18 +258,28 @@ class AppDetail {
   final int id;
   final List<AppEntry> entries;
   final Uint8List pieces;
+
+  /// Fixed-width history rows; see `core::nexus::SAMPLE_ROW_BYTES`.
   final Uint8List samples;
+
+  /// Swarm addresses, which are not contacts. See `Detail::peers`.
+  final List<String> peers;
 
   const AppDetail({
     required this.id,
     required this.entries,
     required this.pieces,
     required this.samples,
+    required this.peers,
   });
 
   @override
   int get hashCode =>
-      id.hashCode ^ entries.hashCode ^ pieces.hashCode ^ samples.hashCode;
+      id.hashCode ^
+      entries.hashCode ^
+      pieces.hashCode ^
+      samples.hashCode ^
+      peers.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -260,7 +289,8 @@ class AppDetail {
           id == other.id &&
           entries == other.entries &&
           pieces == other.pieces &&
-          samples == other.samples;
+          samples == other.samples &&
+          peers == other.peers;
 }
 
 /// This device as a person can identify it.
@@ -300,12 +330,17 @@ class AppEntry {
   final bool selected;
   final bool available;
 
+  /// Where the bytes landed, once they have, so the interface can show a
+  /// preview rather than a filename.
+  final String? path;
+
   const AppEntry({
     required this.id,
     required this.label,
     required this.bytes,
     required this.selected,
     required this.available,
+    this.path,
   });
 
   @override
@@ -314,7 +349,8 @@ class AppEntry {
       label.hashCode ^
       bytes.hashCode ^
       selected.hashCode ^
-      available.hashCode;
+      available.hashCode ^
+      path.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -325,7 +361,8 @@ class AppEntry {
           label == other.label &&
           bytes == other.bytes &&
           selected == other.selected &&
-          available == other.available;
+          available == other.available &&
+          path == other.path;
 }
 
 /// A locally accepted command that has not settled yet.
@@ -384,6 +421,32 @@ class AppSnapshot {
           contacts == other.contacts &&
           collections == other.collections &&
           alerts == other.alerts;
+}
+
+/// A native source selected by the app without copying its bytes through the
+/// bridge.
+class AppSourceFile {
+  final String name;
+  final String path;
+  final BigInt bytes;
+
+  const AppSourceFile({
+    required this.name,
+    required this.path,
+    required this.bytes,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ path.hashCode ^ bytes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppSourceFile &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          path == other.path &&
+          bytes == other.bytes;
 }
 
 /// A coalesced transfer sample.

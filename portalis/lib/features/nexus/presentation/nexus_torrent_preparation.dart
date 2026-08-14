@@ -41,12 +41,16 @@ class _NexusTorrentPreparationState extends State<NexusTorrentPreparation> {
           entries: selected.toList()..sort(),
         ),
       );
-      if (mounted) {
-        showToast(
-          context,
-          'Selection saved — download is waiting for the Nexus torrent substrate.',
-        );
-      }
+      if (!mounted) return;
+      // Choosing is the last thing this screen is for: the download starts
+      // on its own and its progress belongs to the collection, so staying
+      // here would leave the person on a page with nothing left to do.
+      Navigator.of(context).maybePop();
+      showToast(
+        context,
+        'Downloading ${plural(selected.length, 'file')}',
+        severity: ToastSeverity.success,
+      );
     } catch (error) {
       if (mounted) showToast(context, '$error', severity: ToastSeverity.error);
     } finally {
