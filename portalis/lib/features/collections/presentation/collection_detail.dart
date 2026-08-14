@@ -6,8 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart' hide PickedFile;
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../../app/app_controllers.dart';
+import '../../../design/collection_deletion_dialog.dart';
 import '../../../design/design.dart';
+import '../../../design/resizable_media_preview.dart';
 import '../../media/domain/media_item.dart';
 import '../../media/presentation/media_viewer_screen.dart';
 import '../domain/collection.dart';
@@ -18,15 +19,18 @@ import '../platform/source_access.dart';
 import 'collection_contents.dart';
 import 'collection_commands.dart';
 import 'collection_overview.dart';
+import 'collection_source.dart';
 import '../../../theme.dart';
-import 'collection_removal.dart';
 
-/// Shows one collection and coordinates user actions with the collections
-/// controller. Collection-specific rendering lives in the presentation layer.
+/// Shows one collection and coordinates user actions with whichever
+/// [CollectionSource] backs it. Collection-specific rendering lives in the
+/// presentation layer; where a reading comes from and where a command lands
+/// is the source's business, not this widget's.
 class CollectionDetail extends StatefulWidget {
   const CollectionDetail({
     super.key,
     required this.collection,
+    this.source = const LegacyCollectionSource(),
     this.showCommands = true,
     this.level = CollectionDetailLevel.full,
     this.showTitle = true,
@@ -35,6 +39,11 @@ class CollectionDetail extends StatefulWidget {
   });
 
   final Collection collection;
+
+  /// Defaults to the legacy controller, so every call site that predates
+  /// sources — the standalone screen, the inline library row — needs no
+  /// change at all.
+  final CollectionSource source;
   final bool showCommands;
 
   /// How much to show. Defaults to [CollectionDetailLevel.full] because most
@@ -53,9 +62,14 @@ class CollectionDetail extends StatefulWidget {
 
 /// A collection on its own screen, used on compact layouts.
 class CollectionScreen extends StatelessWidget {
-  const CollectionScreen({super.key, required this.collection});
+  const CollectionScreen({
+    super.key,
+    required this.collection,
+    this.source = const LegacyCollectionSource(),
+  });
 
   final Collection collection;
+  final CollectionSource source;
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +84,7 @@ class CollectionScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 NavBackButton(onTap: () => Navigator.of(context).pop()),
-                CollectionDetail(collection: collection),
+                CollectionDetail(collection: collection, source: source),
               ],
             ),
           ),
@@ -83,9 +97,7 @@ class CollectionScreen extends StatelessWidget {
 class _CollectionDetailState extends State<CollectionDetail> {
   bool _busy = false;
 
-  Collection get _collection =>
-      AppControllers.collections.byId(widget.collection.id) ??
-      widget.collection;
+  Collection get _collection => widget.source.resolve(widget.collection);
 
   void _toast(String message, {ToastSeverity severity = ToastSeverity.info}) {
     if (mounted) showToast(context, message, severity: severity);
@@ -103,6 +115,12 @@ class _CollectionDetailState extends State<CollectionDetail> {
   }
 
   Future<void> _showInvite() async {
+    final override = widget.source.showInvite;
+    if (override != null) {
+      await override(context, _collection);
+      return;
+    }
+
     final code = _collection.inviteCode;
     if (code == null) return;
 
@@ -240,24 +258,45 @@ class _CollectionDetailState extends State<CollectionDetail> {
     await _run(() async {
       final label =
           'Added ${DateTime.now().toIso8601String().split('T').first}';
-      await AppControllers.collections.addMedia(_collection.id, label, picked);
+      await widget.source.addMedia(_collection.id, label, picked);
       _toast('Preparing ${picked.length} item${picked.length == 1 ? '' : 's'}');
     });
   }
 
   Future<void> _fetchPending() => _run(() async {
-        final started =
-            await AppControllers.collections.fetchMedia(_collection.id);
+        final started = await widget.source.fetchMedia(_collection.id);
         _toast('Fetching $started item${started == 1 ? '' : 's'}');
       });
 
-  Future<void> _delete() => confirmAndDeleteCollection(
-        context,
-        _collection,
-        setBusy: (busy) {
-          if (mounted) setState(() => _busy = busy);
-        },
-      );
+  Future<void> _delete() async {
+    final collection = _collection;
+    final choice = await confirmCollectionDeletion(
+      context,
+      collectionName: collection.name,
+    );
+    if (choice == null || !mounted) return;
+    // Not fire-and-forget: deleting genuinely fails (a torrent that isn't in
+    // the session, a store write that can't land), and without this the
+    // dialog would just close with nothing happening and no error shown.
+    setState(() => _busy = true);
+    try {
+      await switch (choice) {
+        CollectionDeletionChoice.collectionOnly =>
+          widget.source.delete(collection.id),
+        CollectionDeletionChoice.withFiles =>
+          widget.source.deleteWithFiles(collection.id),
+      };
+      // Embedded, the list beside us simply drops it and the selection moves
+      // on; there is no route to leave.
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      showToast(context, "Couldn't delete this collection: $error");
+      setState(() => _busy = false);
+    }
+  }
 
   Future<void> _openMedia(Collection collection, MediaItem media) async {
     final sourcePath = media.localPath;
@@ -277,9 +316,15 @@ class _CollectionDetailState extends State<CollectionDetail> {
   }
 
   @override
+  void dispose() {
+    widget.source.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: AppControllers.collections,
+      listenable: widget.source.listenable,
       builder: (context, _) => _detail(_collection),
     );
   }
@@ -292,8 +337,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
           collection: collection,
           busy: _busy,
           onCommand: _command,
-          history: AppControllers.collections.historyFor(collection.id),
-          peerHistory: AppControllers.collections.peerHistoryFor(collection.id),
+          history: widget.source.historyFor(collection.id),
+          peerHistory: widget.source.peerHistoryFor(collection.id),
           showCommands: widget.showCommands,
           level: widget.level,
           showTitle: widget.showTitle,
@@ -323,7 +368,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
               ),
             )
           else
-            _ResizableMediaPreview(
+            ResizableMediaPreview(
               child: CollectionContents(
                 collection: collection,
                 onOpenMedia: (media) => _openMedia(collection, media),
@@ -343,75 +388,13 @@ class _CollectionDetailState extends State<CollectionDetail> {
       final id = _collection.id;
       switch (command) {
         case CollectionCommand.restart:
-          await AppControllers.collections.restart(id);
+          await widget.source.restart(id);
         case CollectionCommand.pause:
-          await AppControllers.collections.pause(id);
+          await widget.source.pause(id);
         case CollectionCommand.delete:
           return;
       }
       _toast('${command.label} applied');
     }));
-  }
-}
-
-/// A fixed-height, drag-to-resize frame around the media grid.
-///
-/// The grid itself still sizes to its own content (`shrinkWrap: true` in
-/// [CollectionContents]) — a large collection could otherwise push the whole
-/// card, and the list, far down the page. Scrolling inside a height the
-/// person controls themselves is the same trade every other resizable panel
-/// makes.
-class _ResizableMediaPreview extends StatefulWidget {
-  const _ResizableMediaPreview({required this.child});
-
-  final Widget child;
-
-  @override
-  State<_ResizableMediaPreview> createState() => _ResizableMediaPreviewState();
-}
-
-class _ResizableMediaPreviewState extends State<_ResizableMediaPreview> {
-  static const double _minHeight = 180;
-  static const double _maxHeight = 480;
-  static const double _defaultHeight = 220;
-
-  double _height = _defaultHeight;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          height: _height,
-          child: SingleChildScrollView(child: widget.child),
-        ),
-        MouseRegion(
-          cursor: SystemMouseCursors.resizeUpDown,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onVerticalDragUpdate: (details) {
-              setState(() {
-                _height =
-                    (_height + details.delta.dy).clamp(_minHeight, _maxHeight);
-              });
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.borderStrong,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 }

@@ -15,6 +15,7 @@ class CollectionsList extends StatelessWidget {
     required this.onOpen,
     required this.detailFor,
     required this.onCommand,
+    this.canExpand,
     this.footer,
   });
 
@@ -28,6 +29,15 @@ class CollectionsList extends StatelessWidget {
     Widget inlineStatus,
   ) detailFor;
   final ValueChanged<(Collection, CollectionCommand)> onCommand;
+
+  /// Whether a collection may grow into its own detail at all. `null` (the
+  /// default) means every one of them can, which is every caller this had
+  /// until one collection stopped being "settled content to view" and became
+  /// "a choice still to make" — nothing to grow a row into, only a screen to
+  /// go to. `false` gives that row [CollectionRow]'s own older, simpler
+  /// behaviour: a plain tap, and the command bar always showing.
+  final bool Function(Collection collection)? canExpand;
+
   final Widget? footer;
 
   @override
@@ -49,12 +59,15 @@ class CollectionsList extends StatelessWidget {
           }
           final collection = collections[index];
           final isOpen = collection.id == openId;
+          final expandable = canExpand?.call(collection) ?? true;
           return CollectionRow(
             collection: collection,
             selected: isOpen,
             onTap: () => onOpen(collection),
-            detail: (level, inlineHeader, inlineStatus) =>
-                detailFor(collection, level, inlineHeader, inlineStatus),
+            detail: expandable
+                ? (level, inlineHeader, inlineStatus) =>
+                    detailFor(collection, level, inlineHeader, inlineStatus)
+                : null,
             onCommand: (command) => onCommand((collection, command)),
           );
         },

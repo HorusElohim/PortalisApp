@@ -10,6 +10,8 @@ import '../../../app/app_controllers.dart';
 import '../../../design/design.dart';
 import '../../../theme.dart';
 import '../../media/application/media_formats.dart';
+import '../../nexus/application/nexus_app_controller.dart';
+import '../../nexus/domain/nexus_app_state.dart';
 import '../domain/picked_file.dart';
 import '../platform/no_copy_source_picker.dart';
 import '../platform/photo_library_picker.dart';
@@ -24,7 +26,12 @@ String _kindLabel(String name) => MediaFormats.resolve(name).label;
 /// Photos/Files/Folder pickers, a file list with per-item remove, and one
 /// Create & share action that seeds the new collection from this device.
 class ShareScreen extends StatefulWidget {
-  const ShareScreen({super.key, this.onClose, this.initialFiles});
+  const ShareScreen({
+    super.key,
+    this.onClose,
+    this.initialFiles,
+    this.controller,
+  });
 
   /// Called instead of popping a route — set when this is embedded in the
   /// desktop shell's centre pane rather than pushed over it.
@@ -36,6 +43,10 @@ class ShareScreen extends StatefulWidget {
   /// screen entirely.
   final List<PickedFile>? initialFiles;
 
+  /// Injected by tests and alternate shells; production uses the one
+  /// application-owned Nexus runtime.
+  final NexusAppController? controller;
+
   @override
   State<ShareScreen> createState() => _ShareScreenState();
 }
@@ -45,6 +56,9 @@ class _ShareScreenState extends State<ShareScreen> {
   List<PickedFile> _files = [];
   bool _busy = false;
   String? _error;
+
+  NexusAppController get _controller =>
+      widget.controller ?? AppControllers.nexusApp;
 
   @override
   void initState() {
@@ -97,7 +111,51 @@ class _ShareScreenState extends State<ShareScreen> {
     }
   }
 
+  /// Files, or a folder's files, from one affordance.
+  ///
+  /// A person adding "these things" does not think of a folder as a different
+  /// kind of act, and the result is identical either way: a flat list of
+  /// no-copy sources. Two buttons made them choose a picker before choosing
+  /// content; a sheet asks the question only when the platform can answer it
+  /// both ways.
   Future<void> _pickFiles() async {
+    if (supportsDirectPathSources) {
+      final choice = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: AppColors.surface,
+        builder: (sheetContext) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                key: const Key('shareChooseFiles'),
+                leading: const Icon(Icons.description_outlined),
+                title: const Text('Choose files'),
+                onTap: () => Navigator.of(sheetContext).pop('files'),
+              ),
+              ListTile(
+                key: const Key('shareChooseFolder'),
+                leading: const Icon(Icons.folder_outlined),
+                title: const Text('Choose a folder'),
+                subtitle: const Text('Adds the files at its top level'),
+                onTap: () => Navigator.of(sheetContext).pop('folder'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (choice == null || !mounted) return;
+      if (choice == 'folder') {
+        await _pickFolder();
+        return;
+      }
+      await _pickIndividualFiles();
+      return;
+    }
+    await _pickIndividualFiles();
+  }
+
+  Future<void> _pickIndividualFiles() async {
     if (supportsNativeFilesSources) {
       try {
         _add(await NoCopySourcePicker.pickFiles());
@@ -160,6 +218,95 @@ class _ShareScreenState extends State<ShareScreen> {
     }
   }
 
+  /// A `.torrent` descriptor or a magnet, which creates its own collection.
+  ///
+  /// Unlike every other source here it does not add to `_files`: its content
+  /// is not on this device to be shared, it is something to fetch. So it
+  /// bypasses the name field and the Create button entirely and hands the
+  /// source to Nexus, which resolves it and asks which files to take.
+  Future<void> _pickTorrent() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const Key('shareChooseTorrentFile'),
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('Choose a .torrent file'),
+              onTap: () => Navigator.of(sheetContext).pop('file'),
+            ),
+            ListTile(
+              key: const Key('sharePasteMagnet'),
+              leading: const Icon(Icons.link),
+              title: const Text('Paste a magnet link'),
+              onTap: () => Navigator.of(sheetContext).pop('magnet'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+
+    final source = choice == 'magnet'
+        ? await promptForText(
+            context,
+            title: 'Paste a magnet link',
+            confirmLabel: 'Add',
+          )
+        : await _pickTorrentFilePath();
+    if (source == null || source.trim().isEmpty || !mounted) return;
+    await _importTorrent(source.trim());
+  }
+
+  Future<String?> _pickTorrentFilePath() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        withData: false,
+        type: FileType.custom,
+        allowedExtensions: ['torrent'],
+      );
+      return result?.files.single.path;
+    } catch (error) {
+      _toast('Couldn\'t read that .torrent file: $error',
+          severity: ToastSeverity.error);
+      return null;
+    }
+  }
+
+  Future<void> _importTorrent(String source) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await _controller.send(NexusCommand.importTorrent(source));
+      if (!mounted) return;
+      _close();
+      showToast(
+        context,
+        'Resolving the torrent — choose files next',
+        severity: ToastSeverity.success,
+      );
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Always offered, on every platform: importing a torrent is a download,
+  /// not a share, so it does not depend on this device having a no-copy
+  /// picker for its own files.
+  Widget _torrentButton() => _PickerButton(
+        key: const Key('shareAddTorrent'),
+        label: 'Torrent',
+        icon: Icons.download_outlined,
+        onTap: _busy ? null : _pickTorrent,
+      );
+
   void _toast(String msg, {ToastSeverity severity = ToastSeverity.info}) {
     if (!mounted) return;
     showToast(context, msg, severity: severity);
@@ -189,7 +336,21 @@ class _ShareScreenState extends State<ShareScreen> {
       _error = null;
     });
     try {
-      await AppControllers.collections.createWithMedia(name, _files);
+      await _controller.send(
+        NexusCommand(
+          kind: 'createCollection',
+          name: name,
+          files: _files
+              .map(
+                (file) => NexusSourceFile(
+                  name: file.name,
+                  path: file.path,
+                  bytes: BigInt.from(file.lengthBytes),
+                ),
+              )
+              .toList(growable: false),
+        ),
+      );
       if (mounted) {
         FocusScope.of(context).unfocus();
         _close();
@@ -270,6 +431,8 @@ class _ShareScreenState extends State<ShareScreen> {
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 18),
+            // Local sources are platform-gated: sharing files this device
+            // holds needs a no-copy picker, and not every platform has one.
             if (supportsDirectPathSources)
               Row(
                 children: [
@@ -289,13 +452,7 @@ class _ShareScreenState extends State<ShareScreen> {
                     ),
                   ),
                   const SizedBox(width: 9),
-                  Expanded(
-                    child: _PickerButton(
-                      label: 'Folder',
-                      icon: Icons.folder_outlined,
-                      onTap: _busy ? null : _pickFolder,
-                    ),
-                  ),
+                  Expanded(child: _torrentButton()),
                 ],
               )
             else if (supportsNativeFilesSources || supportsMobileGallerySources)
@@ -319,10 +476,18 @@ class _ShareScreenState extends State<ShareScreen> {
                         onTap: _busy ? null : _pickFiles,
                       ),
                     ),
+                  const SizedBox(width: 9),
+                  Expanded(child: _torrentButton()),
                 ],
               )
-            else
+            else ...[
+              // Nothing local can be shared here, but a torrent is fetched
+              // rather than shared — it needs no picker at all, so it stays
+              // available where the others cannot be.
+              _torrentButton(),
+              const SizedBox(height: 14),
               _NoCopySourceNotice(message: noCopySourceUnavailableMessage),
+            ],
             const SizedBox(height: 14),
             if (_files.isEmpty)
               Container(
@@ -459,7 +624,12 @@ class _ShareScreenState extends State<ShareScreen> {
 }
 
 class _PickerButton extends StatelessWidget {
-  const _PickerButton({required this.label, required this.icon, this.onTap});
+  const _PickerButton({
+    super.key,
+    required this.label,
+    required this.icon,
+    this.onTap,
+  });
 
   final String label;
   final IconData icon;

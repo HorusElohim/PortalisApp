@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
+import '../../../design/peer_chip.dart';
 import '../../../theme.dart';
 import '../domain/collection.dart';
 import '../domain/peer_observation.dart';
@@ -48,7 +49,7 @@ class CollectionPeers extends StatelessWidget {
               for (final collaborator in namedPeers)
                 _NamedPeer(collaborator: collaborator),
               if (collection.collaborators.length > namedPeers.length)
-                _PeerLabel(
+                PeerChip(
                   label:
                       '+${collection.collaborators.length - namedPeers.length} more',
                 ),
@@ -84,7 +85,7 @@ class _NamedPeer extends StatelessWidget {
   final Collaborator collaborator;
 
   @override
-  Widget build(BuildContext context) => _PeerLabel(
+  Widget build(BuildContext context) => PeerChip(
         label: collaborator.name,
         leading: Avatar(initials: collaborator.initials, size: 20),
       );
@@ -100,86 +101,11 @@ class _AnonymousPeer extends StatelessWidget {
   final bool active;
 
   @override
-  Widget build(BuildContext context) => _PeerLabel(
+  Widget build(BuildContext context) => PeerChip(
         label: peer.address,
         detail: formatLastSeen(peer.lastSeen),
         color: active ? AppColors.ember : rememberedPeerColor(peer.address),
       );
-}
-
-class _PeerLabel extends StatelessWidget {
-  _PeerLabel({
-    required this.label,
-    this.leading,
-    this.detail,
-    Color? color,
-  }) : color = color ?? AppColors.textDim;
-
-  final String label;
-  final Widget? leading;
-  final String? detail;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final maxWidth = MediaQuery.sizeOf(context).width - 2 * kScreenGutter;
-    final colorful = color != AppColors.textDim;
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: maxWidth),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-        decoration: BoxDecoration(
-          color: colorful
-              ? color.withValues(
-                  alpha: color == AppColors.ember ? 0.12 : 0.08,
-                )
-              : AppColors.surface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: colorful
-                ? color.withValues(
-                    alpha: color == AppColors.ember ? 0.35 : 0.24,
-                  )
-                : AppColors.border,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (leading != null) ...[leading!, const SizedBox(width: 6)],
-                Flexible(
-                  child: Text(
-                    label,
-                    overflow: TextOverflow.ellipsis,
-                    style:
-                        monoLabel(size: 10.5, color: color, letterSpacing: 0),
-                  ),
-                ),
-                if (detail != null) ...[
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      detail!,
-                      overflow: TextOverflow.ellipsis,
-                      style: monoLabel(
-                        size: 9,
-                        color: AppColors.textDim,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 /// Bytes received by this device for the collection, not an invented split by
