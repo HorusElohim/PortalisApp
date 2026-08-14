@@ -4,7 +4,7 @@ import 'package:portalis/screens/mobile_shell_layout.dart';
 void main() {
   tearDown(resetTestState);
 
-group('shell', () {
+  group('shell', () {
     testWidgets('has four destinations and switches between them',
         (tester) async {
       await pumpApp(tester, collections: []);
@@ -37,8 +37,17 @@ group('shell', () {
         (tester) async {
       // The header provides a compact summary while the library owns the
       // single source of truth for each collection.
-      await pumpApp(tester, collections: [
-        buildCollection(state: 'downloading', downloadMbps: 1.5, uploadMbps: 0.5),
+      await pumpApp(tester, nexusCollections: [
+        buildNexusCollection(
+          status: 'Downloading',
+          transfer: const NexusTransfer(
+            progress: 0.4,
+            downBytesPerSecond: 1500000,
+            upBytesPerSecond: 500000,
+            peers: 1,
+            etaSecs: null,
+          ),
+        ),
       ]);
 
       expect(find.textContaining('1 active transfer'), findsOneWidget);
@@ -48,7 +57,7 @@ group('shell', () {
 
     testWidgets('uses the phone layout narrow and three panes wide',
         (tester) async {
-      await pumpApp(tester, collections: [buildCollection()]);
+      await pumpApp(tester, nexusCollections: [buildNexusCollection()]);
 
       await pumpApp(tester, size: phoneSize);
       expect(find.byType(AppBottomNav), findsOneWidget);
@@ -57,7 +66,8 @@ group('shell', () {
       await tester.binding.setSurfaceSize(desktopSize);
       await tester.pumpWidget(const MyApp());
       await tester.pump();
-      AppControllers.collections.debugSeed([buildCollection()]);
+      AppControllers.nexusApp
+          .debugSeed(buildNexusState([buildNexusCollection()]));
       await tester.pump();
       // The desktop sidebar carries a People pane that mobile has no room
       // for, and the bottom bar is gone entirely.
@@ -66,44 +76,17 @@ group('shell', () {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('a collection opens inside its own card', (tester) async {
-      // It used to take a button in a side panel that pushed a full-screen
-      // route over the sidebar, the list and all. Then it was a second panel
-      // beside the list â€” a thinner account of the same collection, plus a
-      // button to get from one to the other. The card is the view.
-      //
-      // It now grows in three taps rather than snapping fully open: mid
-      // (graph and actions) for a routine glance, full (peers and files too)
-      // for whoever wants everything, and a third tap all the way back
-      // closed â€” three light touches instead of one all-or-nothing click.
-      await pumpApp(tester, size: desktopSize, collections: [
-        buildCollection(id: 'a', name: 'Iceland'),
-        buildCollection(id: 'b', name: 'Studio'),
+    testWidgets('a Nexus collection opens its streamed detail route',
+        (tester) async {
+      await pumpApp(tester, size: desktopSize, nexusCollections: [
+        buildNexusCollection(id: 1, name: 'Iceland'),
+        buildNexusCollection(id: 2, name: 'Studio', status: 'Preparing'),
       ]);
 
-      expect(find.text('Open collection'), findsNothing);
-      expect(find.byType(CollectionDetail), findsNothing);
-
       await tester.tap(find.text('Studio').first);
-      await tester.pump();
+      await pumpTransition(tester);
 
-      // Mid: open in place, whole list still around it, but not everything
-      // is showing yet â€” peers and files are one tap deeper.
-      expect(find.byType(CollectionDetail), findsOneWidget);
-      expect(find.text('Invite'), findsOneWidget);
-      expect(find.text('Iceland'), findsWidgets);
-
-      await tester.tap(find.text('Studio').first);
-      await tester.pump();
-
-      // Full: still the same card, now with everything.
-      expect(find.byType(CollectionDetail), findsOneWidget);
-
-      // A third click has nothing left to mean but closing it â€” the card is
-      // the only view.
-      await tester.tap(find.text('Studio').first);
-      await tester.pump();
-      expect(find.byType(CollectionDetail), findsNothing);
+      expect(find.byType(NexusTorrentPreparation), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -112,7 +95,8 @@ group('shell', () {
       // The window can now be dragged between the two layouts freely, so the
       // shells have to agree about where you are rather than each keeping its
       // own idea of it.
-      await pumpApp(tester, size: desktopSize, collections: [buildCollection()]);
+      await pumpApp(tester,
+          size: desktopSize, collections: [buildCollection()]);
       await tester.tap(find.byKey(const Key('identityChip')));
       await tester.pump();
 
@@ -136,7 +120,8 @@ group('shell', () {
       // Settings are controls rather than things to look at, so they sit in
       // the header rather than the list. What is left in the list is what
       // there is to look at.
-      await pumpApp(tester, size: desktopSize, collections: [buildCollection()]);
+      await pumpApp(tester,
+          size: desktopSize, collections: [buildCollection()]);
 
       for (final gone in ['Transfers', 'Settings', 'People']) {
         expect(find.text(gone), findsNothing, reason: '$gone is not a row');
@@ -176,10 +161,11 @@ group('shell', () {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the command bar dispatches on what was pasted', (tester) async {
-      await pumpApp(tester, size: desktopSize, collections: [
-        buildCollection(name: 'Iceland trip'),
-        buildCollection(id: 'c2', name: 'Band demos'),
+    testWidgets('the command bar dispatches on what was pasted',
+        (tester) async {
+      await pumpApp(tester, size: desktopSize, nexusCollections: [
+        buildNexusCollection(name: 'Iceland trip'),
+        buildNexusCollection(id: 2, name: 'Band demos'),
       ]);
 
       final field = find.byKey(const Key('commandBarField'));
@@ -209,7 +195,8 @@ group('shell', () {
 
     testWidgets('a pasted invite key still has to be confirmed',
         (tester) async {
-      await pumpApp(tester, size: desktopSize, collections: [buildCollection()]);
+      await pumpApp(tester,
+          size: desktopSize, collections: [buildCollection()]);
 
       // Joining announces you to strangers â€” recognising a code opens the
       // join screen with it filled in, it never joins on the paste alone.
@@ -226,8 +213,6 @@ group('shell', () {
       expect(tester.takeException(), isNull);
     });
   });
-
-
 
   group('home tab', () {
     testWidgets('is the leftmost destination and returns from another tab',
@@ -246,18 +231,17 @@ group('shell', () {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('unwinds a pushed screen rather than only switching tab',
+    testWidgets(
+        'unwinds a pushed Nexus collection rather than only switching tab',
         (tester) async {
       // The distinction that makes it a Home button and not just a tab: one
       // tap lands you at the start, not one screen shallower.
-      await pumpApp(tester);
-      await tester.tap(find.byKey(const Key('commandBarField')));
-      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await pumpApp(tester, nexusCollections: [
+        buildNexusCollection(name: 'Episode', status: 'Preparing'),
+      ]);
+      await tester.tap(find.text('Episode'));
       await pumpTransition(tester);
-      await tester.tap(find.byKey(const Key('shareCollectionAction')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(find.byType(ShareScreen), findsOneWidget);
+      expect(find.byType(NexusTorrentPreparation), findsOneWidget);
       expect(AppNavigation.depth.value, greaterThan(0));
 
       AppNavigation.goHome();
@@ -267,7 +251,7 @@ group('shell', () {
         await tester.pump(const Duration(milliseconds: 50));
       }
 
-      expect(find.byType(ShareScreen), findsNothing);
+      expect(find.byType(NexusTorrentPreparation), findsNothing);
       expect(AppNavigation.depth.value, 0);
       expect(tester.takeException(), isNull);
     });

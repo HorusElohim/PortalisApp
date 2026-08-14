@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/features/nexus/application/nexus_app_controller.dart';
 import 'package:portalis/features/nexus/data/nexus_app_repository.dart';
 import 'package:portalis/features/nexus/domain/nexus_app_state.dart';
+import 'package:portalis/features/nexus/presentation/nexus_home_library.dart';
 import 'package:portalis/features/nexus/presentation/nexus_torrent_preparation.dart';
 
 void main() {
@@ -101,6 +102,57 @@ void main() {
     expect(repository.commands.single.kind, 'downloadSelection');
     expect(repository.commands.single.collection, 9);
     expect(repository.commands.single.entries, [2]);
+  });
+
+  testWidgets('Home renders Nexus collections without a legacy projection',
+      (tester) async {
+    NexusCollection? opened;
+    final collection = NexusCollection(
+      id: 9,
+      name: 'Episode archive',
+      role: 'Owner',
+      revision: BigInt.one,
+      status: 'Preparing',
+      members: const [],
+      entries: 2,
+      totalBytes: BigInt.from(39),
+      transfer: null,
+      pending: null,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NexusHomeLibrary(
+            wide: false,
+            state: NexusAppState(
+              device: const NexusDevice(
+                name: 'Mina',
+                handle: null,
+                fingerprint: 'fingerprint',
+                devices: 1,
+              ),
+              connectivity: 'LocalOnly',
+              contacts: const [],
+              collections: [collection],
+              alerts: const [],
+            ),
+            error: null,
+            query: '',
+            filter: NexusCollectionFilter.all,
+            onSearch: (_) {},
+            onFilterChanged: (_) {},
+            onImportTorrent: (_) async {},
+            onJoin: (_) {},
+            onOpen: (value) => opened = value,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Episode archive'), findsOneWidget);
+    expect(find.text('PREPARING'), findsOneWidget);
+    await tester.tap(find.text('Episode archive'));
+    expect(opened, same(collection));
   });
 }
 

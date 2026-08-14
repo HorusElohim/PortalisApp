@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/app/app_controllers.dart';
 import 'package:portalis/features/collections/domain/collection.dart';
 import 'package:portalis/features/collections/domain/collection_import.dart';
 import 'package:portalis/features/media/domain/media_item.dart';
+import 'package:portalis/features/nexus/domain/nexus_app_state.dart';
 import 'package:portalis/features/settings/domain/engine_settings.dart';
 import 'package:portalis/main.dart';
 import 'package:portalis/services/navigation.dart';
@@ -21,6 +24,8 @@ export 'package:portalis/features/collections/presentation/collection_share.dart
 export 'package:portalis/features/collections/presentation/command_bar.dart';
 export 'package:portalis/features/media/domain/media_item.dart';
 export 'package:portalis/features/media/presentation/media_viewer_screen.dart';
+export 'package:portalis/features/nexus/domain/nexus_app_state.dart';
+export 'package:portalis/features/nexus/presentation/nexus_torrent_preparation.dart';
 export 'package:portalis/features/settings/domain/engine_settings.dart';
 export 'package:portalis/main.dart';
 export 'package:portalis/screens/people.dart';
@@ -69,6 +74,42 @@ Collection buildCollection({
       ingestion: ingestion,
     );
 
+NexusCollection buildNexusCollection({
+  int id = 1,
+  String name = 'Iceland trip',
+  String role = 'Owner',
+  String status = 'Available',
+  int entries = 0,
+  int totalBytes = 0,
+  NexusTransfer? transfer,
+}) =>
+    NexusCollection(
+      id: id,
+      name: name,
+      role: role,
+      revision: BigInt.one,
+      status: status,
+      members: const [],
+      entries: entries,
+      totalBytes: BigInt.from(totalBytes),
+      transfer: transfer,
+      pending: null,
+    );
+
+NexusAppState buildNexusState(List<NexusCollection> collections) =>
+    NexusAppState(
+      device: const NexusDevice(
+        name: 'Portalis',
+        handle: null,
+        fingerprint: 'test-fingerprint',
+        devices: 1,
+      ),
+      connectivity: 'LocalOnly',
+      contacts: const [],
+      collections: collections,
+      alerts: const [],
+    );
+
 EngineSettings buildEngineSettings() => const EngineSettings(
       listenPortStart: 6881,
       listenPortEnd: 6999,
@@ -84,6 +125,7 @@ Future<void> pumpApp(
   WidgetTester tester, {
   Size size = phoneSize,
   List<Collection> collections = const [],
+  List<NexusCollection> nexusCollections = const [],
   String? error,
 }) async {
   await tester.binding.setSurfaceSize(size);
@@ -91,6 +133,10 @@ Future<void> pumpApp(
   await tester.pumpWidget(const MyApp());
   await tester.pump();
   AppControllers.collections.debugSeed(collections, error: error);
+  AppControllers.nexusApp.debugSeed(
+    buildNexusState(nexusCollections),
+    details: const Stream<NexusDetail?>.empty(),
+  );
   await tester.pump();
 }
 
@@ -101,13 +147,12 @@ Future<void> pumpTransition(WidgetTester tester) async {
 
 String inviteCode(String name) {
   final plain = '${'a' * 64}:$name';
-  return plain.codeUnits
-      .map((c) => c.toRadixString(16).padLeft(2, '0'))
-      .join();
+  return plain.codeUnits.map((c) => c.toRadixString(16).padLeft(2, '0')).join();
 }
 
 void resetTestState() {
   AppControllers.collections.debugSeed([]);
+  AppControllers.nexusApp.debugSeed(null);
   AppNavigation.tab.value = AppNavigation.homeTab;
   AppNavigation.depth.value = 0;
 }

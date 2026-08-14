@@ -38,12 +38,11 @@ class _RootShellState extends AdaptiveShellState<RootShell> {
       );
     }
     return MobileShellLayout(
-        index: tab,
-        onSelected: selectTab,
-        onOpen: (id) => openCollection(id, inline: false),
-        onShare: ([files]) => openShare(files, false),
-        onJoin: (code) => openJoin(code, inline: false),
-      );
+      index: tab,
+      onSelected: selectTab,
+      onShare: ([files]) => openShare(files, false),
+      onJoin: (code) => openJoin(code, inline: false),
+    );
   }
 
   @override
@@ -53,8 +52,6 @@ class _RootShellState extends AdaptiveShellState<RootShell> {
         liveRate: AppControllers.collections.liveRate,
         home: Home(
           embedded: true,
-          openId: openId,
-          onOpen: (id) => openCollection(id, inline: true),
           onShare: ([files]) => openShare(files, true),
           onJoin: openJoinInline,
         ),

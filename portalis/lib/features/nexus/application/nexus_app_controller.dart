@@ -19,6 +19,7 @@ class NexusAppController extends ChangeNotifier {
   Future<void>? _starting;
 
   NexusAppState? _state;
+  Stream<NexusDetail?>? _debugDetails;
   NexusAppState? get state => _state;
   String? lastError;
   bool get started => _starting != null;
@@ -65,7 +66,21 @@ class NexusAppController extends ChangeNotifier {
   /// Widgets consume this stream directly; it deliberately does not become a
   /// second app-level cache beside [state].
   Stream<NexusDetail?> watchDetail(int? collection) =>
-      _repository.watchDetail(collection);
+      _debugDetails ?? _repository.watchDetail(collection);
+
+  /// Seeds the projection for widgets that exercise app composition without a
+  /// native runtime. Production state always arrives through [watchStates].
+  @visibleForTesting
+  void debugSeed(
+    NexusAppState? state, {
+    String? error,
+    Stream<NexusDetail?>? details,
+  }) {
+    _state = state;
+    lastError = error;
+    _debugDetails = details;
+    notifyListeners();
+  }
 
   Future<void> stop() async {
     final wasStarted = _starting != null || _subscription != null;

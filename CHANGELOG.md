@@ -30,6 +30,10 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- Home now renders its collection library directly from the app-owned Nexus
+  state stream. Its cards, filters, summaries, and collection routes no
+  longer project or observe legacy collection records.
+
 - Dropping or choosing a local `.torrent` now enters Nexus directly and opens
   its preparation screen. The file list is streamed from the resolved
   descriptor, can be narrowed before confirmation, and requests no payload

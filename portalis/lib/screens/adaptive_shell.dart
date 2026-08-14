@@ -7,7 +7,6 @@ import '../design/design.dart';
 import '../features/collections/domain/picked_file.dart';
 import '../services/navigation.dart';
 import 'desktop_pane.dart';
-import '../features/collections/presentation/collection_detail.dart';
 import '../features/collections/presentation/collection_join.dart';
 import '../features/collections/presentation/collection_share.dart';
 
@@ -24,12 +23,10 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     with WidgetsBindingObserver {
   int get tab => AppNavigation.tab.value;
   DesktopPane get pane => _pane;
-  String? get openId => _openId;
   String? get pendingInvite => _pendingInvite;
   List<PickedFile>? get pendingShareFiles => _pendingShareFiles;
 
   DesktopPane _pane = DesktopPane.home;
-  String? _openId;
   String? _pendingInvite;
   List<PickedFile>? _pendingShareFiles;
 
@@ -69,20 +66,6 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     setState(() => _pane = next);
     final tab = _tabForPane(next);
     if (tab != null) AppNavigation.tab.value = tab;
-  }
-
-  void openCollection(String id, {required bool inline}) {
-    final collection = AppControllers.collections.byId(id);
-    if (collection == null) return;
-    if (!inline) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-            builder: (_) => CollectionScreen(collection: collection)),
-      );
-      return;
-    }
-    setState(() => _openId = _openId == id ? null : id);
-    selectPane(DesktopPane.home);
   }
 
   void openShare([List<PickedFile>? initialFiles, bool inline = false]) {

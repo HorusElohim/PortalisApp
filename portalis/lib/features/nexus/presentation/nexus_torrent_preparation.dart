@@ -71,6 +71,18 @@ class _NexusTorrentPreparationState extends State<NexusTorrentPreparation> {
             if (detail == null) {
               return const Center(child: CircularProgressIndicator());
             }
+            if (detail.entries.isEmpty) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(kScreenGutter),
+                  child: Text(
+                    'Waiting for torrent metadata before you choose files.',
+                    textAlign: TextAlign.center,
+                    style: AppText.body(color: AppColors.textDim),
+                  ),
+                ),
+              );
+            }
             final selected = _selected ?? _selectedFrom(detail);
             final selectedBytes = detail.entries
                 .where((entry) => selected.contains(entry.id))

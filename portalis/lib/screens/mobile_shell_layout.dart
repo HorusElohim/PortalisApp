@@ -16,14 +16,12 @@ class MobileShellLayout extends StatelessWidget {
     super.key,
     required this.index,
     required this.onSelected,
-    required this.onOpen,
     required this.onShare,
     required this.onJoin,
   });
 
   final int index;
   final ValueChanged<int> onSelected;
-  final ValueChanged<String> onOpen;
   final void Function([List<PickedFile>?]) onShare;
   final ValueChanged<String> onJoin;
 
@@ -40,7 +38,6 @@ class MobileShellLayout extends StatelessWidget {
                 TickerMode(
                   enabled: index == 0,
                   child: Home(
-                    onOpen: onOpen,
                     onShare: onShare,
                     onJoin: onJoin,
                   ),
@@ -103,9 +100,8 @@ class AppBottomNav extends StatelessWidget {
                     child: InkWell(
                       key: Key('navTab$i'),
                       borderRadius: BorderRadius.circular(AppRadius.inner),
-                      onTap: () => i == 0
-                          ? AppNavigation.goHome()
-                          : onSelected(i),
+                      onTap: () =>
+                          i == 0 ? AppNavigation.goHome() : onSelected(i),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 6),
                         child: Column(
