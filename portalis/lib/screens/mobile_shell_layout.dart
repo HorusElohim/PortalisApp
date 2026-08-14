@@ -17,13 +17,11 @@ class MobileShellLayout extends StatelessWidget {
     required this.index,
     required this.onSelected,
     required this.onShare,
-    required this.onJoin,
   });
 
   final int index;
   final ValueChanged<int> onSelected;
   final void Function([List<PickedFile>?]) onShare;
-  final ValueChanged<String> onJoin;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -37,10 +35,7 @@ class MobileShellLayout extends StatelessWidget {
               children: [
                 TickerMode(
                   enabled: index == 0,
-                  child: Home(
-                    onShare: onShare,
-                    onJoin: onJoin,
-                  ),
+                  child: Home(onShare: onShare),
                 ),
                 TickerMode(
                   enabled: index == 1,

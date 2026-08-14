@@ -5,7 +5,6 @@
 //! tested at all — they are the two paths where every remaining bug can hide,
 //! and until now exercising either meant a real swarm.
 
-use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -69,11 +68,12 @@ pub(crate) trait Substrate: Send + Sync {
         destination: &std::path::Path,
     ) -> anyhow::Result<TorrentInfo>;
 
-    /// Start acquiring this handle, with any addresses known to hold it.
+    /// Stop or resume moving bytes for this handle.
     ///
-    /// How a *Nexus-shared* collection starts, where the info hash arrives in
-    /// a signed manifest rather than a pasted link.
-    async fn acquire(&self, handle: &str, peers: Vec<SocketAddr>) -> anyhow::Result<TorrentInfo>;
+    /// Idempotent: asking for a state the engine is already in is not an
+    /// error, which is what lets the reconciler simply assert the stored
+    /// intent on every pass rather than tracking what it last applied.
+    async fn set_paused(&self, handle: &str, paused: bool) -> anyhow::Result<()>;
 
     /// Stop carrying it. Files already on disk stay there.
     async fn release(&self, handle: &str) -> anyhow::Result<()>;
@@ -81,7 +81,6 @@ pub(crate) trait Substrate: Send + Sync {
     /// Everything held right now.
     async fn holdings(&self) -> Vec<TorrentInfo>;
 
-    fn ready(&self) -> bool;
 }
 
 /// The real one.
@@ -113,8 +112,12 @@ impl Substrate for Torrents {
         crate::torrent::acquire_selection(source, files, destination).await
     }
 
-    async fn acquire(&self, handle: &str, peers: Vec<SocketAddr>) -> anyhow::Result<TorrentInfo> {
-        crate::torrent::add_info_hash_with_peers(handle, peers).await
+    async fn set_paused(&self, handle: &str, paused: bool) -> anyhow::Result<()> {
+        if paused {
+            crate::torrent::pause_torrent(handle).await
+        } else {
+            crate::torrent::restart_torrent(handle).await
+        }
     }
 
     async fn release(&self, handle: &str) -> anyhow::Result<()> {
@@ -125,9 +128,6 @@ impl Substrate for Torrents {
         crate::torrent::list_torrents().await.unwrap_or_default()
     }
 
-    fn ready(&self) -> bool {
-        crate::torrent::session_started()
-    }
 }
 
 static CURRENT: Mutex<Option<Arc<dyn Substrate>>> = Mutex::new(None);
@@ -140,23 +140,6 @@ pub(crate) fn current() -> Arc<dyn Substrate> {
         .clone()
 }
 
-/// Swaps in a test double until the returned guard is dropped.
-#[cfg(test)]
-pub(crate) fn use_double(double: Arc<dyn Substrate>) -> Restore {
-    *CURRENT.lock().unwrap() = Some(double);
-    Restore
-}
-
-#[cfg(test)]
-pub(crate) struct Restore;
-
-#[cfg(test)]
-impl Drop for Restore {
-    fn drop(&mut self) {
-        *CURRENT.lock().unwrap() = None;
-    }
-}
-
 /// Records what was asked of it and answers from a list. Enough to test the
 /// two paths that decide *what* to move, which is where the bugs have been —
 /// nothing here pretends to move anything.
@@ -164,13 +147,14 @@ impl Drop for Restore {
 #[derive(Default)]
 pub(crate) struct Recorded {
     pub(crate) held: Mutex<Vec<String>>,
-    pub(crate) acquired: Mutex<Vec<String>>,
     pub(crate) released: Mutex<Vec<String>>,
     pub(crate) published: Mutex<Vec<String>>,
     /// Every `(source, files, destination)` a selection was started for.
     pub(crate) selections: Mutex<Vec<(String, Vec<usize>, std::path::PathBuf)>>,
     /// Every source `inspect` was asked about, in order.
     pub(crate) inspected: Mutex<Vec<String>>,
+    /// Every `(handle, paused)` the engine was told to apply.
+    pub(crate) paused: Mutex<Vec<(String, bool)>>,
     publication: Mutex<Option<(String, Vec<u8>)>>,
     inspection: Mutex<Option<Inspected>>,
 }
@@ -239,9 +223,12 @@ impl Substrate for Recorded {
         Ok(held_torrent(&inspection.info_hash))
     }
 
-    async fn acquire(&self, handle: &str, _peers: Vec<SocketAddr>) -> anyhow::Result<TorrentInfo> {
-        self.acquired.lock().unwrap().push(handle.to_string());
-        anyhow::bail!("nothing to acquire from")
+    async fn set_paused(&self, handle: &str, paused: bool) -> anyhow::Result<()> {
+        self.paused
+            .lock()
+            .unwrap()
+            .push((handle.to_string(), paused));
+        Ok(())
     }
 
     async fn release(&self, handle: &str) -> anyhow::Result<()> {
@@ -259,9 +246,6 @@ impl Substrate for Recorded {
             .collect()
     }
 
-    fn ready(&self) -> bool {
-        true
-    }
 }
 
 #[cfg(test)]

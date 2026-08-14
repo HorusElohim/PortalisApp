@@ -56,6 +56,7 @@ pub struct AppCollection {
     pub entries: u32,
     pub total_bytes: u64,
     pub on_disk_bytes: u64,
+    pub uploaded_bytes: u64,
     pub transfer: Option<AppTransfer>,
     pub pending: Option<AppPending>,
 }
@@ -236,6 +237,78 @@ pub async fn watch_detail(
     }
 }
 
+/// One directory under the download folder, traced back to the collection
+/// that owns it when Nexus still claims one.
+#[derive(Clone, Debug)]
+pub struct AppStorageEntry {
+    pub name: String,
+    pub bytes: u64,
+    pub path: String,
+    /// The owning collection's handle, when one claims it. Absent for the
+    /// usual case: leftovers of a collection that has been deleted.
+    pub collection: Option<u32>,
+    pub collection_name: Option<String>,
+}
+
+/// What is on disk under the download directory, resolved against Nexus.
+///
+/// Ownership is decided by the substrate handle a collection recorded when
+/// its download started, matched to the directory the engine reports for
+/// that torrent — not by name, which two collections may share.
+///
+/// # Errors
+///
+/// Returns a displayable reason when the directory cannot be walked.
+pub async fn storage_breakdown() -> Result<Vec<AppStorageEntry>, String> {
+    let raw = crate::torrent::storage_breakdown()
+        .await
+        .map_err(|error| error.to_string())?;
+    let holdings = crate::substrate::current().holdings().await;
+
+    // Where each carried torrent's files actually sit, so a directory can be
+    // traced back to it. `starts_with` rather than equality: a multi-file
+    // torrent nests its files below the folder it was given.
+    let by_path: Vec<(std::path::PathBuf, &str)> = holdings
+        .iter()
+        .filter_map(|info| {
+            info.files
+                .first()
+                .map(|file| (std::path::PathBuf::from(&file.absolute_path), info.info_hash.as_str()))
+        })
+        .collect();
+
+    let owners = {
+        let runtime = locked_runtime()?;
+        let nexus = runtime
+            .as_ref()
+            .ok_or_else(|| "start Nexus before reading storage".to_owned())?;
+        nexus.carried_collections()
+    };
+
+    Ok(raw
+        .into_iter()
+        .map(|entry| {
+            let path = std::path::Path::new(&entry.path);
+            let owner = by_path
+                .iter()
+                .find(|(files, _)| files.starts_with(path))
+                .and_then(|(_, hash)| {
+                    owners
+                        .iter()
+                        .find(|(_, _, handle)| handle == hash)
+                        .map(|(id, name, _)| (*id, name.clone()))
+                });
+            AppStorageEntry {
+                name: entry.name,
+                bytes: entry.bytes,
+                path: entry.path,
+                collection: owner.as_ref().map(|(id, _)| id.0),
+                collection_name: owner.map(|(_, name)| name),
+            }
+        })
+        .collect())
+}
+
 /// Validates and accepts one command without waiting for I/O.
 pub fn send(command: AppCommand) -> Result<AppAccepted, String> {
     let command = command.into_core()?;
@@ -388,6 +461,7 @@ fn snapshot(state: &PortalisState) -> AppSnapshot {
                 entries: collection.entries,
                 total_bytes: collection.total_bytes,
                 on_disk_bytes: collection.on_disk_bytes,
+                uploaded_bytes: collection.uploaded_bytes,
                 transfer: collection.transfer.map(|transfer| AppTransfer {
                     progress: transfer.progress,
                     down_bytes_per_second: transfer.down_bytes_per_second,

@@ -7,7 +7,7 @@ void main() {
   group('shell', () {
     testWidgets('has four destinations and switches between them',
         (tester) async {
-      await pumpApp(tester, collections: []);
+      await pumpApp(tester);
 
       expect(find.text('Home'), findsOneWidget);
       expect(find.text('People'), findsOneWidget);
@@ -101,7 +101,7 @@ void main() {
       // shells have to agree about where you are rather than each keeping its
       // own idea of it.
       await pumpApp(tester,
-          size: desktopSize, collections: [buildCollection()]);
+          size: desktopSize, nexusCollections: [buildNexusCollection()]);
       await tester.tap(find.byKey(const Key('identityChip')));
       await tester.pump();
 
@@ -126,7 +126,7 @@ void main() {
       // the header rather than the list. What is left in the list is what
       // there is to look at.
       await pumpApp(tester,
-          size: desktopSize, collections: [buildCollection()]);
+          size: desktopSize, nexusCollections: [buildNexusCollection()]);
 
       for (final gone in ['Transfers', 'Settings', 'People']) {
         expect(find.text(gone), findsNothing, reason: '$gone is not a row');
@@ -198,31 +198,12 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('a pasted invite key still has to be confirmed',
-        (tester) async {
-      await pumpApp(tester,
-          size: desktopSize, collections: [buildCollection()]);
-
-      // Joining announces you to strangers â€” recognising a code opens the
-      // join screen with it filled in, it never joins on the paste alone.
-      await tester.enterText(
-          find.byKey(const Key('commandBarField')), inviteCode('Iceland trip'));
-      await tester.pump();
-      expect(find.text('JOIN'), findsOneWidget);
-
-      await tester.tap(find.byKey(const Key('commandBarSubmit')));
-      await pumpTransition(tester);
-
-      expect(find.byType(JoinCollectionScreen), findsOneWidget);
-      expect(find.text('Code recognised'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
   });
 
   group('home tab', () {
     testWidgets('is the leftmost destination and returns from another tab',
         (tester) async {
-      await pumpApp(tester, collections: []);
+      await pumpApp(tester);
       expect(find.text('Home'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('navTab3')));

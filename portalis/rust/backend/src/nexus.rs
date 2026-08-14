@@ -41,10 +41,6 @@ impl NexusIdentity {
         &self.signing
     }
 
-    pub(crate) fn into_signing_identity(self) -> DeviceIdentity {
-        self.signing
-    }
-
     pub(crate) fn encryption_secret(&self) -> [u8; 32] {
         self.encryption.to_bytes()
     }

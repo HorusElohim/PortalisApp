@@ -75,6 +75,8 @@ pub struct CollectionFacts {
     pub paused: bool,
     /// How much of it this device is holding.
     pub on_disk_bytes: u64,
+    /// How much this device has sent for it this session.
+    pub uploaded_bytes: u64,
 }
 
 /// Builds one collection's projection, deriving everything the interface would
@@ -103,6 +105,7 @@ pub fn collection(handles: &mut Handles, facts: &CollectionFacts) -> CollectionS
         entries: facts.entries,
         total_bytes: facts.total_bytes,
         on_disk_bytes: facts.on_disk_bytes,
+        uploaded_bytes: facts.uploaded_bytes,
         transfer: facts.progress.map(transfer),
         pending: None,
     }
@@ -211,6 +214,7 @@ mod tests {
             failure: None,
             paused: false,
             on_disk_bytes: 0,
+            uploaded_bytes: 0,
         }
     }
 

@@ -1,550 +1,183 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../app/app_controllers.dart';
 import '../design/design.dart';
-import '../features/collections/domain/collection.dart';
-import '../features/collections/presentation/collection_presentation.dart';
+import '../features/nexus/domain/nexus_app_state.dart';
 import '../theme.dart';
 
-/// Distinct collaborators across every collection, and where they appear.
+/// The people this device knows, from Nexus.
 ///
-/// The transfer figures on a collaborator card are pooled from the
-/// collections that collaborator belongs to. The native engine reports
-/// transfer activity per collection, not per signed identity, so the card
-/// deliberately describes the aggregate rather than pretending to know which
-/// individual connection consumed which bytes.
+/// Contacts only. An anonymous swarm address is a property of a *transfer*,
+/// not of a person: it carries no signed identity, so pooling addresses into
+/// a directory of strangers would put them beside people this device holds
+/// real evidence about. They live on the collection moving bytes with them
+/// instead — see `Detail.peers`. Nexus keeps no record of departed addresses,
+/// so there is nothing here to forget either.
 class PeopleScreen extends StatelessWidget {
   const PeopleScreen({super.key, this.embedded = false});
 
   final bool embedded;
 
   @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: AppControllers.collections,
-      builder: (context, _) => _build(context),
-    );
-  }
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: AppControllers.nexusApp,
+        builder: (context, _) => _build(context),
+      );
 
   Widget _build(BuildContext context) {
-    final byDevice = <String,
-        ({
-      Collaborator who,
-      List<String> collections,
-      int totalBytes,
-      double downloadMbps,
-      double uploadMbps,
-      bool isSharing,
-    })>{};
-    for (final collection in AppControllers.collections.collections) {
-      for (final collaborator in collection.collaborators) {
-        final entry = byDevice[collaborator.deviceId];
-        if (entry == null) {
-          byDevice[collaborator.deviceId] = (
-            who: collaborator,
-            collections: [collection.name],
-            totalBytes: collection.totalBytes,
-            downloadMbps: collection.downloadMbps,
-            uploadMbps: collection.uploadMbps,
-            isSharing: collection.isSharing,
-          );
-        } else {
-          entry.collections.add(collection.name);
-          byDevice[collaborator.deviceId] = (
-            who: entry.who,
-            collections: entry.collections,
-            totalBytes: entry.totalBytes + collection.totalBytes,
-            downloadMbps: entry.downloadMbps + collection.downloadMbps,
-            uploadMbps: entry.uploadMbps + collection.uploadMbps,
-            isSharing: entry.isSharing || collection.isSharing,
-          );
-        }
-      }
-    }
-    final people = byDevice.values.toList();
+    final state = AppControllers.nexusApp.state;
+    final contacts = state?.contacts ?? const <NexusContact>[];
+    final collections = state?.collections ?? const <NexusCollection>[];
 
-    // Anonymous swarm peers across every collection. An address is a
-    // connection, not a signed identity. Its collection names and last-seen
-    // time are known here; per-peer speed and bytes are not.
-    final byAddress = <String,
-        ({
-      String address,
-      List<String> collections,
-      DateTime lastSeen,
-    })>{};
-    for (final peer in AppControllers.collections.peerHistory) {
-      final entry = byAddress[peer.address];
-      if (entry == null) {
-        byAddress[peer.address] = (
-          address: peer.address,
-          collections: [peer.collectionName],
-          lastSeen: peer.lastSeen,
-        );
-      } else {
-        if (!entry.collections.contains(peer.collectionName)) {
-          entry.collections.add(peer.collectionName);
-        }
-        byAddress[peer.address] = (
-          address: entry.address,
-          collections: entry.collections,
-          lastSeen: peer.lastSeen.isAfter(entry.lastSeen)
-              ? peer.lastSeen
-              : entry.lastSeen,
-        );
-      }
-    }
-    final torrentPeople = byAddress.values.toList();
-    final activeTorrentAddresses = <String>{
-      for (final collection in AppControllers.collections.collections)
-        ...collection.torrentPeers,
-    };
-
-    final cards = [
-      for (final entry in people) PersonCard(entry: entry),
-      for (final entry in torrentPeople)
-        TorrentPeerCard(
-          entry: entry,
-          active: activeTorrentAddresses.contains(entry.address),
+    // Where each contact actually appears, so a card can say more than that
+    // they exist.
+    final entries = [
+      for (final contact in contacts)
+        (
+          contact: contact,
+          collections: [
+            for (final collection in collections)
+              if (collection.members.contains(contact.id)) collection.name,
+          ],
         ),
     ];
 
     return AppScreen(
       title: 'People',
-      subtitle: cards.isEmpty
-          ? null
-          : Text(_subtitle(people.length, torrentPeople.length)),
+      subtitle:
+          entries.isEmpty ? null : Text(plural(entries.length, 'contact')),
       embedded: embedded,
       width: ScreenWidth.full,
-      body: cards.isEmpty
+      body: entries.isEmpty
           ? Center(
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: kScreenGutter),
+                padding: const EdgeInsets.symmetric(horizontal: kScreenGutter),
                 child: Text(
-                  'Nobody yet. Collaborators appear once you share or join, '
-                  'and torrent peers once something is downloading.',
+                  'Nobody yet. People appear here once you add a contact, or '
+                  'once somebody shares a collection with you.',
                   textAlign: TextAlign.center,
                   style: AppText.body(color: AppColors.textDim),
                 ),
               ),
             )
-          : Column(
-              children: [
-                if (torrentPeople.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                        kScreenGutter, 0, kScreenGutter, 12),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: OutlineActionButton(
-                        label: 'Forget all remembered peers',
-                        icon: Icons.delete_sweep_outlined,
-                        expand: true,
-                        tone: ActionButtonTone.neutral,
-                        onTap: () => unawaited(_forgetAllPeers(context)),
-                      ),
-                    ),
-                  ),
-                Expanded(
-                  child: WindowBuilder(
-                    builder: (context, window) => GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(
-                          kScreenGutter, 0, kScreenGutter, 28),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: window.columns(340),
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                        // Anonymous peers include a short explanation of the
-                        // metrics we do and do not know. Give their cards room
-                        // instead of clipping the final line on compact windows.
-                        mainAxisExtent: torrentPeople.isEmpty ? 180 : 208,
-                      ),
-                      itemCount: cards.length,
-                      itemBuilder: (context, i) => cards[i],
-                    ),
-                  ),
+          : WindowBuilder(
+              builder: (context, window) => GridView.builder(
+                padding: const EdgeInsets.fromLTRB(
+                  kScreenGutter,
+                  0,
+                  kScreenGutter,
+                  28,
                 ),
-              ],
-            ),
-    );
-  }
-
-  Future<void> _forgetAllPeers(BuildContext context) async {
-    final count = await AppControllers.collections.forgetAllPeers();
-    if (count == 0 || !context.mounted) return;
-    showToast(
-      context,
-      'Forgot $count torrent peer${count == 1 ? '' : 's'}',
-      severity: ToastSeverity.info,
-      duration: const Duration(seconds: 6),
-      actionLabel: 'UNDO',
-      onAction: () =>
-          unawaited(AppControllers.collections.undoForgetAllPeers()),
-    );
-  }
-
-  String _subtitle(int collaborators, int torrentPeers) {
-    final parts = [
-      if (collaborators > 0)
-        '$collaborators collaborator${collaborators == 1 ? '' : 's'}',
-      if (torrentPeers > 0)
-        '$torrentPeers torrent peer${torrentPeers == 1 ? '' : 's'}',
-    ];
-    return '${parts.join(', ')} across your collections';
-  }
-}
-
-/// A collaborator summary card. Named collaborators and anonymous swarm peers
-/// share the same visual language while their identity colors remain distinct.
-class PersonCard extends StatelessWidget {
-  PersonCard._({
-    super.key,
-    required this.avatar,
-    required this.title,
-    required this.subtitle,
-    this.totalBytes = 0,
-    this.sharedCount = 0,
-    this.rateMbps = 0,
-    this.status = 'IDLE',
-    Color? statusColor,
-    this.active = false,
-    Color? metricColor,
-    Color? subtitleColor,
-    this.peerSummary,
-    this.trailing,
-  })  : statusColor = statusColor ?? AppColors.textFaint,
-        metricColor = metricColor ?? AppColors.signal,
-        subtitleColor = subtitleColor ?? AppColors.textFaint;
-
-  factory PersonCard({
-    Key? key,
-    required ({
-      Collaborator who,
-      List<String> collections,
-      int totalBytes,
-      double downloadMbps,
-      double uploadMbps,
-      bool isSharing,
-    }) entry,
-  }) {
-    final rateMbps =
-        entry.uploadMbps > 0 ? entry.uploadMbps : entry.downloadMbps;
-    return PersonCard._(
-      key: key,
-      avatar: Avatar(initials: entry.who.initials, size: 44),
-      title: entry.who.isAdmin ? '${entry.who.name} · admin' : entry.who.name,
-      subtitle: entry.collections.join(' · '),
-      totalBytes: entry.totalBytes,
-      sharedCount: entry.collections.length,
-      rateMbps: rateMbps,
-      status: _statusLabel(
-        uploadMbps: entry.uploadMbps,
-        downloadMbps: entry.downloadMbps,
-        isSharing: entry.isSharing,
-      ),
-      statusColor: rateMbps > 0 ? AppColors.signal : AppColors.textFaint,
-      active: rateMbps > 0,
-    );
-  }
-
-  final Widget avatar;
-  final String title;
-  final String subtitle;
-  final int? totalBytes;
-  final int sharedCount;
-  final double? rateMbps;
-  final String status;
-  final Color statusColor;
-  final bool active;
-  final Color metricColor;
-  final Color subtitleColor;
-  final Widget? peerSummary;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return SurfaceCard(
-      padding: const EdgeInsets.all(16),
-      glow: active ? GlowLevel.active : GlowLevel.none,
-      glowIntensity: Glow.intensityForRate(rateMbps ?? 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              avatar,
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppText.cardTitle(),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        if (active) ...[
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: statusColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                        ],
-                        Flexible(
-                          child: Text(
-                            status,
-                            overflow: TextOverflow.ellipsis,
-                            style: monoLabel(
-                              size: 9.5,
-                              color: statusColor,
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: window.columns(340),
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  mainAxisExtent: 190,
+                ),
+                itemCount: entries.length,
+                itemBuilder: (context, index) => ContactCard(
+                  contact: entries[index].contact,
+                  collections: entries[index].collections,
                 ),
               ),
-              const SizedBox(width: 8),
-              if (peerSummary == null)
-                _RateValue(
-                  rateMbps: rateMbps,
-                  color: rateMbps == null ? AppColors.textFaint : metricColor,
-                ),
-              if (trailing != null) trailing!,
-            ],
-          ),
-          const SizedBox(height: 14),
-          if (peerSummary == null)
-            Row(
-              children: [
-                Expanded(
-                  child: _Metric(
-                    value:
-                        rateMbps == null ? '—' : rateMbps!.toStringAsFixed(1),
-                    label: 'MB/S',
-                    color: rateMbps == null ? AppColors.textFaint : metricColor,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _Metric(value: '$sharedCount', label: 'SHARED'),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _Metric(
-                    value: _gigabytes(totalBytes),
-                    label: 'GB TOTAL',
-                    color:
-                        totalBytes == null ? AppColors.textFaint : metricColor,
-                  ),
-                ),
-              ],
-            )
-          else
-            peerSummary!,
-          const SizedBox(height: 11),
-          Text(
-            subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppText.secondary(color: subtitleColor),
-          ),
-        ],
-      ),
+            ),
     );
   }
 }
 
-/// One anonymous swarm peer's card. A live network-only address earns ember;
-/// a remembered address gets a quieter color of its own.
-class TorrentPeerCard extends PersonCard {
-  TorrentPeerCard({
+/// One person this device holds signed statements about.
+///
+/// Shows no transfer figures. Neither engine attributes bytes to a signed
+/// identity — a collection knows what it moved, not which of its members
+/// consumed it — and the card this replaces showed a pooled collection total
+/// wearing a person's name.
+class ContactCard extends StatelessWidget {
+  const ContactCard({
     super.key,
-    required ({
-      String address,
-      List<String> collections,
-      DateTime lastSeen,
-    }) entry,
-    required super.active,
-  }) : super._(
-          avatar: Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: active
-                  ? AppColors.emberWash
-                  : rememberedPeerColor(entry.address).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(44 * 0.34),
-            ),
-            child: Icon(
-              Icons.hub_outlined,
-              size: 20,
-              color:
-                  active ? AppColors.ember : rememberedPeerColor(entry.address),
-            ),
-          ),
-          title: entry.address,
-          subtitle: '${entry.collections.join(' · ')} · '
-              '${formatLastSeen(entry.lastSeen)}',
-          totalBytes: null,
-          rateMbps: null,
-          status: active ? 'CONNECTED' : 'NOT CONNECTED',
-          statusColor:
-              active ? AppColors.ember : rememberedPeerColor(entry.address),
-          metricColor:
-              active ? AppColors.ember : rememberedPeerColor(entry.address),
-          subtitleColor:
-              active ? AppColors.ember : rememberedPeerColor(entry.address),
-          peerSummary: _AnonymousPeerSummary(
-            collections: entry.collections.length,
-            active: active,
-            color:
-                active ? AppColors.ember : rememberedPeerColor(entry.address),
-          ),
-        );
-}
-
-/// Factual address-level state. We deliberately do not divide collection
-/// bytes between peers because that figure is not in the engine projection.
-class _AnonymousPeerSummary extends StatelessWidget {
-  const _AnonymousPeerSummary({
+    required this.contact,
     required this.collections,
-    required this.active,
-    required this.color,
   });
 
-  final int collections;
-  final bool active;
-  final Color color;
+  final NexusContact contact;
+  final List<String> collections;
+
+  bool get _reachable => contact.reachable != null;
 
   @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _Metric(
-                  value: '$collections',
-                  label: collections == 1 ? 'COLLECTION' : 'COLLECTIONS',
-                  color: color,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _Metric(
-                  value: active ? 'LIVE' : 'SEEN',
-                  label: 'CONNECTION',
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 7),
-          Text(
-            'Individual transfer totals are unavailable',
-            style: monoLabel(size: 9, color: AppColors.textDim),
-          ),
-        ],
-      );
-}
-
-class _RateValue extends StatelessWidget {
-  const _RateValue({required this.rateMbps, required this.color});
-
-  final double? rateMbps;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            rateMbps == null ? '—' : rateMbps!.toStringAsFixed(1),
-            style: TextStyle(
-              fontFamily: AppFonts.display,
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-          Text(
-            'MB/S',
-            style: monoLabel(size: 9, color: AppColors.signalMuted),
-          ),
-        ],
-      );
-}
-
-class _Metric extends StatelessWidget {
-  _Metric({
-    required this.value,
-    required this.label,
-    Color? color,
-  }) : color = color ?? AppColors.signal;
-
-  final String value;
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        height: 50,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceRaised,
-          borderRadius: BorderRadius.circular(AppRadius.inner),
-        ),
+  Widget build(BuildContext context) => SurfaceCard(
+        padding: const EdgeInsets.all(16),
+        glow: _reachable ? GlowLevel.calm : GlowLevel.none,
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontFamily: AppFonts.display,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
+            Row(
+              children: [
+                Avatar(initials: _initials, size: 44),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        contact.displayName,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.cardTitle(),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        contact.handle ?? _friendship,
+                        overflow: TextOverflow.ellipsis,
+                        style: monoLabel(
+                          size: 9.5,
+                          color: AppColors.textDim,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Verification is the one thing about a contact a person has
+                // to act on (D4), so it is the badge rather than a detail.
+                StatusBadge(
+                  label: contact.verified ? 'VERIFIED' : 'UNVERIFIED',
+                  color: contact.verified ? AppColors.signal : null,
+                ),
+              ],
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 14),
             Text(
-              label,
-              style: monoLabel(
-                size: 9,
-                color: AppColors.signalMuted,
-                letterSpacing: 0.2,
-              ),
+              collections.isEmpty
+                  ? 'No shared collections yet'
+                  : collections.join(' · '),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.secondary(color: AppColors.textDim),
+            ),
+            const Spacer(),
+            // The fingerprint is what a person compares out of band to make
+            // "verified" mean anything, so it is shown rather than hidden
+            // behind a tap.
+            Text(
+              contact.fingerprint,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: monoLabel(size: 9, color: AppColors.textFaint),
             ),
           ],
         ),
       );
-}
 
-String _gigabytes(int? bytes) =>
-    bytes == null ? '—' : (bytes / 1000000000).toStringAsFixed(1);
+  String get _initials {
+    final name = contact.displayName.trim();
+    return name.isEmpty ? '?' : name[0].toUpperCase();
+  }
 
-String _statusLabel({
-  required double uploadMbps,
-  required double downloadMbps,
-  required bool isSharing,
-}) {
-  if (uploadMbps > 0 && downloadMbps > 0) return 'SENDING · RECEIVING';
-  if (uploadMbps > 0) return 'SENDING';
-  if (downloadMbps > 0) return 'RECEIVING';
-  if (isSharing) return 'SHARING';
-  return 'IDLE';
+  String get _friendship => switch (contact.friendship) {
+        'Requested' => 'REQUEST SENT',
+        'Pending' => 'WANTS TO CONNECT',
+        'Blocked' => 'BLOCKED',
+        _ => _reachable ? 'CONNECTED' : 'OFFLINE',
+      };
 }

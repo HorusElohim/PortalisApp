@@ -87,6 +87,7 @@ class FrbNexusAppRepository implements NexusAppRepository {
         entries: collection.entries,
         totalBytes: collection.totalBytes,
         onDiskBytes: collection.onDiskBytes,
+        uploadedBytes: collection.uploadedBytes,
         transfer: collection.transfer == null
             ? null
             : NexusTransfer(

@@ -299,6 +299,7 @@ impl LocalCollections {
                 entries: u32::try_from(entries).unwrap_or(u32::MAX),
                 total_bytes,
                 on_disk_bytes: stored.on_disk_bytes,
+                uploaded_bytes: 0,
                 transfer: None,
                 pending: None,
             });
@@ -667,6 +668,7 @@ impl Nexus {
             // Nothing has been fetched: these are the person's own files,
             // referenced where they already are rather than copied.
             on_disk_bytes: 0,
+            uploaded_bytes: 0,
             transfer: None,
             pending: None,
         });
@@ -726,6 +728,7 @@ impl Nexus {
             entries: 0,
             total_bytes: 0,
             on_disk_bytes: 0,
+            uploaded_bytes: 0,
             transfer: None,
             pending: None,
         });
@@ -935,6 +938,30 @@ impl Nexus {
 
     fn collection_detail(&self, collection: Handle) -> Option<Detail> {
         self.detail_sources().build(collection)
+    }
+
+    /// Every collection with a substrate handle, as `(handle, name, hash)`.
+    ///
+    /// For the storage view, which has directories on disk and needs to say
+    /// which collection each belongs to. The substrate handle is the only
+    /// honest join: a name is not unique and a process-local handle means
+    /// nothing on disk.
+    #[must_use]
+    pub fn carried_collections(&self) -> Vec<(Handle, String, String)> {
+        let Ok(stored) = self.store.collections() else {
+            return Vec::new();
+        };
+        let index = self
+            .collections
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        stored
+            .into_iter()
+            .filter_map(|(key, collection)| {
+                let handle = index.handle(&key)?;
+                Some((handle, collection.name, collection.substrate_handle?))
+            })
+            .collect()
     }
 
     fn detail_sources(&self) -> DetailSources {
@@ -1419,6 +1446,7 @@ mod tests {
             entries: 1,
             total_bytes: 10,
             on_disk_bytes: 0,
+            uploaded_bytes: 0,
             transfer: None,
             pending: None,
         }

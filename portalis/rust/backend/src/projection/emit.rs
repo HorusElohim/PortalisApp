@@ -219,6 +219,7 @@ mod tests {
             entries: 2,
             total_bytes: 1_024,
             on_disk_bytes: 0,
+            uploaded_bytes: 0,
             transfer,
             pending: None,
         }

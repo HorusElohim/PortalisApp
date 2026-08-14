@@ -30,7 +30,7 @@ class CollectionDetail extends StatefulWidget {
   const CollectionDetail({
     super.key,
     required this.collection,
-    this.source = const LegacyCollectionSource(),
+    required this.source,
     this.showCommands = true,
     this.level = CollectionDetailLevel.full,
     this.showTitle = true,
@@ -40,9 +40,9 @@ class CollectionDetail extends StatefulWidget {
 
   final Collection collection;
 
-  /// Defaults to the legacy controller, so every call site that predates
-  /// sources — the standalone screen, the inline library row — needs no
-  /// change at all.
+  /// Where this collection's live state comes from, and where its commands
+  /// go. Required rather than defaulted: there is one engine now, and a
+  /// default would be a quiet way to reintroduce a second.
   final CollectionSource source;
   final bool showCommands;
 
@@ -65,7 +65,7 @@ class CollectionScreen extends StatelessWidget {
   const CollectionScreen({
     super.key,
     required this.collection,
-    this.source = const LegacyCollectionSource(),
+    required this.source,
   });
 
   final Collection collection;
@@ -310,7 +310,11 @@ class _CollectionDetailState extends State<CollectionDetail> {
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => MediaViewerScreen(collection: collection, media: media),
+        builder: (_) => MediaViewerScreen(
+          collection: collection,
+          media: media,
+          source: widget.source,
+        ),
       ),
     );
   }

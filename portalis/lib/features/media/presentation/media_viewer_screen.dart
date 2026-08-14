@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
-import '../../../app/app_controllers.dart';
+import '../../collections/presentation/collection_source.dart';
 import '../../../design/design.dart';
 import '../../collections/domain/collection.dart';
 import '../application/media_formats.dart';
@@ -17,7 +17,13 @@ class MediaViewerScreen extends StatefulWidget {
     super.key,
     required this.collection,
     required this.media,
+    required this.source,
   });
+
+  /// Where live progress comes from while this is open. The same seam
+  /// `CollectionDetail` uses, so a Nexus collection's viewer stays live
+  /// rather than freezing on the snapshot it was opened with.
+  final CollectionSource source;
 
   /// Seeds rather than sources of truth. Current values are looked up while
   /// the view is open so download progress remains live.
@@ -33,8 +39,7 @@ class _MediaViewerScreenState extends State<MediaViewerScreen> {
   String? _playingPath;
   bool _videoFailed = false;
 
-  Collection get _collection =>
-      AppControllers.collections.byId(widget.collection.id) ?? widget.collection;
+  Collection get _collection => widget.source.resolve(widget.collection);
 
   MediaItem get _media {
     for (final media in _collection.media) {
@@ -54,12 +59,12 @@ class _MediaViewerScreenState extends State<MediaViewerScreen> {
   void initState() {
     super.initState();
     _syncVideo();
-    AppControllers.collections.addListener(_syncVideo);
+    widget.source.listenable.addListener(_syncVideo);
   }
 
   @override
   void dispose() {
-    AppControllers.collections.removeListener(_syncVideo);
+    widget.source.listenable.removeListener(_syncVideo);
     _disposeVideo();
     super.dispose();
   }
@@ -113,7 +118,7 @@ class _MediaViewerScreenState extends State<MediaViewerScreen> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: AppControllers.collections,
+      listenable: widget.source.listenable,
       builder: (context, _) => CollectionMediaViewer(
         collection: _collection,
         media: _media,

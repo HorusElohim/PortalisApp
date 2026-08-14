@@ -1,179 +1,64 @@
 import 'test_support.dart';
 
-import 'package:flutter/services.dart';
-import 'package:portalis/features/collections/presentation/collection_presentation.dart';
 
 void main() {
   tearDown(resetTestState);
 
-  group('people and settings', () {
-    testWidgets('the User profile counts distinct collaborators',
-        (tester) async {
-      const ana = Collaborator(deviceId: 'dev-ana', name: 'Ana');
-      const jonas = Collaborator(deviceId: 'dev-jonas', name: 'Jonas');
-      const rosa = Collaborator(deviceId: 'dev-rosa', name: 'Rosa');
-      await pumpApp(tester, collections: [
-        // Ana is in both collections; she is one person, not two. Four
-        // memberships across two collections, three actual people â€” the
-        // counts differ deliberately so this can only pass by deduplicating.
-        buildCollection(id: 'a', collaborators: [ana, jonas]),
-        buildCollection(id: 'b', collaborators: [ana, rosa]),
-      ]);
-      await tester.tap(find.byKey(const Key('navTab1')));
-      await tester.pump();
-
-      expect(find.text('PEOPLE'), findsOneWidget);
-      expect(find.text('3'), findsOneWidget);
-      expect(find.text('COLLECTIONS'), findsOneWidget);
-      expect(find.text('2'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('shows anonymous torrent peers from shared collections',
-        (tester) async {
-      await pumpApp(tester, collections: [
-        buildCollection(
-          id: 'shared-with-peer',
-          totalBytes: 9900000000,
-          uploadMbps: 72.6,
-          torrentPeers: const ['198.51.100.7:6881'],
-        ),
-      ]);
-
-      await tester.tap(find.byKey(const Key('navTab2')));
-      await tester.pump();
-
-      expect(find.text('198.51.100.7:6881'), findsOneWidget);
-      expect(find.text('CONNECTED'), findsOneWidget);
-      expect(find.textContaining('seen'), findsNothing);
-      expect(find.textContaining('ago'), findsNothing);
-      expect(find.text('72.6'), findsNothing);
-      expect(find.text('Individual transfer totals are unavailable'),
-          findsOneWidget);
-      expect(find.text('LIVE'), findsOneWidget);
-      expect(find.text('Forget all remembered peers'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('forgetting all peers offers an undo action', (tester) async {
-      await pumpApp(tester, collections: [
-        buildCollection(
-          id: 'shared-with-peer',
-          torrentPeers: const ['198.51.100.7:6881'],
-        ),
-      ]);
-
-      await tester.tap(find.byKey(const Key('navTab2')));
-      await tester.pump();
-      await tester.tap(find.text('Forget all remembered peers'));
-      await tester.pump();
-
-      expect(AppControllers.collections.peerHistory, isEmpty);
-      expect(find.text('Forgot 1 torrent peer'), findsOneWidget);
-      expect(find.byKey(const Key('toastUndoAction')), findsOneWidget);
-      expect(find.text('198.51.100.7:6881'), findsNothing);
-
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pump();
-
-      expect(find.text('198.51.100.7:6881'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('a remembered disconnected torrent peer keeps a playful hue',
-        (tester) async {
+  group('people', () {
+    /// People is contacts. Swarm addresses belong to the transfer that is
+    /// moving bytes with them, not to a directory of strangers — see
+    /// `PeopleScreen`'s own doc.
+    testWidgets('lists contacts and where they appear', (tester) async {
+      await tester.binding.setSurfaceSize(desktopSize);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
-        MaterialApp(
-          home: TorrentPeerCard(
-            entry: (
-              address: '198.51.100.8:6881',
-              collections: ['Archive'],
-              lastSeen: DateTime.now().subtract(const Duration(minutes: 2)),
-            ),
-            active: false,
+        const MaterialApp(home: PeopleScreen()),
+      );
+      AppControllers.nexusApp.debugSeed(
+        NexusAppState(
+          device: const NexusDevice(
+            name: 'Portalis',
+            handle: null,
+            fingerprint: 'test-fingerprint',
+            devices: 1,
           ),
+          connectivity: 'LocalOnly',
+          contacts: const [
+            NexusContact(
+              id: 7,
+              displayName: 'Ana',
+              handle: 'ana#7Q2XZ',
+              fingerprint: 'ab:cd:ef',
+              verified: true,
+              friendship: 'Accepted',
+              reachable: null,
+            ),
+          ],
+          collections: [
+            buildNexusCollection(id: 1, name: 'Iceland trip', members: const [7]),
+          ],
+          alerts: const [],
         ),
       );
-
-      final status = tester.widget<Text>(find.text('NOT CONNECTED'));
-      expect(
-        status.style?.color,
-        rememberedPeerColor('198.51.100.8:6881'),
-      );
-      expect(status.style?.color, isNot(AppColors.textFaint));
-      expect(find.textContaining(RegExp(r'Archive · 2m')), findsOneWidget);
-      expect(find.textContaining('seen'), findsNothing);
-      expect(find.textContaining('ago'), findsNothing);
-      expect(find.text('SEEN'), findsOneWidget);
-      expect(find.text('Individual transfer totals are unavailable'),
-          findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('pools collaborator transfer facts into the People card',
-        (tester) async {
-      const ana = Collaborator(deviceId: 'dev-ana', name: 'Ana');
-      await pumpApp(tester, collections: [
-        buildCollection(
-          id: 'photos',
-          name: 'Iceland trip',
-          collaborators: [ana],
-          totalBytes: 1200000000,
-          uploadMbps: 8.1,
-        ),
-        buildCollection(
-          id: 'music',
-          name: 'Band demos',
-          collaborators: [ana],
-          totalBytes: 2200000000,
-          uploadMbps: 3.3,
-        ),
-      ]);
-
-      await tester.tap(find.byKey(const Key('navTab2')));
       await tester.pump();
 
       expect(find.text('Ana'), findsOneWidget);
-      expect(find.text('11.4'), findsNWidgets(2));
-      expect(find.text('2'), findsWidgets);
-      expect(find.text('3.4'), findsNWidgets(1));
-      expect(find.text('Iceland trip · Band demos'), findsOneWidget);
-      expect(tester.takeException(), isNull);
+      expect(find.text('VERIFIED'), findsOneWidget);
+      expect(find.text('Iceland trip'), findsOneWidget,
+          reason: 'a card says where the person actually appears');
+      // The fingerprint is what makes "verified" mean anything, so it is
+      // on screen rather than behind a tap.
+      expect(find.text('ab:cd:ef'), findsOneWidget);
     });
 
-    // People has gone missing on a platform twice: first it existed only as
-    // a desktop sidebar pane, then as a row so far down the old You screen
-    // that it was past the address, the identity notice and File formats.
-    // Both times it was reachable in principle and unfindable in practice.
-    // It is now its own bottom tab on both layouts — direct rather than
-    // reachable — and the count in User's profile is a shortcut onto that
-    // same tab, not a second route to a second copy of it.
-    testWidgets(
-        'People is its own tab, and the User profile count is a shortcut to it',
-        (tester) async {
-      const ana = Collaborator(deviceId: 'dev-ana', name: 'Ana');
-      await pumpApp(tester, collections: [
-        buildCollection(id: 'a', collaborators: [ana]),
-      ]);
-
-      // Direct: no intermediate screen to lose it behind.
-      await tester.tap(find.byKey(const Key('navTab2')));
+    testWidgets('says so plainly when nobody is known yet', (tester) async {
+      await tester.binding.setSurfaceSize(desktopSize);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(const MaterialApp(home: PeopleScreen()));
+      AppControllers.nexusApp.debugSeed(buildNexusState(const []));
       await tester.pump();
-      expect(find.byType(PeopleScreen), findsOneWidget);
-      expect(find.text('Ana'), findsOneWidget);
 
-      // The User profile's count still works, but as a shortcut onto the
-      // People tab rather than a push â€” tapping it selects the shared tab.
-      await tester.tap(find.byKey(const Key('navTab1')));
-      await tester.pump();
-      await tester.tap(find.text('PEOPLE'));
-      await pumpTransition(tester);
-
-      expect(find.byType(PeopleScreen), findsOneWidget);
-      expect(AppNavigation.tab.value, AppNavigation.peopleTab);
-      expect(tester.takeException(), isNull);
+      expect(find.textContaining('Nobody yet'), findsOneWidget);
     });
   });
 

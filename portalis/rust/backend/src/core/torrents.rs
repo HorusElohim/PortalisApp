@@ -35,6 +35,13 @@ enum Pending {
         source: String,
         files: Vec<usize>,
     },
+    /// Something is carrying it: make the engine agree with the stored
+    /// pause flag.
+    Reconcile {
+        key: Vec<u8>,
+        handle: String,
+        paused: bool,
+    },
 }
 
 /// Runs until shutdown, resolving sources and starting downloads.
@@ -74,7 +81,9 @@ pub(crate) async fn follow_torrent_imports(
                 done = perform(&store, substrate.as_ref(), &work) => done,
             };
             let key = match work {
-                Pending::Resolve { key, .. } | Pending::Acquire { key, .. } => key,
+                Pending::Resolve { key, .. }
+                | Pending::Acquire { key, .. }
+                | Pending::Reconcile { key, .. } => key,
             };
             if let Err(error) = done {
                 crate::log::clog!("nexus", "torrent import failed: {error:#}");
@@ -107,9 +116,16 @@ fn pending_work(store: &Store) -> Result<Vec<Pending>, crate::store::StoreError>
             pending.push(Pending::Resolve { key, source });
             continue;
         }
-        // Already carried: the download is running, or has finished. Either
-        // way this worker has nothing left to do for it.
-        if stored.substrate_handle.is_some() {
+        // Already carried: nothing left to start, but the engine still has
+        // to be told what the person last chose. Asserted rather than
+        // remembered — `set_paused` is idempotent, so re-stating the stored
+        // intent costs nothing and cannot drift.
+        if let Some(handle) = stored.substrate_handle {
+            pending.push(Pending::Reconcile {
+                key,
+                handle,
+                paused: stored.paused,
+            });
             continue;
         }
         let files = entries
@@ -137,6 +153,9 @@ async fn perform(
         Pending::Resolve { key, source } => resolve(store, substrate, key, source).await,
         Pending::Acquire { key, source, files } => {
             acquire(store, substrate, key, source, files).await
+        }
+        Pending::Reconcile { handle, paused, .. } => {
+            substrate.set_paused(handle, *paused).await
         }
     }
 }
@@ -353,7 +372,9 @@ mod tests {
             "only the chosen file, by its index"
         );
 
-        // Once carried, there is nothing left to start.
+        // Once carried there is nothing left to *start*, but the engine is
+        // still told what the person last chose — asserted every pass rather
+        // than remembered, which is what keeps a pause from drifting.
         let stored = store.collection(b"a").expect("reads").expect("exists");
         store
             .put_collection(
@@ -364,7 +385,10 @@ mod tests {
                 },
             )
             .expect("writes");
-        assert!(pending_work(&store).expect("scans").is_empty());
+        assert!(matches!(
+            pending_work(&store).expect("scans").as_slice(),
+            [Pending::Reconcile { handle, paused: false, .. }] if handle == "abc"
+        ));
 
         let _ = std::fs::remove_dir_all(dir);
     }

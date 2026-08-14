@@ -97,6 +97,24 @@ pub(crate) async fn follow_transfers(
             }
         };
 
+        // A torrent the engine is carrying that no collection claims is an
+        // orphan: a deleted collection whose download was never stopped. It
+        // is what let the interface report an active transfer with nothing
+        // on screen to explain it, so it is released here rather than left
+        // for somebody to notice.
+        let claimed: std::collections::HashSet<&str> =
+            carried.iter().map(|(_, handle, _)| handle.as_str()).collect();
+        for info in &reported {
+            if !claimed.contains(info.info_hash.as_str()) {
+                if let Err(error) = substrate.release(&info.info_hash).await {
+                    crate::log::clog!(
+                        "nexus",
+                        "could not release an unclaimed torrent: {error}"
+                    );
+                }
+            }
+        }
+
         let mut current = HashMap::new();
         for (key, handle, paused) in carried {
             let Some(info) = by_handle.get(handle.as_str()) else {
@@ -185,12 +203,14 @@ fn publish(
         if collection.transfer == transfer
             && collection.status == status
             && collection.on_disk_bytes == info.progress_bytes
+            && collection.uploaded_bytes == info.uploaded_bytes
         {
             return false;
         }
         collection.transfer = transfer;
         collection.status = status;
         collection.on_disk_bytes = info.progress_bytes;
+        collection.uploaded_bytes = info.uploaded_bytes;
         true
     });
 }

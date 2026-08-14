@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/features/collections/domain/picked_file.dart';
@@ -111,8 +112,14 @@ void main() {
     expect(repository.commands.single.entries, [2]);
   });
 
+  /// Sharing local files needs a no-copy picker, which Android and iOS do
+  /// not have — and a Flutter test reports Android unless told otherwise, so
+  /// without this the screen correctly refuses and the test looks broken.
+  /// The magnet test below deliberately does *not* do this: importing a
+  /// torrent must work on every platform.
   testWidgets('the existing New share page creates a Nexus collection',
       (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     final repository = _Repository();
     final controller = NexusAppController(repository: repository);
     var closed = false;
@@ -147,6 +154,9 @@ void main() {
     expect(command.files.single.path, '/media/episode.mp4');
     expect(command.files.single.bytes, BigInt.from(42));
     expect(closed, isTrue);
+    // Reset inline: the framework asserts this is unset by the time the test
+    // body returns, which is before any tear-down would run.
+    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets(
@@ -165,6 +175,7 @@ void main() {
       entries: 2,
       totalBytes: BigInt.from(39),
       onDiskBytes: BigInt.zero,
+      uploadedBytes: BigInt.zero,
       transfer: null,
       pending: null,
     );
@@ -190,7 +201,6 @@ void main() {
             onSearch: (_) {},
             onImportTorrent: (_) async {},
             onCreateCollection: () => created = true,
-            onJoin: (_) {},
             onOpen: (value) => opened = value,
             onCommand: (_) {},
           ),
@@ -281,6 +291,7 @@ void main() {
             entries: 1,
             totalBytes: BigInt.from(100),
             onDiskBytes: BigInt.from(50),
+            uploadedBytes: BigInt.zero,
             transfer: const NexusTransfer(
               progress: 0.5,
               downBytesPerSecond: 125000,
@@ -342,7 +353,6 @@ void main() {
               onSearch: (_) {},
               onImportTorrent: (_) async {},
               onCreateCollection: () {},
-              onJoin: (_) {},
               // No addTearDown here: once this is handed to
               // `NexusHomeLibrary`, `CollectionDetail`'s own state is its
               // sole owner and disposes it when the row collapses or the
@@ -467,6 +477,7 @@ NexusAppState _collectionState() => NexusAppState(
           entries: 0,
           totalBytes: BigInt.zero,
           onDiskBytes: BigInt.zero,
+          uploadedBytes: BigInt.zero,
           transfer: null,
           pending: null,
         ),

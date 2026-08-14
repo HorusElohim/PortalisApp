@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_controllers.dart';
+import '../features/nexus/domain/nexus_app_state.dart';
 import '../design/design.dart';
 import '../features/settings/presentation/device_profile_section.dart';
 import '../services/navigation.dart';
@@ -21,23 +22,22 @@ class UserScreen extends StatefulWidget {
 
 class _UserScreenState extends State<UserScreen> {
   bool _showFormats = false;
-  String? _syncAddress;
 
   @override
   void initState() {
     super.initState();
     AppControllers.identity.load();
-    _loadSyncAddress();
   }
 
-  Future<void> _loadSyncAddress() async {
-    try {
-      final address = await AppControllers.collections.syncAddress();
-      if (mounted) setState(() => _syncAddress = address);
-    } catch (_) {
-      // The identity remains useful even when the sync listener is unavailable.
-    }
-  }
+  /// What this device has sent and is holding, from Nexus.
+  int get _totalUploaded => _sum((c) => c.uploadedBytes.toInt());
+
+  int get _totalOnDisk => _sum((c) => c.onDiskBytes.toInt());
+
+  int _sum(int Function(NexusCollection) of) =>
+      AppControllers.nexusApp.state?.collections
+          .fold<int>(0, (total, collection) => total + of(collection)) ??
+      0;
 
   Future<void> _rename() async {
     final profile = AppControllers.identity.info;
@@ -78,7 +78,7 @@ class _UserScreenState extends State<UserScreen> {
       body: ListenableBuilder(
         listenable: Listenable.merge([
           AppControllers.identity,
-          AppControllers.collections,
+          AppControllers.nexusApp,
         ]),
         builder: (context, _) {
           final identity = AppControllers.identity;
@@ -86,8 +86,11 @@ class _UserScreenState extends State<UserScreen> {
             child: DeviceProfileSection(
               profile: identity.info,
               identityError: identity.lastError,
-              collections: AppControllers.collections.collections,
-              syncAddress: _syncAddress,
+              sentBytes: _totalUploaded,
+              receivedBytes: _totalOnDisk,
+              people: AppControllers.nexusApp.state?.contacts.length ?? 0,
+              collections:
+                  AppControllers.nexusApp.state?.collections.length ?? 0,
               onRename: identity.info == null ? null : _rename,
               onOpenPeople: () =>
                   AppNavigation.tab.value = AppNavigation.peopleTab,

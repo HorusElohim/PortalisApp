@@ -8,7 +8,6 @@ import '../design/collection_deletion_dialog.dart';
 import '../design/design.dart';
 import '../features/collections/domain/picked_file.dart';
 import '../features/collections/presentation/collection_commands.dart';
-import '../features/collections/presentation/collection_join.dart';
 import '../features/collections/presentation/collection_share.dart';
 import '../features/nexus/data/nexus_collection_source.dart';
 import '../features/nexus/domain/nexus_app_state.dart';
@@ -25,7 +24,6 @@ class Home extends StatefulWidget {
     this.openId,
     this.onOpen,
     this.onShare,
-    this.onJoin,
   });
 
   final bool embedded;
@@ -40,7 +38,6 @@ class Home extends StatefulWidget {
   /// [AdaptiveShellState.openCollection] always made.
   final ValueChanged<int>? onOpen;
   final void Function([List<PickedFile>? initialFiles])? onShare;
-  final ValueChanged<String>? onJoin;
 
   @override
   State<Home> createState() => _HomeState();
@@ -96,13 +93,6 @@ class _HomeState extends State<Home> {
     }
   }
 
-  void _openJoin(String code) {
-    if (widget.onJoin != null) {
-      widget.onJoin!(code);
-    } else {
-      _push(JoinCollectionScreen(initialCode: code));
-    }
-  }
 
   void _openCollection(NexusCollection collection) {
     // Every collection but one defers to `onOpen` when the wide shell
@@ -240,7 +230,6 @@ class _HomeState extends State<Home> {
           onOpen: _openCollection,
           onCommand: _handleCommand,
           onSearch: (query) => setState(() => _query = query),
-          onJoin: _openJoin,
           onImportTorrent: _importTorrent,
           onCreateCollection: () => _openShare(),
         );

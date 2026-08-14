@@ -25,14 +25,6 @@ pub fn set_nickname(nickname: String) -> anyhow::Result<DeviceIdentityInfo> {
     native::set_nickname(nickname)
 }
 
-/// The actual signing keypair — for other backend modules that need to
-/// sign something themselves (e.g. `collections.rs` signing manifest
-/// entries),
-/// never exposed to Flutter directly the way `device_identity()`'s DTO is.
-pub(crate) fn current_identity() -> anyhow::Result<crate::domain::identity::DeviceIdentity> {
-    current_nexus_identity().map(crate::nexus::NexusIdentity::into_signing_identity)
-}
-
 /// Both private keys used by the online Nexus workflow. Kept below the bridge
 /// so callers can sign and open envelopes without exposing key material.
 pub(crate) fn current_nexus_identity() -> anyhow::Result<crate::nexus::NexusIdentity> {
@@ -141,28 +133,16 @@ mod native {
     pub(super) fn set_nickname(nickname: String) -> anyhow::Result<DeviceIdentityInfo> {
         let (identity, _old_nickname) = load_or_create()?;
         save(&identity, &nickname)?;
-        // Collaborator records hold a *copy* of the name taken when the
-        // collection was created or joined, so renaming the identity alone
-        // left every existing collection showing the old one — and kept
-        // sending it to peers, since the collaborator list is what sync
-        // exchanges. Non-fatal: the rename itself has already been saved,
-        // and a collection whose record didn't update is a stale label, not
-        // a broken collection.
-        if let Err(e) =
-            crate::collab_store::rename_device(&identity.signing_identity().device_id(), &nickname)
-        {
-            crate::log::clog!(
-                "device",
-                "set_nickname: renamed the identity but couldn't update collections ({e:#})"
-            );
-        }
         let info = DeviceIdentityInfo {
+            // The existing bridge contract still names the raw Ed25519 key;
+            // Nexus itself uses the derived id `NexusIdentity` exposes.
             device_id: identity.signing_identity().device_id().to_hex(),
             nickname,
         };
         *CACHE.lock().unwrap() = Some(info.clone());
         Ok(info)
     }
+
 }
 
 #[cfg(test)]

@@ -18,11 +18,8 @@
 /// modules beside it are written. Step 9 replaces the bridge and deletes it.
 ///
 /// Named `legacy` rather than left as `collections.rs` so that every reference
-/// to it says what it is, and so the diff that removes it is one file.
-pub mod legacy;
 pub mod members;
 pub mod model;
 pub mod publish;
 pub mod receive;
 
-pub use legacy::*;

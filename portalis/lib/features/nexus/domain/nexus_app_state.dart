@@ -70,6 +70,7 @@ class NexusCollection {
     required this.entries,
     required this.totalBytes,
     required this.onDiskBytes,
+    required this.uploadedBytes,
     required this.transfer,
     required this.pending,
   });
@@ -87,6 +88,10 @@ class NexusCollection {
   /// How much of it this device is holding. Carried in the snapshot rather
   /// than asked for, so a size never lags the list it sits in.
   final BigInt onDiskBytes;
+
+  /// What this device has sent for it this session. The engine's own
+  /// counter, so a restart begins it again.
+  final BigInt uploadedBytes;
   final NexusTransfer? transfer;
   final NexusPending? pending;
 }

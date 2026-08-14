@@ -4,13 +4,14 @@ class StorageEntry {
     required this.name,
     required this.bytes,
     required this.path,
-    this.collectionId,
+    this.collection,
     this.collectionName,
   });
 
   final String name;
   final int bytes;
   final String path;
-  final String? collectionId;
+  /// The owning collection's Nexus handle, when one claims this directory.
+  final int? collection;
   final String? collectionName;
 }

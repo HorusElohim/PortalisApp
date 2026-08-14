@@ -189,6 +189,7 @@ fn state(handles: &mut Handles, progress: Option<Progress>) -> PortalisState {
                 failure: None,
                 paused: false,
                 on_disk_bytes: 0,
+                uploaded_bytes: 0,
             },
         )],
     )

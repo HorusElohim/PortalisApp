@@ -36,7 +36,6 @@ class NexusHomeLibrary extends StatelessWidget {
     required this.onSearch,
     required this.onImportTorrent,
     required this.onCreateCollection,
-    required this.onJoin,
     required this.onOpen,
     required this.onCommand,
     this.openId,
@@ -50,7 +49,6 @@ class NexusHomeLibrary extends StatelessWidget {
   final ValueChanged<String> onSearch;
   final Future<void> Function(String source) onImportTorrent;
   final VoidCallback onCreateCollection;
-  final ValueChanged<String> onJoin;
   final ValueChanged<NexusCollection> onOpen;
   final ValueChanged<(NexusCollection, CollectionCommand)> onCommand;
 
@@ -87,7 +85,6 @@ class NexusHomeLibrary extends StatelessWidget {
 
   Widget _toolbar() => PortalisCommandBar(
         onSearch: onSearch,
-        onInvite: onJoin,
         onImportTorrent: onImportTorrent,
       );
 
@@ -159,11 +156,10 @@ class NexusHomeLibrary extends StatelessWidget {
       detailFor: (row, level, inlineHeader, inlineStatus) => CollectionDetail(
         key: ValueKey(row.id),
         collection: row,
-        // `detailFor` is only reachable for an expandable row that `openId`
-        // names, and `openSource` is its owner's promise that a source
-        // exists exactly then — see this widget's own doc. The fallback is
-        // defensive rather than load-bearing: it never actually happens.
-        source: openSource ?? const LegacyCollectionSource(),
+        // Only reachable for an expandable row that `openId` names, and
+        // `openSource` is its owner's promise that a source exists exactly
+        // then — see this widget's own doc.
+        source: openSource!,
         showCommands: true,
         level: level,
         showTitle: false,

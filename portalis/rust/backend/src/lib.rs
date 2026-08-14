@@ -1,7 +1,13 @@
 #![cfg_attr(not(frb_expand), allow(unexpected_cfgs))]
 mod api; /* AUTO INJECTED BY flutter_rust_bridge. This line may not be accurate, and you can change it according to your needs. */
+/// The Flutter-facing version handshake.
+pub mod bridge;
+/// The running core: state, workers, and the command boundary.
 pub mod core;
+/// This device's Nexus identity.
 mod domain;
+/// The signing identity every publication is authored by.
+mod nexus;
 mod log;
 /// Where persisted state lives — one place, so tests can move it.
 mod paths;
@@ -11,31 +17,17 @@ pub mod store;
 mod substrate;
 /// One JSON document, read whole or written whole.
 mod vault;
-// Private and NOT part of tool/frb_build.sh's --rust-input, same reason as
-// `domain` — see collab_store.rs's own module doc.
-mod collab_store;
-/// Durable descriptors for native publication jobs interrupted by shutdown.
-mod import_store;
 /// Durable no-copy gallery source descriptors for seeding after restart.
 mod linked_source_store;
-/// Native backend seam for the online Nexus share client. It is intentionally
-/// private until the app-facing collection workflow is ready.
-mod nexus;
 /// The trusted Nexus service address persisted for the app connection.
 pub mod nexus_settings;
-// Real sockets — native targets only, like librqbit.
 /// Android-only bridge used by Rust-owned MediaStore storage.
 #[cfg(target_os = "android")]
 mod android_content;
-pub mod bridge;
-mod collab_sync;
 /// Canonical storage locations; never cache-path fallbacks.
 mod content_location;
 /// The single app-facing Nexus lifecycle, streams, and command boundary.
 pub mod portalis_api;
-/// Reconciles collection state with known peers while the app is active.
-#[path = "converge.rs"]
-mod reconciliation;
 // Unconditional on every target — see torrent.rs's module doc for why
 // (flutter_rust_bridge's generated glue references this module regardless
 // of any #[cfg] on its own declaration). librqbit itself is still gated to

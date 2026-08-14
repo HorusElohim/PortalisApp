@@ -149,6 +149,12 @@ pub struct CollectionState {
     /// interface renders it beside `total_bytes`, and a size it has to ask for
     /// is a size that is briefly wrong every time the list changes.
     pub on_disk_bytes: u64,
+    /// How much this device has sent to others for this collection.
+    ///
+    /// The engine's own counter for the session, not a durable total: a
+    /// restart starts it again, and claiming otherwise would need a store
+    /// row nothing writes.
+    pub uploaded_bytes: u64,
     /// Progress tier: present only while something is moving.
     pub transfer: Option<Transfer>,
     pub pending: Option<Pending>,

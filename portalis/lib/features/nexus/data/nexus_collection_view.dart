@@ -57,6 +57,7 @@ Collection nexusCollectionView({
     progress: transfer?.progress ?? detail?.progress ?? 0,
     totalBytes: collection.totalBytes.toInt(),
     downloadedBytes: collection.onDiskBytes.toInt(),
+    uploadedBytes: collection.uploadedBytes.toInt(),
     downloadMbps: _megabits(transfer?.downBytesPerSecond ?? 0),
     uploadMbps: _megabits(transfer?.upBytesPerSecond ?? 0),
     livePeers: transfer?.peers ?? swarm.length,

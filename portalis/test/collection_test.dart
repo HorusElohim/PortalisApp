@@ -1,8 +1,59 @@
 import 'test_support.dart';
 
+import 'package:portalis/features/collections/domain/picked_file.dart';
+import 'package:portalis/features/collections/domain/transfer_history.dart';
+import 'package:portalis/features/collections/presentation/collection_source.dart';
+
+
 import 'package:portalis/features/collections/domain/peer_observation.dart';
 import 'package:portalis/features/collections/presentation/collection_peers.dart';
 import 'package:portalis/features/collections/presentation/collection_presentation.dart';
+
+/// A source that answers with exactly what it was given.
+///
+/// The collection screen is one widget over a [CollectionSource]; these tests
+/// are about what it *draws*, so the simplest possible source keeps them
+/// about that rather than about whichever engine is behind it.
+class _FixedSource extends CollectionSource with ChangeNotifier {
+  _FixedSource(this.collection);
+
+  Collection collection;
+  final commands = <String>[];
+
+  @override
+  Listenable get listenable => this;
+
+  @override
+  Collection resolve(Collection seed) => collection;
+
+  @override
+  TransferHistory? historyFor(String id) => null;
+
+  @override
+  List<PeerObservation> peerHistoryFor(String id) => const [];
+
+  @override
+  Future<void> addMedia(String id, String label, List<PickedFile> files) async =>
+      commands.add('addMedia');
+
+  @override
+  Future<int> fetchMedia(String id) async {
+    commands.add('fetch');
+    return 0;
+  }
+
+  @override
+  Future<void> restart(String id) async => commands.add('restart');
+
+  @override
+  Future<void> pause(String id) async => commands.add('pause');
+
+  @override
+  Future<void> delete(String id) async => commands.add('delete');
+
+  @override
+  Future<void> deleteWithFiles(String id) async => commands.add('deleteWithFiles');
+}
 
 void main() {
   tearDown(resetTestState);
@@ -117,7 +168,7 @@ void main() {
       await tester.binding.setSurfaceSize(phoneSize);
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
-        const MaterialApp(home: CollectionScreen(collection: collection)),
+        MaterialApp(home: CollectionScreen(collection: collection, source: _FixedSource(collection))),
       );
       await tester.pump();
 
@@ -146,7 +197,7 @@ void main() {
       await tester.binding.setSurfaceSize(phoneSize);
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
-        const MaterialApp(home: CollectionScreen(collection: collection)),
+        MaterialApp(home: CollectionScreen(collection: collection, source: _FixedSource(collection))),
       );
       await tester.pump();
 
@@ -163,7 +214,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(390, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
-        MaterialApp(home: CollectionScreen(collection: collection)),
+        MaterialApp(home: CollectionScreen(collection: collection, source: _FixedSource(collection))),
       );
       await tester.pump();
 
@@ -256,11 +307,15 @@ void main() {
         downloadMbps: 2,
         livePeers: 3,
       );
-      AppControllers.collections.debugSeed([collection]);
+      final source = _FixedSource(collection);
       await tester.binding.setSurfaceSize(const Size(390, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(MaterialApp(
-        home: MediaViewerScreen(collection: collection, media: media),
+        home: MediaViewerScreen(
+          collection: collection,
+          media: media,
+          source: source,
+        ),
       ));
       await tester.pump();
 
@@ -274,26 +329,27 @@ void main() {
       expect(find.text('File path'), findsOneWidget);
       expect(find.byType(MediaViewerScreen), findsOneWidget);
 
-      // And it follows the cache rather than the arguments it was built with.
-      AppControllers.collections.debugSeed([
-        buildCollection(
-          state: 'downloading',
-          media: const [
-            MediaItem(
-              label: 'clip.mp4',
-              entryLabel: 'Beach day',
-              infoHash: 'aa',
-              sizeBytes: 1000,
-              downloadedBytes: 900,
-              progress: 0.9,
-            ),
-          ],
-          totalBytes: 1000,
-          downloadedBytes: 900,
-          downloadMbps: 2,
-          livePeers: 3,
-        ),
-      ]);
+      // And it follows its source rather than the arguments it was built
+      // with: the same property the controller cache used to provide, now
+      // expressed through the seam every collection screen shares.
+      source.collection = buildCollection(
+        state: 'downloading',
+        media: const [
+          MediaItem(
+            label: 'clip.mp4',
+            entryLabel: 'Beach day',
+            infoHash: 'aa',
+            sizeBytes: 1000,
+            downloadedBytes: 900,
+            progress: 0.9,
+          ),
+        ],
+        totalBytes: 1000,
+        downloadedBytes: 900,
+        downloadMbps: 2,
+        livePeers: 3,
+      );
+      source.notifyListeners();
       await tester.pump();
 
       expect(find.textContaining('900 B of 1 KB'), findsOneWidget);
@@ -306,11 +362,10 @@ void main() {
       // state and an id â€” everything on it that moved is now on the screen
       // itself.
       final collection = buildCollection(state: 'seeding');
-      AppControllers.collections.debugSeed([collection]);
       await tester.binding.setSurfaceSize(const Size(390, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(MaterialApp(
-        home: CollectionScreen(collection: collection),
+        home: CollectionScreen(collection: collection, source: _FixedSource(collection)),
       ));
       await tester.pump();
 
@@ -330,7 +385,7 @@ void main() {
       await tester.binding.setSurfaceSize(phoneSize);
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
-        MaterialApp(home: CollectionScreen(collection: collection)),
+        MaterialApp(home: CollectionScreen(collection: collection, source: _FixedSource(collection))),
       );
       await tester.pump();
 
@@ -372,11 +427,10 @@ void main() {
               addedBy: 'dev1'),
         ],
       );
-      AppControllers.collections.debugSeed([collection]);
       await tester.binding.setSurfaceSize(const Size(390, 1400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(MaterialApp(
-        home: CollectionScreen(collection: collection),
+        home: CollectionScreen(collection: collection, source: _FixedSource(collection)),
       ));
       await tester.pump();
 

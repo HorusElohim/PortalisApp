@@ -79,10 +79,7 @@ class DesktopTopBar extends StatelessWidget {
       );
 
   String? get _peopleCount {
-    final ids = <String>{
-      for (final collection in AppControllers.collections.collections)
-        for (final person in collection.collaborators) person.deviceId,
-    };
-    return ids.isEmpty ? null : '${ids.length}';
+    final contacts = AppControllers.nexusApp.state?.contacts ?? const [];
+    return contacts.isEmpty ? null : '${contacts.length}';
   }
 }

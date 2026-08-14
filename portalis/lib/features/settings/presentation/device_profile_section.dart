@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../design/design.dart';
 import '../../../theme.dart';
-import '../../collections/domain/collection.dart';
 import '../../identity/domain/device_profile.dart';
 
 /// Device identity, session totals, and identity-related destinations.
@@ -12,8 +10,10 @@ class DeviceProfileSection extends StatelessWidget {
     super.key,
     required this.profile,
     required this.identityError,
+    required this.sentBytes,
+    required this.receivedBytes,
+    required this.people,
     required this.collections,
-    required this.syncAddress,
     required this.onRename,
     required this.onOpenPeople,
     required this.onOpenFormats,
@@ -21,8 +21,12 @@ class DeviceProfileSection extends StatelessWidget {
 
   final DeviceProfile? profile;
   final String? identityError;
-  final List<Collection> collections;
-  final String? syncAddress;
+  /// Totals, already summed. The screen above owns where they come from —
+  /// this only renders them.
+  final int sentBytes;
+  final int receivedBytes;
+  final int people;
+  final int collections;
   final VoidCallback? onRename;
   final VoidCallback onOpenPeople;
   final VoidCallback onOpenFormats;
@@ -33,13 +37,8 @@ class DeviceProfileSection extends StatelessWidget {
     final initials = profile != null && nickname.isNotEmpty
         ? nickname[0].toUpperCase()
         : '·';
-    final sent = collections.fold<int>(0, (sum, item) => sum + item.uploadedBytes);
-    final received =
-        collections.fold<int>(0, (sum, item) => sum + item.downloadedBytes);
-    final people = <String>{
-      for (final collection in collections)
-        for (final collaborator in collection.collaborators) collaborator.deviceId,
-    }.length;
+    final sent = sentBytes;
+    final received = receivedBytes;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 4, 0, 26),
@@ -90,7 +89,7 @@ class DeviceProfileSection extends StatelessWidget {
                 ),
                 _ProfileStat(
                   label: 'COLLECTIONS',
-                  value: '${collections.length}',
+                  value: '$collections',
                 ),
                 _ProfileStat(
                   label: 'PEOPLE',
@@ -100,7 +99,6 @@ class DeviceProfileSection extends StatelessWidget {
               ],
             ),
           ),
-          if (syncAddress != null) _SyncAddressCard(address: syncAddress!),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               kScreenGutter,
@@ -134,58 +132,6 @@ class DeviceProfileSection extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SyncAddressCard extends StatelessWidget {
-  const _SyncAddressCard({required this.address});
-
-  final String address;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding:
-            const EdgeInsets.fromLTRB(kScreenGutter, 22, kScreenGutter, 0),
-        child: SurfaceCard(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('YOUR ADDRESS', style: monoLabel(size: 10)),
-              const SizedBox(height: 9),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      address,
-                      style: monoLabel(
-                        size: 12.5,
-                        color: AppColors.text,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: address));
-                      showToast(context, 'Address copied');
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(Icons.copy, size: 15, color: AppColors.textDim),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 9),
-              Text(
-                'Rotates every launch. Collaborators reach this device here '
-                'to exchange collection contents.',
-                style: AppText.secondary(height: 1.45),
-              ),
-            ],
-          ),
-        ),
-      );
 }
 
 class _ProfileStat extends StatelessWidget {

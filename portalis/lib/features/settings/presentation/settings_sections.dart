@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
-import '../../collections/application/collections_controller.dart';
+import '../../nexus/application/nexus_app_controller.dart';
 import '../../../theme.dart';
 import '../domain/engine_settings.dart';
 
@@ -36,20 +36,17 @@ class SettingsHealthCard extends StatelessWidget {
   const SettingsHealthCard({
     super.key,
     required this.settings,
-    required this.collections,
+    required this.controller,
   });
 
   final EngineSettings settings;
-  final CollectionsController collections;
+  final NexusAppController controller;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: collections,
+        listenable: controller,
         builder: (context, _) {
-          final peers = collections.collections.fold<int>(
-            0,
-            (sum, collection) => sum + collection.livePeers,
-          );
+          final peers = controller.activity.peers;
           final facts = [
             'PORT ${settings.listenPortStart}–${settings.listenPortEnd}',
             settings.disableDht ? 'DHT OFF' : 'DHT ON',

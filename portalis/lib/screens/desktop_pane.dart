@@ -28,4 +28,4 @@
 /// [people]/[settings] only in how they're reached — a one-shot action in the
 /// sidebar (or the command bar, or a drop) rather than a persistent header
 /// button — nothing that selects a pane otherwise distinguishes them.
-enum DesktopPane { home, user, people, settings, share, join }
+enum DesktopPane { home, user, people, settings, share }

@@ -12,7 +12,6 @@ void main() {
           home: Scaffold(
             body: PortalisCommandBar(
               onSearch: (_) {},
-              onInvite: (_) {},
               onImportTorrent: (_) async {},
             ),
           ),
@@ -36,25 +35,6 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('join screen recognises a valid code', (tester) async {
-      await tester.binding.setSurfaceSize(phoneSize);
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      await tester.pumpWidget(const MaterialApp(home: JoinCollectionScreen()));
-      await tester.pump();
-
-      // Invite codes are hex-wrapped (collections.rs::invite_code_for) so the
-      // name and address aren't visible in plain text â€” encode the same way.
-      final plain = '${'ab' * 32}:Test Collection@192.168.1.9:5321';
-      final code = plain.codeUnits
-          .map((c) => c.toRadixString(16).padLeft(2, '0'))
-          .join();
-      await tester.enterText(find.byKey(const Key('inviteCodeField')), code);
-      await tester.pump();
-
-      expect(find.text('Test Collection'), findsOneWidget);
-      expect(find.textContaining('1 address'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
 
     testWidgets('share screen requires a name and files', (tester) async {
       await tester.binding.setSurfaceSize(phoneSize);

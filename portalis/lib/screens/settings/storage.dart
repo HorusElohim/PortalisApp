@@ -7,7 +7,7 @@ import '../../app/app_controllers.dart';
 import '../../design/design.dart';
 import '../../features/settings/domain/storage_entry.dart';
 import '../../theme.dart';
-import '../../features/collections/presentation/collection_detail.dart';
+import '../../features/nexus/presentation/nexus_collection_detail.dart';
 
 /// What's actually on disk under the download directory, joined against the
 /// collections the app knows about — not just the raw filesystem, and not
@@ -141,7 +141,11 @@ class _EntryRow extends StatelessWidget {
   /// claims it — see `collections::storage_breakdown`'s doc for when it
   /// doesn't (almost always a deleted collection's leftovers).
   void _openCollection(BuildContext context) {
-    final collection = AppControllers.collections.byId(entry.collectionId!);
+    // Joined on the handle the breakdown resolved from the substrate, not on
+    // a name two collections could share.
+    final collection = AppControllers.nexusApp.state?.collections
+        .where((item) => item.id == entry.collection)
+        .firstOrNull;
     if (collection == null) {
       showToast(context, 'Couldn\'t find that collection',
           severity: ToastSeverity.error);
@@ -149,7 +153,9 @@ class _EntryRow extends StatelessWidget {
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-          builder: (_) => CollectionScreen(collection: collection)),
+        builder: (_) =>
+            nexusCollectionScreen(collection, AppControllers.nexusApp),
+      ),
     );
   }
 
@@ -169,7 +175,7 @@ class _EntryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final linked = entry.collectionId != null;
+    final linked = entry.collection != null;
     return SurfaceCard(
       padding: const EdgeInsets.all(14),
       child: Column(

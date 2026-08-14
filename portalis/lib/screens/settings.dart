@@ -419,7 +419,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// What most people ever need: how fast, and whether to keep sharing.
   List<Widget> _basicSections(EngineSettings s) {
     return [
-      SettingsHealthCard(settings: s, collections: AppControllers.collections),
+      SettingsHealthCard(settings: s, controller: AppControllers.nexusApp),
       SettingsSection(
         label: 'APPEARANCE',
         children: const [ThemePickerRow()],

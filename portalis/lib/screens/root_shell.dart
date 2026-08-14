@@ -6,7 +6,6 @@ import 'desktop_pane.dart';
 import 'desktop_shell_layout.dart';
 import 'home.dart';
 import 'mobile_shell_layout.dart';
-import '../features/collections/presentation/collection_join.dart';
 import '../features/collections/presentation/collection_share.dart';
 import 'people.dart';
 import 'settings.dart';
@@ -31,17 +30,10 @@ class _RootShellState extends AdaptiveShellState<RootShell> {
         onClose: closeShare,
       );
     }
-    if (pane == DesktopPane.join) {
-      return JoinCollectionScreen(
-        initialCode: pendingInvite,
-        onClose: closeJoin,
-      );
-    }
     return MobileShellLayout(
       index: tab,
       onSelected: selectTab,
       onShare: ([files]) => openShare(files, false),
-      onJoin: (code) => openJoin(code, inline: false),
     );
   }
 
@@ -55,12 +47,10 @@ class _RootShellState extends AdaptiveShellState<RootShell> {
           openId: openId,
           onOpen: (id) => openCollection(id, inline: true),
           onShare: ([files]) => openShare(files, true),
-          onJoin: openJoinInline,
         ),
         content: _desktopContent(),
       );
 
-  void openJoinInline(String code) => openJoin(code, inline: true);
 
   Widget _desktopContent() => switch (pane) {
         DesktopPane.people => const PeopleScreen(embedded: true),
@@ -70,11 +60,6 @@ class _RootShellState extends AdaptiveShellState<RootShell> {
             key: ValueKey(pendingShareFiles),
             initialFiles: pendingShareFiles,
             onClose: closeShare,
-          ),
-        DesktopPane.join => JoinCollectionScreen(
-            key: ValueKey(pendingInvite),
-            initialCode: pendingInvite,
-            onClose: closeJoin,
           ),
         DesktopPane.home => const SizedBox.shrink(),
       };

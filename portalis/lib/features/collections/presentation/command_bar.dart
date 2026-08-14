@@ -1,4 +1,4 @@
-// Collection-entry presentation for magnets, invites and local torrents.
+// Collection-entry presentation for magnets and local torrents.
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -7,8 +7,8 @@ import '../../../theme.dart';
 import '../../../design/toast.dart';
 import '../domain/paste.dart';
 
-/// One field for magnets, invites, collection search, and the `.torrent`
-/// picker. Recognised input is dispatched; empty input simply does nothing.
+/// One field for magnets, collection search, and the `.torrent` picker.
+/// Recognised input is dispatched; empty input simply does nothing.
 ///
 /// Replaces the sidebar's magnet field, its Paste and Add buttons, its
 /// .torrent picker and its "Join with a key" action — five controls, three of
@@ -18,13 +18,12 @@ import '../domain/paste.dart';
 /// to. This asks instead: paste, and [PasteKind] decides.
 ///
 /// Search is the fallback rather than the purpose, which is why the same
-/// field can do both without a mode switch — a magnet link and an invite code
-/// are unmistakable, so anything that is neither was meant as a filter.
+/// field can do both without a mode switch — a magnet link is unmistakable,
+/// so anything that is not one was meant as a filter.
 class PortalisCommandBar extends StatefulWidget {
   const PortalisCommandBar({
     super.key,
     required this.onSearch,
-    required this.onInvite,
     required this.onImportTorrent,
     this.autofocus = false,
   });
@@ -33,10 +32,6 @@ class PortalisCommandBar extends StatefulWidget {
   /// the filtering; this widget never holds a filtered list.
   final ValueChanged<String> onSearch;
 
-  /// A recognised invite code, handed on to the join flow rather than joined
-  /// from here — joining names you to strangers, so it keeps its confirmation
-  /// step.
-  final ValueChanged<String> onInvite;
   final Future<void> Function(String source) onImportTorrent;
   final bool autofocus;
 
@@ -75,10 +70,6 @@ class _CommandBarState extends State<PortalisCommandBar> {
         _focus.unfocus();
         return;
       case PasteKind.search:
-        return;
-      case PasteKind.invite:
-        _clear();
-        widget.onInvite(text);
         return;
       case PasteKind.magnet:
         setState(() {
@@ -144,7 +135,7 @@ class _CommandBarState extends State<PortalisCommandBar> {
     final kind = _kind;
     // Mint only once the text is genuinely actionable — the same rule the
     // rest of the palette follows. A search term is not a pending action.
-    final armed = kind == PasteKind.magnet || kind == PasteKind.invite;
+    final armed = kind == PasteKind.magnet;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,7 +172,7 @@ class _CommandBarState extends State<PortalisCommandBar> {
                     isDense: true,
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                    hintText: 'Magnet, invite, or search…',
+                    hintText: 'Magnet or search…',
                     hintStyle: monoLabel(size: 12.5, letterSpacing: 0),
                   ),
                   onChanged: _onChanged,
@@ -248,7 +239,6 @@ class _Hint extends StatelessWidget {
     if (kind == PasteKind.empty) return const SizedBox.shrink();
     final label = switch (kind) {
       PasteKind.magnet => 'ADD TORRENT',
-      PasteKind.invite => 'JOIN',
       PasteKind.search => 'FILTERING',
       PasteKind.empty => '',
     };

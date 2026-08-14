@@ -186,16 +186,6 @@ impl Store {
         Ok(())
     }
 
-    /// The underlying database, for the one legacy adapter that still keeps
-    /// its own table.
-    ///
-    /// Exists so `collab_store` can stop rewriting a JSON file before step 7
-    /// replaces it entirely. Nothing else should reach past the typed methods
-    /// above, and this goes when that module does.
-    pub(crate) const fn database(&self) -> &Database {
-        &self.database
-    }
-
     /// The schema version recorded in the file, or 0 for a store that has
     /// never been written to.
     ///

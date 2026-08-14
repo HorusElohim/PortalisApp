@@ -149,7 +149,6 @@ pub(crate) struct PublishProgressState {
     pub(crate) total_bytes: u64,
     pub(crate) completed_pieces: u64,
     pub(crate) total_pieces: u64,
-    pub(crate) error: Option<String>,
 }
 
 impl PublishProgress {
@@ -161,14 +160,9 @@ impl PublishProgress {
                 total_bytes,
                 completed_pieces: 0,
                 total_pieces: total_bytes.div_ceil(TORRENT_PIECE_LENGTH),
-                error: None,
             })),
             cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
-    }
-
-    pub(crate) fn snapshot(&self) -> PublishProgressState {
-        self.inner.lock().unwrap().clone()
     }
 
     pub(crate) fn set_stage(&self, stage: &str) {
@@ -208,12 +202,6 @@ impl PublishProgress {
             .completed_pieces
             .saturating_add(1)
             .min(state.total_pieces);
-    }
-
-    pub(crate) fn fail(&self, error: String) {
-        let mut state = self.inner.lock().unwrap();
-        state.stage = "failed".into();
-        state.error = Some(error);
     }
 
     pub(crate) fn cancel(&self) {
@@ -441,40 +429,6 @@ pub(crate) fn session_started() -> bool {
     native::session_started()
 }
 
-/// The BitTorrent session's own listen port — for `collab_sync.rs` to
-/// advertise in sync messages (so peers can fetch our seeded media
-/// directly). Internal, never bridged (`pub(crate)` is invisible to FRB's
-/// scan, same as `device::current_identity`).
-pub(crate) async fn bt_listen_port() -> anyhow::Result<Option<u16>> {
-    native::bt_listen_port().await
-}
-
-/// The BitTorrent listen port if it has *ever* been read in this run, without
-/// touching the session.
-///
-/// The port is fixed for the life of the process, but the only way to ask for
-/// it — `session()` — blocks while librqbit starts up (DHT bootstrap, UPnP
-/// probe, re-reading persisted torrents). `collab_sync` therefore only waits a
-/// couple of seconds for it and sends `None` on timeout, and a sync message
-/// without a port leaves the other side with no direct address to fetch media
-/// from: it falls back to DHT, which on a LAN behind one NAT typically never
-/// resolves. Caching turns that into a once-per-run race instead of one that
-/// can be lost on every single exchange.
-pub(crate) fn bt_listen_port_cached() -> Option<u16> {
-    native::bt_listen_port_cached()
-}
-
-/// Adds a torrent by bare info-hash with explicit peer-address hints —
-/// `collab_sync.rs`'s learned "who has this collection's media" addresses
-/// go straight to librqbit as `initial_peers`, so a LAN fetch connects to
-/// the seeder immediately instead of waiting on DHT discovery.
-pub(crate) async fn add_info_hash_with_peers(
-    info_hash_hex: &str,
-    peers: Vec<std::net::SocketAddr>,
-) -> anyhow::Result<TorrentInfo> {
-    native::add_info_hash_with_peers(info_hash_hex, peers).await
-}
-
 /// Where downloads land: the person's configured directory, or the platform
 /// default. One answer, so the engine and the collection record agree.
 #[cfg(not(target_arch = "wasm32"))]
@@ -580,21 +534,6 @@ pub(crate) async fn pause_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
 
 pub(crate) async fn restart_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
     native::restart_torrent(info_hash_hex).await
-}
-
-pub(crate) async fn delete_torrent_files(info_hash_hex: &str) -> anyhow::Result<()> {
-    native::delete_torrent_files(info_hash_hex).await
-}
-
-/// Rebuilds no-copy source storage after a process restart. Session persistence
-/// cannot serialize a custom storage factory, so Portalis restores it itself.
-pub(crate) async fn restore_linked_sources() -> anyhow::Result<()> {
-    native::restore_linked_sources().await
-}
-
-/// Pauses a linked torrent as soon as its original source disappears.
-pub(crate) async fn verify_linked_sources() {
-    native::verify_linked_sources().await;
 }
 
 mod native {
@@ -1079,73 +1018,6 @@ mod native {
             sources: files,
         })?;
         Ok(info)
-    }
-
-    pub(super) async fn restore_linked_sources() -> anyhow::Result<()> {
-        let session = session().await?;
-        for record in crate::linked_source_store::load()? {
-            if crate::torrent::inspect_source_files(&record.sources)
-                .await
-                .is_err()
-            {
-                crate::log::clog!(
-                    "torrent",
-                    "linked source unavailable after restart: {}",
-                    record.info_hash
-                );
-                continue;
-            }
-            let id = TorrentIdOrHash::try_from(record.info_hash.as_str())?;
-            if session.get(id).is_some() {
-                session.delete(id, false).await?;
-            }
-            let sources = record
-                .sources
-                .iter()
-                .map(|source| {
-                    crate::content_location::ContentLocation::from_source_path(&source.path)
-                })
-                .collect::<anyhow::Result<Vec<_>>>()?;
-            let lengths = record
-                .sources
-                .iter()
-                .zip(&sources)
-                .map(|(source, location)| location.length(source.length_bytes))
-                .collect::<anyhow::Result<Vec<_>>>()?;
-            let metadata_dir = source_link_dir(&record.info_hash);
-            std::fs::create_dir_all(&metadata_dir)?;
-            session
-                .add_torrent(
-                    AddTorrent::from_bytes(record.torrent_bytes),
-                    Some(AddTorrentOptions {
-                        overwrite: true,
-                        output_folder: Some(metadata_dir.to_string_lossy().into_owned()),
-                        storage_factory: Some(
-                            ReferencedStorageFactory { sources, lengths }.boxed(),
-                        ),
-                        ..Default::default()
-                    }),
-                )
-                .await
-                .with_context(|| format!("restoring linked source {}", record.info_hash))?;
-        }
-        Ok(())
-    }
-
-    pub(super) async fn verify_linked_sources() {
-        let Ok(records) = crate::linked_source_store::load() else {
-            return;
-        };
-        for record in records {
-            if crate::torrent::inspect_source_files(&record.sources)
-                .await
-                .is_ok()
-            {
-                continue;
-            }
-            crate::log::clog!("torrent", "linked source unavailable: {}", record.info_hash);
-            let _ = pause_torrent(&record.info_hash).await;
-        }
     }
 
     fn create_referenced_metainfo(
@@ -1831,27 +1703,6 @@ mod native {
         );
         Ok(())
     }
-
-    /// 0 = not yet known. The port never changes once the session is up, so a
-    /// plain atomic is enough — see `torrent::bt_listen_port_cached`.
-    static BT_LISTEN_PORT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-
-    pub(super) async fn bt_listen_port() -> anyhow::Result<Option<u16>> {
-        let port = session().await?.tcp_listen_port();
-        if let Some(port) = port {
-            BT_LISTEN_PORT.store(port as u32, std::sync::atomic::Ordering::Relaxed);
-        }
-        crate::log::clog!("torrent", "bt_listen_port: {port:?}");
-        Ok(port)
-    }
-
-    pub(super) fn bt_listen_port_cached() -> Option<u16> {
-        match BT_LISTEN_PORT.load(std::sync::atomic::Ordering::Relaxed) {
-            0 => None,
-            port => Some(port as u16),
-        }
-    }
-
     pub(super) async fn forget_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
         crate::log::clog!("torrent", "forget_torrent: info_hash={info_hash_hex}");
         let session = session().await?;
@@ -1893,43 +1744,6 @@ mod native {
             .await
             .with_context(|| format!("re-adding torrent {info_hash_hex}"))?;
         Ok(())
-    }
-
-    pub(super) async fn delete_torrent_files(info_hash_hex: &str) -> anyhow::Result<()> {
-        crate::log::clog!("torrent", "delete_torrent_files: info_hash={info_hash_hex}");
-        let session = session().await?;
-        let id = TorrentIdOrHash::try_from(info_hash_hex)
-            .map_err(|e| anyhow::anyhow!("{info_hash_hex} isn't a valid info hash: {e}"))?;
-        if session.get(id).is_none() {
-            return Ok(());
-        }
-        session
-            .delete(id, true)
-            .await
-            .context("deleting torrent files")
-    }
-
-    pub(super) async fn add_info_hash_with_peers(
-        info_hash_hex: &str,
-        peers: Vec<std::net::SocketAddr>,
-    ) -> anyhow::Result<TorrentInfo> {
-        crate::log::clog!(
-            "torrent",
-            "add_info_hash_with_peers: info_hash={info_hash_hex} peer_hints={peers:?}"
-        );
-        let session = session().await?;
-        let opts = AddTorrentOptions {
-            overwrite: true,
-            initial_peers: (!peers.is_empty()).then_some(peers),
-            ..Default::default()
-        };
-        let response = session
-            // A bare 40-char hex info-hash is a valid magnet identifier to
-            // librqbit's URL parser, same as the user-facing magnet flow.
-            .add_torrent(AddTorrent::from_url(info_hash_hex), Some(opts))
-            .await
-            .with_context(|| format!("adding torrent {info_hash_hex} with peer hints"))?;
-        response_to_info(&api(session), response)
     }
 
     #[cfg(test)]

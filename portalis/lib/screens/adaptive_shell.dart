@@ -7,7 +7,6 @@ import '../design/design.dart';
 import '../features/collections/domain/picked_file.dart';
 import '../services/navigation.dart';
 import 'desktop_pane.dart';
-import '../features/collections/presentation/collection_join.dart';
 import '../features/collections/presentation/collection_share.dart';
 import '../features/nexus/presentation/nexus_collection_detail.dart';
 
@@ -25,12 +24,10 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
   int get tab => AppNavigation.tab.value;
   DesktopPane get pane => _pane;
   int? get openId => _openId;
-  String? get pendingInvite => _pendingInvite;
   List<PickedFile>? get pendingShareFiles => _pendingShareFiles;
 
   DesktopPane _pane = DesktopPane.home;
   int? _openId;
-  String? _pendingInvite;
   List<PickedFile>? _pendingShareFiles;
 
   @override
@@ -113,28 +110,12 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     selectPane(DesktopPane.share);
   }
 
-  void openJoin(String code, {bool inline = false}) {
-    if (!inline) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => JoinCollectionScreen(initialCode: code),
-        ),
-      );
-      return;
-    }
-    setState(() => _pendingInvite = code);
-    selectPane(DesktopPane.join);
-  }
 
   void closeShare() {
     setState(() => _pendingShareFiles = null);
     selectPane(DesktopPane.home);
   }
 
-  void closeJoin() {
-    setState(() => _pendingInvite = null);
-    selectPane(DesktopPane.home);
-  }
 
   @protected
   Widget buildCompactLayout(BuildContext context);
@@ -181,6 +162,6 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
         DesktopPane.user => 1,
         DesktopPane.people => 2,
         DesktopPane.settings => 3,
-        DesktopPane.share || DesktopPane.join => null,
+        DesktopPane.share => null,
       };
 }

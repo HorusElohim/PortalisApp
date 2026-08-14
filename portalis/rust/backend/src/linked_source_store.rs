@@ -40,24 +40,6 @@ pub(crate) fn remove(info_hash: &str) -> anyhow::Result<()> {
     vault().write(&LinkedSourceStore { records })
 }
 
-pub(crate) fn paths_for(info_hash: &str) -> Vec<String> {
-    load()
-        .ok()
-        .and_then(|records| {
-            records
-                .into_iter()
-                .find(|record| record.info_hash.eq_ignore_ascii_case(info_hash))
-        })
-        .map(|record| {
-            record
-                .sources
-                .into_iter()
-                .map(|source| source.path)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 pub(crate) fn descriptor_for(info_hash: &str) -> anyhow::Result<Vec<u8>> {
     load()?
         .into_iter()

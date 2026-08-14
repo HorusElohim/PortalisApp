@@ -1,6 +1,6 @@
 use std::fmt;
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use rand::rngs::OsRng;
 
 /// A device's public identity — stable across IP/network changes, used as
@@ -15,19 +15,6 @@ impl DeviceId {
 
     pub fn to_hex(self) -> String {
         hex::encode(self.as_bytes())
-    }
-
-    pub fn from_hex(s: &str) -> anyhow::Result<Self> {
-        let bytes = hex::decode(s)?;
-        let arr: [u8; 32] = bytes
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("device id must be 32 bytes"))?;
-        Ok(Self(VerifyingKey::from_bytes(&arr)?))
-    }
-
-    /// Verify a message was signed by this device.
-    pub fn verify(&self, message: &[u8], signature: &Signature) -> bool {
-        self.0.verify(message, signature).is_ok()
     }
 }
 
@@ -85,40 +72,9 @@ impl DeviceIdentity {
 mod tests {
     use super::*;
 
-    #[test]
-    fn sign_and_verify_round_trip() {
-        let identity = DeviceIdentity::generate();
-        let message = b"hello swarm";
-        let signature = identity.sign(message);
 
-        assert!(identity.device_id().verify(message, &signature));
-    }
 
-    #[test]
-    fn verify_rejects_tampered_message() {
-        let identity = DeviceIdentity::generate();
-        let signature = identity.sign(b"original");
 
-        assert!(!identity.device_id().verify(b"tampered", &signature));
-    }
-
-    #[test]
-    fn verify_rejects_wrong_signer() {
-        let signer = DeviceIdentity::generate();
-        let impostor = DeviceIdentity::generate();
-        let message = b"who signed this?";
-        let signature = signer.sign(message);
-
-        assert!(!impostor.device_id().verify(message, &signature));
-    }
-
-    #[test]
-    fn device_id_hex_round_trips() {
-        let identity = DeviceIdentity::generate();
-        let id = identity.device_id();
-
-        assert_eq!(DeviceId::from_hex(&id.to_hex()).unwrap(), id);
-    }
 
     #[test]
     fn identity_bytes_round_trip_to_same_device_id() {

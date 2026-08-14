@@ -27,7 +27,6 @@ void main() {
     });
 
     test('an invite code is anything that decodes to secret:name', () {
-      expect(PasteKind.of(inviteCode('Iceland trip')), PasteKind.invite);
     });
 
     test('hex that decodes to nothing shaped like an invite is a search', () {

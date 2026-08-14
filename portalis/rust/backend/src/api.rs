@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2060059564;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1290072541;
 
 // Section: executor
 
@@ -46,49 +46,6 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
-fn wire__crate__collections__legacy__add_media_to_collection_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "add_media_to_collection",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_collection_id = <String>::sse_decode(&mut deserializer);
-            let api_label = <String>::sse_decode(&mut deserializer);
-            let api_files = <Vec<crate::torrent::SourceFile>>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok = crate::collections::legacy::add_media_to_collection(
-                            api_collection_id,
-                            api_label,
-                            api_files,
-                        )
-                        .await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
 fn wire__crate__torrent__add_torrent_from_file_path_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -163,43 +120,6 @@ fn wire__crate__torrent__add_torrent_from_magnet_impl(
         },
     )
 }
-fn wire__crate__collections__legacy__create_collection_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "create_collection",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_name = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok =
-                            crate::collections::legacy::create_collection(api_name).await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
 fn wire__crate__torrent__create_collection_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -230,46 +150,6 @@ fn wire__crate__torrent__create_collection_impl(
                     (move || async move {
                         let output_ok =
                             crate::torrent::create_collection(api_name, api_files).await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
-fn wire__crate__collections__legacy__create_collection_with_media_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "create_collection_with_media",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_name = <String>::sse_decode(&mut deserializer);
-            let api_files = <Vec<crate::torrent::SourceFile>>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok = crate::collections::legacy::create_collection_with_media(
-                            api_name, api_files,
-                        )
-                        .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -311,82 +191,6 @@ fn wire__crate__settings__default_engine_settings_impl(
         },
     )
 }
-fn wire__crate__collections__legacy__delete_collection_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "delete_collection",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_collection_id = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok =
-                            crate::collections::legacy::delete_collection(api_collection_id)
-                                .await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
-fn wire__crate__collections__legacy__delete_collection_files_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "delete_collection_files",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_collection_id = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok =
-                            crate::collections::legacy::delete_collection_files(api_collection_id)
-                                .await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
 fn wire__crate__device__device_identity_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -416,42 +220,6 @@ fn wire__crate__device__device_identity_impl(
                         let output_ok = crate::device::device_identity()?;
                         Ok(output_ok)
                     })(),
-                )
-            }
-        },
-    )
-}
-fn wire__crate__collections__legacy__engine_ready_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "engine_ready",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, ()>(
-                    (move || async move {
-                        let output_ok =
-                            Result::<_, ()>::Ok(crate::collections::legacy::engine_ready().await)?;
-                        Ok(output_ok)
-                    })()
-                    .await,
                 )
             }
         },
@@ -524,44 +292,6 @@ fn wire__crate__settings__engine_settings_default_impl(
         },
     )
 }
-fn wire__crate__collections__legacy__fetch_collection_media_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "fetch_collection_media",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_collection_id = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok =
-                            crate::collections::legacy::fetch_collection_media(api_collection_id)
-                                .await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
 fn wire__crate__bridge__get_version_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -588,82 +318,6 @@ fn wire__crate__bridge__get_version_impl(
                 let output_ok = Result::<_, ()>::Ok(crate::bridge::get_version())?;
                 Ok(output_ok)
             })())
-        },
-    )
-}
-fn wire__crate__collections__legacy__join_collection_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "join_collection",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_invite_code = <String>::sse_decode(&mut deserializer);
-            let api_display_name = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok = crate::collections::legacy::join_collection(
-                            api_invite_code,
-                            api_display_name,
-                        )
-                        .await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
-fn wire__crate__collections__legacy__list_collections_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "list_collections",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok = crate::collections::legacy::list_collections().await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
         },
     )
 }
@@ -803,81 +457,6 @@ fn wire__crate__torrent__output_dir_impl(
         },
     )
 }
-fn wire__crate__collections__legacy__pause_collection_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "pause_collection",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_collection_id = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok =
-                            crate::collections::legacy::pause_collection(api_collection_id).await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
-fn wire__crate__collections__legacy__restart_collection_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "restart_collection",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_collection_id = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok =
-                            crate::collections::legacy::restart_collection(api_collection_id)
-                                .await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
 fn wire__crate__portalis_api__send_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -907,44 +486,6 @@ fn wire__crate__portalis_api__send_impl(
                     let output_ok = crate::portalis_api::send(api_command)?;
                     Ok(output_ok)
                 })())
-            }
-        },
-    )
-}
-fn wire__crate__collections__legacy__set_active_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "set_active",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_active = <bool>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, ()>(
-                    (move || async move {
-                        let output_ok = Result::<_, ()>::Ok({
-                            crate::collections::legacy::set_active(api_active).await;
-                        })?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
             }
         },
     )
@@ -1125,41 +666,6 @@ fn wire__crate__portalis_api__start_impl(
         },
     )
 }
-fn wire__crate__collections__legacy__start_engine_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "start_engine",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok = crate::collections::legacy::start_engine().await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
 fn wire__crate__portalis_api__stop_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1195,44 +701,7 @@ fn wire__crate__portalis_api__stop_impl(
         },
     )
 }
-fn wire__crate__collections__legacy__stop_collection_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "stop_collection",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_collection_id = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok =
-                            crate::collections::legacy::stop_collection(api_collection_id).await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
-fn wire__crate__collections__legacy__storage_breakdown_impl(
+fn wire__crate__portalis_api__storage_breakdown_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1256,9 +725,9 @@ fn wire__crate__collections__legacy__storage_breakdown_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             deserializer.end();
             move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                transform_result_sse::<_, String>(
                     (move || async move {
-                        let output_ok = crate::collections::legacy::storage_breakdown().await?;
+                        let output_ok = crate::portalis_api::storage_breakdown().await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -1294,82 +763,6 @@ fn wire__crate__torrent__storage_usage_bytes_impl(
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
                         let output_ok = crate::torrent::storage_usage_bytes().await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
-fn wire__crate__collections__legacy__sync_address_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "sync_address",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok = crate::collections::legacy::sync_address().await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
-fn wire__crate__collections__legacy__sync_collection_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "sync_collection",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_collection_id = <String>::sse_decode(&mut deserializer);
-            let api_peer_addr = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || async move {
-                        let output_ok = crate::collections::legacy::sync_collection(
-                            api_collection_id,
-                            api_peer_addr,
-                        )
-                        .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -1527,6 +920,7 @@ impl SseDecode for crate::portalis_api::AppCollection {
         let mut var_entries = <u32>::sse_decode(deserializer);
         let mut var_totalBytes = <u64>::sse_decode(deserializer);
         let mut var_onDiskBytes = <u64>::sse_decode(deserializer);
+        let mut var_uploadedBytes = <u64>::sse_decode(deserializer);
         let mut var_transfer = <Option<crate::portalis_api::AppTransfer>>::sse_decode(deserializer);
         let mut var_pending = <Option<crate::portalis_api::AppPending>>::sse_decode(deserializer);
         return crate::portalis_api::AppCollection {
@@ -1540,6 +934,7 @@ impl SseDecode for crate::portalis_api::AppCollection {
             entries: var_entries,
             total_bytes: var_totalBytes,
             on_disk_bytes: var_onDiskBytes,
+            uploaded_bytes: var_uploadedBytes,
             transfer: var_transfer,
             pending: var_pending,
         };
@@ -1705,6 +1100,24 @@ impl SseDecode for crate::portalis_api::AppSourceFile {
     }
 }
 
+impl SseDecode for crate::portalis_api::AppStorageEntry {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_bytes = <u64>::sse_decode(deserializer);
+        let mut var_path = <String>::sse_decode(deserializer);
+        let mut var_collection = <Option<u32>>::sse_decode(deserializer);
+        let mut var_collectionName = <Option<String>>::sse_decode(deserializer);
+        return crate::portalis_api::AppStorageEntry {
+            name: var_name,
+            bytes: var_bytes,
+            path: var_path,
+            collection: var_collection,
+            collection_name: var_collectionName,
+        };
+    }
+}
+
 impl SseDecode for crate::portalis_api::AppTransfer {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1727,78 +1140,6 @@ impl SseDecode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_u8().unwrap() != 0
-    }
-}
-
-impl SseDecode for crate::collections::legacy::CollaboratorInfo {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_deviceId = <String>::sse_decode(deserializer);
-        let mut var_displayName = <String>::sse_decode(deserializer);
-        let mut var_isAdmin = <bool>::sse_decode(deserializer);
-        return crate::collections::legacy::CollaboratorInfo {
-            device_id: var_deviceId,
-            display_name: var_displayName,
-            is_admin: var_isAdmin,
-        };
-    }
-}
-
-impl SseDecode for crate::collections::legacy::CollectionInfo {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_id = <String>::sse_decode(deserializer);
-        let mut var_name = <String>::sse_decode(deserializer);
-        let mut var_kind = <crate::collections::legacy::CollectionKind>::sse_decode(deserializer);
-        let mut var_inviteCode = <Option<String>>::sse_decode(deserializer);
-        let mut var_collaborators =
-            <Vec<crate::collections::legacy::CollaboratorInfo>>::sse_decode(deserializer);
-        let mut var_media = <Vec<crate::collections::legacy::MediaInfo>>::sse_decode(deserializer);
-        let mut var_progress = <f64>::sse_decode(deserializer);
-        let mut var_totalBytes = <u64>::sse_decode(deserializer);
-        let mut var_downloadedBytes = <u64>::sse_decode(deserializer);
-        let mut var_uploadedBytes = <u64>::sse_decode(deserializer);
-        let mut var_downloadMbps = <f64>::sse_decode(deserializer);
-        let mut var_uploadMbps = <f64>::sse_decode(deserializer);
-        let mut var_livePeers = <u32>::sse_decode(deserializer);
-        let mut var_torrentPeers = <Vec<String>>::sse_decode(deserializer);
-        let mut var_pendingMedia = <u32>::sse_decode(deserializer);
-        let mut var_etaSecs = <Option<u64>>::sse_decode(deserializer);
-        let mut var_state = <String>::sse_decode(deserializer);
-        let mut var_ingestion =
-            <Option<crate::collections::legacy::ImportInfo>>::sse_decode(deserializer);
-        return crate::collections::legacy::CollectionInfo {
-            id: var_id,
-            name: var_name,
-            kind: var_kind,
-            invite_code: var_inviteCode,
-            collaborators: var_collaborators,
-            media: var_media,
-            progress: var_progress,
-            total_bytes: var_totalBytes,
-            downloaded_bytes: var_downloadedBytes,
-            uploaded_bytes: var_uploadedBytes,
-            download_mbps: var_downloadMbps,
-            upload_mbps: var_uploadMbps,
-            live_peers: var_livePeers,
-            torrent_peers: var_torrentPeers,
-            pending_media: var_pendingMedia,
-            eta_secs: var_etaSecs,
-            state: var_state,
-            ingestion: var_ingestion,
-        };
-    }
-}
-
-impl SseDecode for crate::collections::legacy::CollectionKind {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut inner = <i32>::sse_decode(deserializer);
-        return match inner {
-            0 => crate::collections::legacy::CollectionKind::Shared,
-            1 => crate::collections::legacy::CollectionKind::Torrent,
-            _ => unreachable!("Invalid variant for CollectionKind: {}", inner),
-        };
     }
 }
 
@@ -1872,35 +1213,6 @@ impl SseDecode for f64 {
     }
 }
 
-impl SseDecode for i32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
-    }
-}
-
-impl SseDecode for crate::collections::legacy::ImportInfo {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_stage = <String>::sse_decode(deserializer);
-        let mut var_progress = <f64>::sse_decode(deserializer);
-        let mut var_processedBytes = <u64>::sse_decode(deserializer);
-        let mut var_totalBytes = <u64>::sse_decode(deserializer);
-        let mut var_completedPieces = <u64>::sse_decode(deserializer);
-        let mut var_totalPieces = <u64>::sse_decode(deserializer);
-        let mut var_error = <Option<String>>::sse_decode(deserializer);
-        return crate::collections::legacy::ImportInfo {
-            stage: var_stage,
-            progress: var_progress,
-            processed_bytes: var_processedBytes,
-            total_bytes: var_totalBytes,
-            completed_pieces: var_completedPieces,
-            total_pieces: var_totalPieces,
-            error: var_error,
-        };
-    }
-}
-
 impl SseDecode for Vec<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1965,41 +1277,13 @@ impl SseDecode for Vec<crate::portalis_api::AppSourceFile> {
     }
 }
 
-impl SseDecode for Vec<crate::collections::legacy::CollaboratorInfo> {
+impl SseDecode for Vec<crate::portalis_api::AppStorageEntry> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut len_ = <i32>::sse_decode(deserializer);
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
-            ans_.push(<crate::collections::legacy::CollaboratorInfo>::sse_decode(
-                deserializer,
-            ));
-        }
-        return ans_;
-    }
-}
-
-impl SseDecode for Vec<crate::collections::legacy::CollectionInfo> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut len_ = <i32>::sse_decode(deserializer);
-        let mut ans_ = Vec::with_capacity(len_ as usize);
-        for idx_ in 0..len_ {
-            ans_.push(<crate::collections::legacy::CollectionInfo>::sse_decode(
-                deserializer,
-            ));
-        }
-        return ans_;
-    }
-}
-
-impl SseDecode for Vec<crate::collections::legacy::MediaInfo> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut len_ = <i32>::sse_decode(deserializer);
-        let mut ans_ = Vec::with_capacity(len_ as usize);
-        for idx_ in 0..len_ {
-            ans_.push(<crate::collections::legacy::MediaInfo>::sse_decode(
+            ans_.push(<crate::portalis_api::AppStorageEntry>::sse_decode(
                 deserializer,
             ));
         }
@@ -2055,20 +1339,6 @@ impl SseDecode for Vec<crate::torrent::SourceFile> {
     }
 }
 
-impl SseDecode for Vec<crate::collections::legacy::StorageEntry> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut len_ = <i32>::sse_decode(deserializer);
-        let mut ans_ = Vec::with_capacity(len_ as usize);
-        for idx_ in 0..len_ {
-            ans_.push(<crate::collections::legacy::StorageEntry>::sse_decode(
-                deserializer,
-            ));
-        }
-        return ans_;
-    }
-}
-
 impl SseDecode for Vec<crate::torrent::TorrentFile> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2090,34 +1360,6 @@ impl SseDecode for Vec<crate::torrent::TorrentInfo> {
             ans_.push(<crate::torrent::TorrentInfo>::sse_decode(deserializer));
         }
         return ans_;
-    }
-}
-
-impl SseDecode for crate::collections::legacy::MediaInfo {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_name = <String>::sse_decode(deserializer);
-        let mut var_entryName = <String>::sse_decode(deserializer);
-        let mut var_infoHash = <String>::sse_decode(deserializer);
-        let mut var_absolutePath = <Option<String>>::sse_decode(deserializer);
-        let mut var_lengthBytes = <u64>::sse_decode(deserializer);
-        let mut var_downloadedBytes = <u64>::sse_decode(deserializer);
-        let mut var_progress = <f64>::sse_decode(deserializer);
-        let mut var_pieceRuns = <Vec<crate::torrent::PieceRun>>::sse_decode(deserializer);
-        let mut var_fetched = <bool>::sse_decode(deserializer);
-        let mut var_addedBy = <Option<String>>::sse_decode(deserializer);
-        return crate::collections::legacy::MediaInfo {
-            name: var_name,
-            entry_name: var_entryName,
-            info_hash: var_infoHash,
-            absolute_path: var_absolutePath,
-            length_bytes: var_lengthBytes,
-            downloaded_bytes: var_downloadedBytes,
-            progress: var_progress,
-            piece_runs: var_pieceRuns,
-            fetched: var_fetched,
-            added_by: var_addedBy,
-        };
     }
 }
 
@@ -2188,19 +1430,6 @@ impl SseDecode for Option<bool> {
     }
 }
 
-impl SseDecode for Option<crate::collections::legacy::ImportInfo> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        if (<bool>::sse_decode(deserializer)) {
-            return Some(<crate::collections::legacy::ImportInfo>::sse_decode(
-                deserializer,
-            ));
-        } else {
-            return None;
-        }
-    }
-}
-
 impl SseDecode for Option<u32> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2249,24 +1478,6 @@ impl SseDecode for crate::torrent::SourceFile {
             name: var_name,
             path: var_path,
             length_bytes: var_lengthBytes,
-        };
-    }
-}
-
-impl SseDecode for crate::collections::legacy::StorageEntry {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_name = <String>::sse_decode(deserializer);
-        let mut var_bytes = <u64>::sse_decode(deserializer);
-        let mut var_path = <String>::sse_decode(deserializer);
-        let mut var_collectionId = <Option<String>>::sse_decode(deserializer);
-        let mut var_collectionName = <Option<String>>::sse_decode(deserializer);
-        return crate::collections::legacy::StorageEntry {
-            name: var_name,
-            bytes: var_bytes,
-            path: var_path,
-            collection_id: var_collectionId,
-            collection_name: var_collectionName,
         };
     }
 }
@@ -2365,6 +1576,13 @@ impl SseDecode for usize {
     }
 }
 
+impl SseDecode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
+    }
+}
+
 fn pde_ffi_dispatcher_primary_impl(
     func_id: i32,
     port: flutter_rust_bridge::for_generated::MessagePort,
@@ -2374,134 +1592,45 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__collections__legacy__add_media_to_collection_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        2 => {
+        1 => {
             wire__crate__torrent__add_torrent_from_file_path_impl(port, ptr, rust_vec_len, data_len)
         }
-        3 => wire__crate__torrent__add_torrent_from_magnet_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__collections__legacy__create_collection_impl(
+        2 => wire__crate__torrent__add_torrent_from_magnet_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__torrent__create_collection_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__settings__default_engine_settings_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__device__device_identity_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__settings__engine_settings_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__settings__engine_settings_default_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__torrent__list_torrents_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__nexus_settings__nexus_endpoint_config_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        5 => wire__crate__torrent__create_collection_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__collections__legacy__create_collection_with_media_impl(
+        11 => wire__crate__nexus_settings__nexus_endpoint_config_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        7 => wire__crate__settings__default_engine_settings_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__collections__legacy__delete_collection_impl(
+        12 => wire__crate__torrent__output_dir_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__portalis_api__send_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__portalis_api__set_active_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__settings__set_engine_settings_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__nexus_settings__set_nexus_endpoint_config_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        9 => wire__crate__collections__legacy__delete_collection_files_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        10 => wire__crate__device__device_identity_impl(port, ptr, rust_vec_len, data_len),
-        11 => {
-            wire__crate__collections__legacy__engine_ready_impl(port, ptr, rust_vec_len, data_len)
-        }
-        12 => wire__crate__settings__engine_settings_impl(port, ptr, rust_vec_len, data_len),
-        13 => {
-            wire__crate__settings__engine_settings_default_impl(port, ptr, rust_vec_len, data_len)
-        }
-        14 => wire__crate__collections__legacy__fetch_collection_media_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        16 => wire__crate__collections__legacy__join_collection_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        17 => wire__crate__collections__legacy__list_collections_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        18 => wire__crate__torrent__list_torrents_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__nexus_settings__nexus_endpoint_config_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        20 => wire__crate__nexus_settings__nexus_endpoint_config_default_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        21 => wire__crate__torrent__output_dir_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__collections__legacy__pause_collection_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        23 => wire__crate__collections__legacy__restart_collection_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        24 => wire__crate__portalis_api__send_impl(port, ptr, rust_vec_len, data_len),
-        25 => wire__crate__collections__legacy__set_active_impl(port, ptr, rust_vec_len, data_len),
-        26 => wire__crate__portalis_api__set_active_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__settings__set_engine_settings_impl(port, ptr, rust_vec_len, data_len),
-        28 => wire__crate__nexus_settings__set_nexus_endpoint_config_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        29 => wire__crate__device__set_nickname_impl(port, ptr, rust_vec_len, data_len),
-        30 => wire__crate__portalis_api__start_impl(port, ptr, rust_vec_len, data_len),
-        31 => {
-            wire__crate__collections__legacy__start_engine_impl(port, ptr, rust_vec_len, data_len)
-        }
-        32 => wire__crate__portalis_api__stop_impl(port, ptr, rust_vec_len, data_len),
-        33 => wire__crate__collections__legacy__stop_collection_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        34 => wire__crate__collections__legacy__storage_breakdown_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        35 => wire__crate__torrent__storage_usage_bytes_impl(port, ptr, rust_vec_len, data_len),
-        36 => {
-            wire__crate__collections__legacy__sync_address_impl(port, ptr, rust_vec_len, data_len)
-        }
-        37 => wire__crate__collections__legacy__sync_collection_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        38 => wire__crate__portalis_api__watch_detail_impl(port, ptr, rust_vec_len, data_len),
-        39 => wire__crate__portalis_api__watch_states_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__device__set_nickname_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__portalis_api__start_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__portalis_api__stop_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__portalis_api__storage_breakdown_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__torrent__storage_usage_bytes_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__portalis_api__watch_detail_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__portalis_api__watch_states_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2514,7 +1643,7 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        15 => wire__crate__bridge__get_version_impl(ptr, rust_vec_len, data_len),
+        8 => wire__crate__bridge__get_version_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2557,6 +1686,7 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppCollection {
             self.entries.into_into_dart().into_dart(),
             self.total_bytes.into_into_dart().into_dart(),
             self.on_disk_bytes.into_into_dart().into_dart(),
+            self.uploaded_bytes.into_into_dart().into_dart(),
             self.transfer.into_into_dart().into_dart(),
             self.pending.into_into_dart().into_dart(),
         ]
@@ -2771,6 +1901,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppSourceFile>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppStorageEntry {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.name.into_into_dart().into_dart(),
+            self.bytes.into_into_dart().into_dart(),
+            self.path.into_into_dart().into_dart(),
+            self.collection.into_into_dart().into_dart(),
+            self.collection_name.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::portalis_api::AppStorageEntry
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppStorageEntry>
+    for crate::portalis_api::AppStorageEntry
+{
+    fn into_into_dart(self) -> crate::portalis_api::AppStorageEntry {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppTransfer {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2791,86 +1945,6 @@ impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppTransfer>
     for crate::portalis_api::AppTransfer
 {
     fn into_into_dart(self) -> crate::portalis_api::AppTransfer {
-        self
-    }
-}
-// Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::collections::legacy::CollaboratorInfo {
-    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.device_id.into_into_dart().into_dart(),
-            self.display_name.into_into_dart().into_dart(),
-            self.is_admin.into_into_dart().into_dart(),
-        ]
-        .into_dart()
-    }
-}
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::collections::legacy::CollaboratorInfo
-{
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::collections::legacy::CollaboratorInfo>
-    for crate::collections::legacy::CollaboratorInfo
-{
-    fn into_into_dart(self) -> crate::collections::legacy::CollaboratorInfo {
-        self
-    }
-}
-// Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::collections::legacy::CollectionInfo {
-    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.id.into_into_dart().into_dart(),
-            self.name.into_into_dart().into_dart(),
-            self.kind.into_into_dart().into_dart(),
-            self.invite_code.into_into_dart().into_dart(),
-            self.collaborators.into_into_dart().into_dart(),
-            self.media.into_into_dart().into_dart(),
-            self.progress.into_into_dart().into_dart(),
-            self.total_bytes.into_into_dart().into_dart(),
-            self.downloaded_bytes.into_into_dart().into_dart(),
-            self.uploaded_bytes.into_into_dart().into_dart(),
-            self.download_mbps.into_into_dart().into_dart(),
-            self.upload_mbps.into_into_dart().into_dart(),
-            self.live_peers.into_into_dart().into_dart(),
-            self.torrent_peers.into_into_dart().into_dart(),
-            self.pending_media.into_into_dart().into_dart(),
-            self.eta_secs.into_into_dart().into_dart(),
-            self.state.into_into_dart().into_dart(),
-            self.ingestion.into_into_dart().into_dart(),
-        ]
-        .into_dart()
-    }
-}
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::collections::legacy::CollectionInfo
-{
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::collections::legacy::CollectionInfo>
-    for crate::collections::legacy::CollectionInfo
-{
-    fn into_into_dart(self) -> crate::collections::legacy::CollectionInfo {
-        self
-    }
-}
-// Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::collections::legacy::CollectionKind {
-    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        match self {
-            Self::Shared => 0.into_dart(),
-            Self::Torrent => 1.into_dart(),
-            _ => unreachable!(),
-        }
-    }
-}
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::collections::legacy::CollectionKind
-{
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::collections::legacy::CollectionKind>
-    for crate::collections::legacy::CollectionKind
-{
-    fn into_into_dart(self) -> crate::collections::legacy::CollectionKind {
         self
     }
 }
@@ -2939,61 +2013,6 @@ impl flutter_rust_bridge::IntoIntoDart<crate::settings::EngineSettings>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::collections::legacy::ImportInfo {
-    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.stage.into_into_dart().into_dart(),
-            self.progress.into_into_dart().into_dart(),
-            self.processed_bytes.into_into_dart().into_dart(),
-            self.total_bytes.into_into_dart().into_dart(),
-            self.completed_pieces.into_into_dart().into_dart(),
-            self.total_pieces.into_into_dart().into_dart(),
-            self.error.into_into_dart().into_dart(),
-        ]
-        .into_dart()
-    }
-}
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::collections::legacy::ImportInfo
-{
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::collections::legacy::ImportInfo>
-    for crate::collections::legacy::ImportInfo
-{
-    fn into_into_dart(self) -> crate::collections::legacy::ImportInfo {
-        self
-    }
-}
-// Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::collections::legacy::MediaInfo {
-    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.name.into_into_dart().into_dart(),
-            self.entry_name.into_into_dart().into_dart(),
-            self.info_hash.into_into_dart().into_dart(),
-            self.absolute_path.into_into_dart().into_dart(),
-            self.length_bytes.into_into_dart().into_dart(),
-            self.downloaded_bytes.into_into_dart().into_dart(),
-            self.progress.into_into_dart().into_dart(),
-            self.piece_runs.into_into_dart().into_dart(),
-            self.fetched.into_into_dart().into_dart(),
-            self.added_by.into_into_dart().into_dart(),
-        ]
-        .into_dart()
-    }
-}
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::collections::legacy::MediaInfo
-{
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::collections::legacy::MediaInfo>
-    for crate::collections::legacy::MediaInfo
-{
-    fn into_into_dart(self) -> crate::collections::legacy::MediaInfo {
-        self
-    }
-}
-// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::nexus_settings::NexusEndpointConfig {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -3046,30 +2065,6 @@ impl flutter_rust_bridge::IntoDart for crate::torrent::SourceFile {
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::torrent::SourceFile {}
 impl flutter_rust_bridge::IntoIntoDart<crate::torrent::SourceFile> for crate::torrent::SourceFile {
     fn into_into_dart(self) -> crate::torrent::SourceFile {
-        self
-    }
-}
-// Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::collections::legacy::StorageEntry {
-    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.name.into_into_dart().into_dart(),
-            self.bytes.into_into_dart().into_dart(),
-            self.path.into_into_dart().into_dart(),
-            self.collection_id.into_into_dart().into_dart(),
-            self.collection_name.into_into_dart().into_dart(),
-        ]
-        .into_dart()
-    }
-}
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::collections::legacy::StorageEntry
-{
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::collections::legacy::StorageEntry>
-    for crate::collections::legacy::StorageEntry
-{
-    fn into_into_dart(self) -> crate::collections::legacy::StorageEntry {
         self
     }
 }
@@ -3182,6 +2177,7 @@ impl SseEncode for crate::portalis_api::AppCollection {
         <u32>::sse_encode(self.entries, serializer);
         <u64>::sse_encode(self.total_bytes, serializer);
         <u64>::sse_encode(self.on_disk_bytes, serializer);
+        <u64>::sse_encode(self.uploaded_bytes, serializer);
         <Option<crate::portalis_api::AppTransfer>>::sse_encode(self.transfer, serializer);
         <Option<crate::portalis_api::AppPending>>::sse_encode(self.pending, serializer);
     }
@@ -3282,6 +2278,17 @@ impl SseEncode for crate::portalis_api::AppSourceFile {
     }
 }
 
+impl SseEncode for crate::portalis_api::AppStorageEntry {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.name, serializer);
+        <u64>::sse_encode(self.bytes, serializer);
+        <String>::sse_encode(self.path, serializer);
+        <Option<u32>>::sse_encode(self.collection, serializer);
+        <Option<String>>::sse_encode(self.collection_name, serializer);
+    }
+}
+
 impl SseEncode for crate::portalis_api::AppTransfer {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3297,58 +2304,6 @@ impl SseEncode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_u8(self as _).unwrap();
-    }
-}
-
-impl SseEncode for crate::collections::legacy::CollaboratorInfo {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.device_id, serializer);
-        <String>::sse_encode(self.display_name, serializer);
-        <bool>::sse_encode(self.is_admin, serializer);
-    }
-}
-
-impl SseEncode for crate::collections::legacy::CollectionInfo {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.id, serializer);
-        <String>::sse_encode(self.name, serializer);
-        <crate::collections::legacy::CollectionKind>::sse_encode(self.kind, serializer);
-        <Option<String>>::sse_encode(self.invite_code, serializer);
-        <Vec<crate::collections::legacy::CollaboratorInfo>>::sse_encode(
-            self.collaborators,
-            serializer,
-        );
-        <Vec<crate::collections::legacy::MediaInfo>>::sse_encode(self.media, serializer);
-        <f64>::sse_encode(self.progress, serializer);
-        <u64>::sse_encode(self.total_bytes, serializer);
-        <u64>::sse_encode(self.downloaded_bytes, serializer);
-        <u64>::sse_encode(self.uploaded_bytes, serializer);
-        <f64>::sse_encode(self.download_mbps, serializer);
-        <f64>::sse_encode(self.upload_mbps, serializer);
-        <u32>::sse_encode(self.live_peers, serializer);
-        <Vec<String>>::sse_encode(self.torrent_peers, serializer);
-        <u32>::sse_encode(self.pending_media, serializer);
-        <Option<u64>>::sse_encode(self.eta_secs, serializer);
-        <String>::sse_encode(self.state, serializer);
-        <Option<crate::collections::legacy::ImportInfo>>::sse_encode(self.ingestion, serializer);
-    }
-}
-
-impl SseEncode for crate::collections::legacy::CollectionKind {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <i32>::sse_encode(
-            match self {
-                crate::collections::legacy::CollectionKind::Shared => 0,
-                crate::collections::legacy::CollectionKind::Torrent => 1,
-                _ => {
-                    unimplemented!("");
-                }
-            },
-            serializer,
-        );
     }
 }
 
@@ -3395,26 +2350,6 @@ impl SseEncode for f64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_f64::<NativeEndian>(self).unwrap();
-    }
-}
-
-impl SseEncode for i32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
-    }
-}
-
-impl SseEncode for crate::collections::legacy::ImportInfo {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.stage, serializer);
-        <f64>::sse_encode(self.progress, serializer);
-        <u64>::sse_encode(self.processed_bytes, serializer);
-        <u64>::sse_encode(self.total_bytes, serializer);
-        <u64>::sse_encode(self.completed_pieces, serializer);
-        <u64>::sse_encode(self.total_pieces, serializer);
-        <Option<String>>::sse_encode(self.error, serializer);
     }
 }
 
@@ -3468,32 +2403,12 @@ impl SseEncode for Vec<crate::portalis_api::AppSourceFile> {
     }
 }
 
-impl SseEncode for Vec<crate::collections::legacy::CollaboratorInfo> {
+impl SseEncode for Vec<crate::portalis_api::AppStorageEntry> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
-            <crate::collections::legacy::CollaboratorInfo>::sse_encode(item, serializer);
-        }
-    }
-}
-
-impl SseEncode for Vec<crate::collections::legacy::CollectionInfo> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <i32>::sse_encode(self.len() as _, serializer);
-        for item in self {
-            <crate::collections::legacy::CollectionInfo>::sse_encode(item, serializer);
-        }
-    }
-}
-
-impl SseEncode for Vec<crate::collections::legacy::MediaInfo> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <i32>::sse_encode(self.len() as _, serializer);
-        for item in self {
-            <crate::collections::legacy::MediaInfo>::sse_encode(item, serializer);
+            <crate::portalis_api::AppStorageEntry>::sse_encode(item, serializer);
         }
     }
 }
@@ -3538,16 +2453,6 @@ impl SseEncode for Vec<crate::torrent::SourceFile> {
     }
 }
 
-impl SseEncode for Vec<crate::collections::legacy::StorageEntry> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <i32>::sse_encode(self.len() as _, serializer);
-        for item in self {
-            <crate::collections::legacy::StorageEntry>::sse_encode(item, serializer);
-        }
-    }
-}
-
 impl SseEncode for Vec<crate::torrent::TorrentFile> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3565,22 +2470,6 @@ impl SseEncode for Vec<crate::torrent::TorrentInfo> {
         for item in self {
             <crate::torrent::TorrentInfo>::sse_encode(item, serializer);
         }
-    }
-}
-
-impl SseEncode for crate::collections::legacy::MediaInfo {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.name, serializer);
-        <String>::sse_encode(self.entry_name, serializer);
-        <String>::sse_encode(self.info_hash, serializer);
-        <Option<String>>::sse_encode(self.absolute_path, serializer);
-        <u64>::sse_encode(self.length_bytes, serializer);
-        <u64>::sse_encode(self.downloaded_bytes, serializer);
-        <f64>::sse_encode(self.progress, serializer);
-        <Vec<crate::torrent::PieceRun>>::sse_encode(self.piece_runs, serializer);
-        <bool>::sse_encode(self.fetched, serializer);
-        <Option<String>>::sse_encode(self.added_by, serializer);
     }
 }
 
@@ -3642,16 +2531,6 @@ impl SseEncode for Option<bool> {
     }
 }
 
-impl SseEncode for Option<crate::collections::legacy::ImportInfo> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <bool>::sse_encode(self.is_some(), serializer);
-        if let Some(value) = self {
-            <crate::collections::legacy::ImportInfo>::sse_encode(value, serializer);
-        }
-    }
-}
-
 impl SseEncode for Option<u32> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3688,17 +2567,6 @@ impl SseEncode for crate::torrent::SourceFile {
         <String>::sse_encode(self.name, serializer);
         <String>::sse_encode(self.path, serializer);
         <Option<u64>>::sse_encode(self.length_bytes, serializer);
-    }
-}
-
-impl SseEncode for crate::collections::legacy::StorageEntry {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.name, serializer);
-        <u64>::sse_encode(self.bytes, serializer);
-        <String>::sse_encode(self.path, serializer);
-        <Option<String>>::sse_encode(self.collection_id, serializer);
-        <Option<String>>::sse_encode(self.collection_name, serializer);
     }
 }
 
@@ -3773,6 +2641,13 @@ impl SseEncode for usize {
             .cursor
             .write_u64::<NativeEndian>(self as _)
             .unwrap();
+    }
+}
+
+impl SseEncode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
     }
 }
 

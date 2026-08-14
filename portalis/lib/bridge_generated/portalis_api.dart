@@ -7,7 +7,7 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `detail_projection`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Opens the local Nexus runtime once. Calling it again is harmless.
 ///
@@ -38,6 +38,18 @@ Stream<AppSnapshot> watchStates() =>
 /// Streams the detail tier for one collection, or `None` after unsubscribing.
 Stream<AppDetail?> watchDetail({int? collection}) =>
     RustLib.instance.api.cratePortalisApiWatchDetail(collection: collection);
+
+/// What is on disk under the download directory, resolved against Nexus.
+///
+/// Ownership is decided by the substrate handle a collection recorded when
+/// its download started, matched to the directory the engine reports for
+/// that torrent — not by name, which two collections may share.
+///
+/// # Errors
+///
+/// Returns a displayable reason when the directory cannot be walked.
+Future<List<AppStorageEntry>> storageBreakdown() =>
+    RustLib.instance.api.cratePortalisApiStorageBreakdown();
 
 /// Validates and accepts one command without waiting for I/O.
 Future<AppAccepted> send({required AppCommand command}) =>
@@ -80,6 +92,7 @@ class AppCollection {
   final int entries;
   final BigInt totalBytes;
   final BigInt onDiskBytes;
+  final BigInt uploadedBytes;
   final AppTransfer? transfer;
   final AppPending? pending;
 
@@ -94,6 +107,7 @@ class AppCollection {
     required this.entries,
     required this.totalBytes,
     required this.onDiskBytes,
+    required this.uploadedBytes,
     this.transfer,
     this.pending,
   });
@@ -110,6 +124,7 @@ class AppCollection {
       entries.hashCode ^
       totalBytes.hashCode ^
       onDiskBytes.hashCode ^
+      uploadedBytes.hashCode ^
       transfer.hashCode ^
       pending.hashCode;
 
@@ -128,6 +143,7 @@ class AppCollection {
           entries == other.entries &&
           totalBytes == other.totalBytes &&
           onDiskBytes == other.onDiskBytes &&
+          uploadedBytes == other.uploadedBytes &&
           transfer == other.transfer &&
           pending == other.pending;
 }
@@ -447,6 +463,46 @@ class AppSourceFile {
           name == other.name &&
           path == other.path &&
           bytes == other.bytes;
+}
+
+/// One directory under the download folder, traced back to the collection
+/// that owns it when Nexus still claims one.
+class AppStorageEntry {
+  final String name;
+  final BigInt bytes;
+  final String path;
+
+  /// The owning collection's handle, when one claims it. Absent for the
+  /// usual case: leftovers of a collection that has been deleted.
+  final int? collection;
+  final String? collectionName;
+
+  const AppStorageEntry({
+    required this.name,
+    required this.bytes,
+    required this.path,
+    this.collection,
+    this.collectionName,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^
+      bytes.hashCode ^
+      path.hashCode ^
+      collection.hashCode ^
+      collectionName.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppStorageEntry &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          bytes == other.bytes &&
+          path == other.path &&
+          collection == other.collection &&
+          collectionName == other.collectionName;
 }
 
 /// A coalesced transfer sample.

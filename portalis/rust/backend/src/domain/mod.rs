@@ -1,16 +1,13 @@
-//! Domain layer: pure logic, no I/O, no `librqbit`, no FRB types. Fully
-//! unit-testable in isolation. See `rust/backend/README.md` for the big
-//! picture and the UML class diagram this module implements.
+//! What Nexus's own identity is made of.
 //!
-//! Everything here is `pub(crate)`, not `pub` — these types are never meant
-//! to cross the FFI boundary directly (see the README's "Flutter boundary
-//! API" section). `flutter_rust_bridge`'s codegen scans for the bare `pub`
-//! keyword on individual items, not true Rust visibility resolution, so it
-//! would otherwise try to bridge these regardless of `domain` itself being
-//! a private module of `lib.rs`.
+//! Everything here is `pub(crate)`, not `pub` — these types never cross the
+//! FFI boundary directly (see the README's "Flutter boundary API" section).
+//! `flutter_rust_bridge`'s codegen scans for the bare `pub` keyword on
+//! individual items rather than resolving true Rust visibility, so it would
+//! otherwise try to bridge them regardless of `domain` being private.
+//!
+//! The collaboration types that used to live beside `identity` — invites,
+//! manifests, the legacy collection and its collaborators — went with the
+//! legacy stack they served.
 
-pub(crate) mod collaborator;
-pub(crate) mod collection;
 pub(crate) mod identity;
-pub(crate) mod invite;
-pub(crate) mod manifest;

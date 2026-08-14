@@ -19,7 +19,6 @@ export 'package:portalis/features/collections/domain/collection.dart';
 export 'package:portalis/features/collections/domain/collection_import.dart';
 export 'package:portalis/features/collections/domain/paste.dart';
 export 'package:portalis/features/collections/presentation/collection_detail.dart';
-export 'package:portalis/features/collections/presentation/collection_join.dart';
 export 'package:portalis/features/collections/presentation/collection_share.dart';
 export 'package:portalis/features/collections/presentation/command_bar.dart';
 export 'package:portalis/features/media/domain/media_item.dart';
@@ -82,6 +81,7 @@ NexusCollection buildNexusCollection({
   String status = 'Available',
   int entries = 0,
   int totalBytes = 0,
+  List<int> members = const [],
   NexusTransfer? transfer,
 }) =>
     NexusCollection(
@@ -91,10 +91,11 @@ NexusCollection buildNexusCollection({
       role: role,
       revision: BigInt.one,
       status: status,
-      members: const [],
+      members: members,
       entries: entries,
       totalBytes: BigInt.from(totalBytes),
       onDiskBytes: BigInt.zero,
+      uploadedBytes: BigInt.zero,
       transfer: transfer,
       pending: null,
     );
@@ -127,7 +128,6 @@ EngineSettings buildEngineSettings() => const EngineSettings(
 Future<void> pumpApp(
   WidgetTester tester, {
   Size size = phoneSize,
-  List<Collection> collections = const [],
   List<NexusCollection> nexusCollections = const [],
   String? error,
 }) async {
@@ -135,10 +135,10 @@ Future<void> pumpApp(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(const MyApp());
   await tester.pump();
-  AppControllers.collections.debugSeed(collections, error: error);
   AppControllers.nexusApp.debugSeed(
     buildNexusState(nexusCollections),
     details: const Stream<NexusDetail?>.empty(),
+    error: error,
   );
   await tester.pump();
 }
@@ -148,13 +148,8 @@ Future<void> pumpTransition(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 300));
 }
 
-String inviteCode(String name) {
-  final plain = '${'a' * 64}:$name';
-  return plain.codeUnits.map((c) => c.toRadixString(16).padLeft(2, '0')).join();
-}
 
 void resetTestState() {
-  AppControllers.collections.debugSeed([]);
   AppControllers.nexusApp.debugSeed(null);
   AppNavigation.tab.value = AppNavigation.homeTab;
   AppNavigation.depth.value = 0;

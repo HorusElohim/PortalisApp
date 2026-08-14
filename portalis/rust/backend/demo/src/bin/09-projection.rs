@@ -206,6 +206,7 @@ fn facts(progress: Option<Progress>, failure: Option<Status>) -> CollectionFacts
         failure,
         paused: false,
         on_disk_bytes: 0,
+        uploaded_bytes: 0,
     }
 }
 
