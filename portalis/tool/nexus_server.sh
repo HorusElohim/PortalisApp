@@ -26,22 +26,22 @@ cargo build -p portalis-nexus-server
 
 BINARY="$BACKEND_DIR/target/debug/portalis-nexus-server"
 
-# The server logs JSON, which is right for a deployment and unreadable when
-# what you need is two values to type into Settings. So the identity is read
-# out of the store before starting, and printed plainly.
+# Text logs, asked for explicitly: the service picks a format from whether its
+# output is a terminal, and here it is a file, which would otherwise mean JSON.
 #
-# Starting once to learn the identity and again to serve would be two
-# processes; instead this starts it, waits for the ready line, and prints the
-# values from that line.
+# The identity is read from the ready line rather than by starting the service
+# twice — one process, and the two values a person needs printed plainly above
+# its own log.
 LOG="$(mktemp -t nexus-server)"
 PORTALIS_NEXUS_DATA_DIR="$DATA_DIR" \
 PORTALIS_NEXUS_LISTEN_ADDR="$LISTEN" \
+PORTALIS_NEXUS_LOG=text \
   "$BINARY" > "$LOG" 2>&1 &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -f "$LOG"' EXIT INT TERM
 
 for _ in $(seq 1 100); do
-  if grep -q '"Portalis Nexus is ready"' "$LOG" 2>/dev/null; then break; fi
+  if grep -q 'Portalis Nexus is ready' "$LOG" 2>/dev/null; then break; fi
   if ! kill -0 "$SERVER_PID" 2>/dev/null; then
     echo "[ERROR] the service exited before it was ready:" >&2
     cat "$LOG" >&2
@@ -50,7 +50,7 @@ for _ in $(seq 1 100); do
   sleep 0.1
 done
 
-NODE_ID="$(grep -o '"node_id":"[a-f0-9]*"' "$LOG" | head -1 | cut -d'"' -f4)"
+NODE_ID="$(grep -oE 'node_id=[a-f0-9]{64}' "$LOG" | head -1 | cut -d= -f2)"
 if [ -z "$NODE_ID" ]; then
   echo "[ERROR] the service never reported a node id:" >&2
   cat "$LOG" >&2

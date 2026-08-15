@@ -12,14 +12,52 @@ use tokio::time::timeout;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
+/// What to say when nobody has said otherwise.
+///
+/// The transport narrates its own bookkeeping at INFO — every node it learns
+/// about, every address it learns for it, every time a connection changes
+/// type. That is the right level for somebody debugging iroh and the wrong
+/// one for somebody watching their own service, where it buries the three
+/// lines that are actually about Portalis. `RUST_LOG` overrides all of it.
+const DEFAULT_FILTER: &str = "info,iroh=warn,iroh_quinn=warn,iroh_relay=warn,\
+                              iroh_base=warn,netwatch=warn,portmapper=warn";
+
+/// Whether to write logs for a machine or for a person.
+///
+/// JSON is right where something collects it and wrong where somebody is
+/// reading it out of a terminal. Neither is a good default for the other, so
+/// the default is whichever the output is: a terminal gets text, a pipe or a
+/// file gets JSON. `PORTALIS_NEXUS_LOG` settles it either way.
+fn wants_text_logs() -> bool {
+    match std::env::var("PORTALIS_NEXUS_LOG").as_deref() {
+        Ok("text") => true,
+        Ok("json") => false,
+        _ => std::io::IsTerminal::is_terminal(&std::io::stdout()),
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .json()
-        .init();
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(DEFAULT_FILTER));
+    if wants_text_logs() {
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            // Colour belongs on a terminal and nowhere else: escape codes in
+            // a captured log are noise to a reader and a wall to anything
+            // trying to read a value back out of it.
+            .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stdout()))
+            // The module a line came from is noise when every line worth
+            // reading came from the same place.
+            .with_target(false)
+            .compact()
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .json()
+            .init();
+    }
 
     let config = ServerConfig::from_environment()?;
     let node_secret = load_node_secret(&config)?;
