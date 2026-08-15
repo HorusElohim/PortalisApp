@@ -278,7 +278,13 @@ impl LocalCollections {
             let (entries, total_bytes) = if local_sources.is_empty() {
                 (
                     imported_entries.len(),
-                    imported_entries.iter().map(|entry| entry.bytes).sum(),
+                    // Selected only — the same denominator the engine counts
+                    // progress against. See `torrents::republish`.
+                    imported_entries
+                        .iter()
+                        .filter(|entry| entry.selected)
+                        .map(|entry| entry.bytes)
+                        .sum(),
                 )
             } else {
                 (

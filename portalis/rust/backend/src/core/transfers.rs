@@ -263,8 +263,19 @@ fn transfer_of(info: &TorrentInfo) -> Option<Transfer> {
         }
     };
     let down = per_second(info.download_mbps);
+    // The engine decides when it is done, not the ratio. Bytes can be all
+    // present while pieces are still being verified, and a torrent resumed
+    // over existing files counts what is on disk before it knows whether any
+    // of it is wanted — either way the fraction reaches one while the engine
+    // is still working, and a bar reading 100% beside the word Downloading is
+    // the interface contradicting itself.
+    let complete = if info.finished {
+        1.0
+    } else {
+        fraction.min(0.9999)
+    };
     Some(Transfer {
-        progress: fraction.clamp(0.0, 1.0),
+        progress: complete.clamp(0.0, 1.0),
         down_bytes_per_second: down,
         up_bytes_per_second: per_second(info.upload_mbps),
         peers: u16::try_from(info.live_peers).unwrap_or(u16::MAX),
@@ -351,6 +362,34 @@ mod tests {
         let mut live = info(40, 100, false);
         live.state = "live".to_owned();
         assert!(live.knows_progress());
+    }
+
+    /// One hundred percent is a claim about the engine, not about arithmetic.
+    ///
+    /// Bytes can all be present while pieces are still being verified, and a
+    /// torrent resumed over existing files counts what is on disk before it
+    /// knows whether any of it was wanted. Both make the ratio reach one while
+    /// the engine is still working, and a bar reading 100% beside the word
+    /// Downloading is the interface contradicting itself.
+    #[test]
+    fn progress_does_not_reach_the_end_before_the_engine_says_so() {
+        let mut every_byte = info(100, 100, false);
+        every_byte.download_mbps = 1.0;
+        let transfer = transfer_of(&every_byte).expect("still moving");
+        assert!(
+            transfer.progress < 1.0,
+            "unfinished cannot report complete, got {}",
+            transfer.progress
+        );
+
+        // And once it does say so, nothing holds it back.
+        let mut done = info(100, 100, true);
+        done.live_peers = 1;
+        assert_eq!(
+            transfer_of(&done).expect("still serving").progress,
+            1.0,
+            "finished is finished"
+        );
     }
 
     /// A finished collection reports identical numbers every second for as

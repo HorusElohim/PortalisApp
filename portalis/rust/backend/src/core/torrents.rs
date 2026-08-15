@@ -273,7 +273,15 @@ fn republish(store: &Store, states: &watch::Sender<PortalisState>, handle: Handl
     let entries = store.torrent_import_entries(key).unwrap_or_default();
     let name = stored.name.clone();
     let count = u32::try_from(entries.len()).unwrap_or(u32::MAX);
-    let total: u64 = entries.iter().map(|entry| entry.bytes).sum();
+    // Only what this device is actually fetching. The engine counts progress
+    // against the selection, so totalling everything gave a bar two different
+    // denominators: it could never reach the end, and the size beside it
+    // described files that were never coming.
+    let total: u64 = entries
+        .iter()
+        .filter(|entry| entry.selected)
+        .map(|entry| entry.bytes)
+        .sum();
     let carried = stored.substrate_handle.is_some();
 
     states.send_if_modified(|state| {
