@@ -29,7 +29,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::{mpsc, watch};
 
-use crate::projection::state::{Handle, PortalisState, Status};
+use crate::projection::state::{Handle, PortalisState};
 use crate::store::records::{StoredCollection, StoredImportEntry};
 use crate::store::Store;
 use crate::substrate::Substrate;
@@ -284,14 +284,16 @@ fn republish(store: &Store, states: &watch::Sender<PortalisState>, handle: Handl
         else {
             return false;
         };
-        let status = if stored.paused {
-            Status::Paused
-        } else if carried {
-            // The transfer poller takes over from here with real numbers.
-            Status::Downloading
-        } else {
-            Status::Preparing
-        };
+        // The transfer poller takes over from here with real numbers; this
+        // only has to be right about what the store knows.
+        let status = crate::projection::state::status_for(crate::projection::state::StatusFacts {
+            draft: stored.draft,
+            paused: stored.paused,
+            carried,
+            publishing: false,
+            importing: true,
+            live: None,
+        });
         if collection.name == name
             && collection.entries == count
             && collection.total_bytes == total

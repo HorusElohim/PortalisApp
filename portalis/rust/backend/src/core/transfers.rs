@@ -282,16 +282,17 @@ fn transfer_of(info: &TorrentInfo) -> Option<Transfer> {
 /// A person's pause outranks the numbers, exactly as it does in the projection
 /// builder — the two have to agree, because they answer the same question for
 /// the same screen.
+/// The poller is the one caller with a live reading, which is what makes its
+/// answer the most informed one there is — see `status_for`.
 fn status_of(info: &TorrentInfo, paused: bool) -> Status {
-    if paused {
-        Status::Paused
-    } else if info.finished {
-        Status::Available
-    } else if info.progress_bytes == 0 {
-        Status::Preparing
-    } else {
-        Status::Downloading
-    }
+    crate::projection::state::status_for(crate::projection::state::StatusFacts {
+        draft: false,
+        paused,
+        carried: true,
+        publishing: false,
+        importing: false,
+        live: Some(info),
+    })
 }
 
 /// Megabits per second, as the bytes per second everything else speaks.

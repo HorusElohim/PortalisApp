@@ -263,18 +263,18 @@ impl LocalCollections {
                 .current_revision(&key)?
                 .map_or(0, |(number, _)| number);
             let torrent_import = store.torrent_import(&key)?.is_some();
-            // Draft outranks everything: it says nothing has happened yet
-            // and nothing will until the person says so, which no other
-            // status can claim.
-            let status = if stored.draft {
-                Status::Draft
-            } else if stored.paused {
-                Status::Paused
-            } else if torrent_import || (!local_sources.is_empty() && revision == 0) {
-                Status::Preparing
-            } else {
-                Status::Available
-            };
+            // No live reading yet: hydration happens at open, before the
+            // first poll. `status_for` knows that, and the poller refines it
+            // within a second.
+            let status =
+                crate::projection::state::status_for(crate::projection::state::StatusFacts {
+                    draft: stored.draft,
+                    paused: stored.paused,
+                    carried: stored.substrate_handle.is_some(),
+                    publishing: !local_sources.is_empty() && revision == 0,
+                    importing: torrent_import,
+                    live: None,
+                });
             let (entries, total_bytes) = if local_sources.is_empty() {
                 (
                     imported_entries.len(),
@@ -668,11 +668,42 @@ impl Nexus {
         // status alone left the interface offering Pause on something already
         // paused — the button read as inverted because the state behind it
         // and the state in front of it disagreed.
-        self.update_collection(collection, |collection| {
-            collection.status = Status::Paused;
-        })?;
+        self.refresh_status(collection, &key)?;
         self.republish(collection, &key);
         Ok(())
+    }
+
+    /// Recomputes one collection's status from the facts, and publishes it.
+    ///
+    /// Every command that changes what a collection is doing ends here rather
+    /// than assigning a status it worked out for itself. Six call sites used
+    /// to do the latter, and they disagreed.
+    fn refresh_status(&self, handle: Handle, key: &[u8]) -> Result<(), CommandError> {
+        let stored = self
+            .store
+            .collection(key)
+            .map_err(persistence)?
+            .ok_or_else(|| missing_collection(handle))?;
+        let importing = self
+            .store
+            .torrent_import(key)
+            .map_err(persistence)?
+            .is_some();
+        let revision = self
+            .store
+            .current_revision(key)
+            .map_err(persistence)?
+            .map_or(0, |(number, _)| number);
+        let held = self.holdings.get(key);
+        let status = crate::projection::state::status_for(crate::projection::state::StatusFacts {
+            draft: stored.draft,
+            paused: stored.paused,
+            carried: stored.substrate_handle.is_some(),
+            publishing: !stored.sources.is_empty() && revision == 0,
+            importing,
+            live: held.as_ref(),
+        });
+        self.update_collection(handle, |collection| collection.status = status)
     }
 
     /// Wakes whichever worker owns this collection's next step.
@@ -854,17 +885,9 @@ impl Nexus {
         // exactly the kind of lie a pause must never be.
         self.republish(handle, &key);
 
-        self.update_collection(handle, |collection| {
-            // The status is the whole report: a paused collection shows one
-            // line, and resuming hands it back to whatever the numbers say.
-            collection.status = if paused {
-                Status::Paused
-            } else if collection.transfer.is_some() {
-                Status::Downloading
-            } else {
-                Status::Available
-            };
-        })
+        // Resuming hands the report back to whatever the engine is doing,
+        // which this does not have to guess at — see `status_for`.
+        self.refresh_status(handle, &key)
     }
 
     /// Removes the bytes this device holds and keeps the collection.
@@ -1155,15 +1178,22 @@ async fn publish_pending_collections(
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .handle(&key);
-                    // Publishing settles the revision, not the person's
-                    // decision about whether to transfer. A confirmed draft is
-                    // paused on purpose, and declaring it Available here made
-                    // the interface offer Pause on something already stopped.
-                    let paused = store
-                        .collection(&key)
-                        .ok()
-                        .flatten()
-                        .is_some_and(|stored| stored.paused);
+                    // Publishing settles the revision. What the collection is
+                    // then doing is not this worker's call — a confirmed draft
+                    // is paused on purpose, and declaring it Available here
+                    // made the interface offer Pause on something stopped.
+                    let status = store.collection(&key).ok().flatten().map(|stored| {
+                        crate::projection::state::status_for(
+                            crate::projection::state::StatusFacts {
+                                draft: stored.draft,
+                                paused: stored.paused,
+                                carried: stored.substrate_handle.is_some(),
+                                publishing: false,
+                                importing: false,
+                                live: None,
+                            },
+                        )
+                    });
                     if let Some(handle) = handle {
                         states.send_modify(|state| {
                             if let Some(projected) = state
@@ -1172,11 +1202,9 @@ async fn publish_pending_collections(
                                 .find(|projected| projected.id == handle)
                             {
                                 projected.revision = revision;
-                                projected.status = if paused {
-                                    Status::Paused
-                                } else {
-                                    Status::Available
-                                };
+                                if let Some(status) = status {
+                                    projected.status = status;
+                                }
                             }
                         });
                     }

@@ -113,6 +113,75 @@ pub enum Status {
     ConflictingHistory,
 }
 
+/// What a collection is doing, derived in one place.
+///
+/// Six separate derivations of this used to exist — the projection rebuild,
+/// pausing, confirming a draft, the publisher, the torrent worker and the
+/// transfer poller — each knowing a different subset of the truth. They
+/// disagreed exactly as often as you would expect: a paused import reported
+/// itself as importing, and a finished torrent went back to importing on
+/// every restart, because that rebuild only ever asked whether a torrent
+/// source existed and never whether it had finished with it.
+///
+/// The order below is the whole rule, and it is an order of authority rather
+/// than of likelihood. A person's decisions outrank the engine's activity,
+/// and the engine's activity outranks what the store can infer without it.
+#[must_use]
+pub fn status_for(facts: StatusFacts<'_>) -> Status {
+    // Nothing has happened and nothing will until somebody says so.
+    if facts.draft {
+        return Status::Draft;
+    }
+    // A decision, so it outranks whatever the numbers are doing — a paused
+    // collection still draining a buffer is paused, not downloading.
+    if facts.paused {
+        return Status::Paused;
+    }
+    if let Some(live) = facts.live {
+        return if live.finished {
+            Status::Available
+        } else if live.progress_bytes == 0 {
+            Status::Preparing
+        } else {
+            Status::Downloading
+        };
+    }
+    // Carried, but nothing has reported on it yet — the first poll is at most
+    // a second away and says which of the three above it really is. Claiming
+    // Preparing here is what made a completed torrent look unfinished for as
+    // long as the app stayed shut.
+    if facts.carried {
+        return Status::Downloading;
+    }
+    // Its own files, not yet offered to anyone.
+    if facts.publishing {
+        return Status::Preparing;
+    }
+    // A source nobody has chosen from, or resolved and waiting.
+    if facts.importing {
+        return Status::Preparing;
+    }
+    Status::Available
+}
+
+/// Everything [`status_for`] is allowed to look at.
+///
+/// A struct rather than six positional booleans, because the call sites that
+/// disagreed did so by knowing different things — naming each one makes what
+/// a caller does *not* know impossible to pass by accident.
+pub struct StatusFacts<'a> {
+    pub draft: bool,
+    pub paused: bool,
+    /// Something is carrying this under a substrate handle.
+    pub carried: bool,
+    /// Has native sources and no revision yet.
+    pub publishing: bool,
+    /// Came from a magnet or a descriptor.
+    pub importing: bool,
+    /// The engine's own reading, where there is one.
+    pub live: Option<&'a crate::torrent::TorrentInfo>,
+}
+
 /// A transfer in flight. The progress tier, coalesced.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Transfer {
@@ -397,6 +466,83 @@ pub enum CommandError {
     /// The local acceptance transaction could not be made durable.
     #[error("Portalis could not durably save this command: {0}")]
     Persistence(String),
+}
+
+#[cfg(test)]
+mod status_tests {
+    use super::*;
+
+    fn facts() -> StatusFacts<'static> {
+        StatusFacts {
+            draft: false,
+            paused: false,
+            carried: false,
+            publishing: false,
+            importing: false,
+            live: None,
+        }
+    }
+
+    /// A person's decisions outrank the engine's activity, and the engine's
+    /// activity outranks what the store can infer without it.
+    #[test]
+    fn a_decision_outranks_whatever_the_engine_is_doing() {
+        assert_eq!(
+            status_for(StatusFacts {
+                draft: true,
+                paused: true,
+                carried: true,
+                ..facts()
+            }),
+            Status::Draft,
+            "nothing has happened yet, whatever else is true"
+        );
+        assert_eq!(
+            status_for(StatusFacts {
+                paused: true,
+                carried: true,
+                ..facts()
+            }),
+            Status::Paused,
+            "a paused collection draining a buffer is still paused"
+        );
+    }
+
+    /// The bug this replaced: the rebuild asked only whether a torrent source
+    /// existed, so a finished import came back as importing on every restart
+    /// and a paused one never said so.
+    #[test]
+    fn an_import_is_not_preparing_forever_just_for_being_an_import() {
+        // Carried and confirmed, with no reading yet — the poll is a second
+        // away and says which it is. Not Preparing.
+        assert_eq!(
+            status_for(StatusFacts {
+                carried: true,
+                importing: true,
+                ..facts()
+            }),
+            Status::Downloading,
+        );
+        // And a paused one says so rather than reporting itself as importing,
+        // which is what made the start/stop button offer the wrong half.
+        assert_eq!(
+            status_for(StatusFacts {
+                paused: true,
+                carried: true,
+                importing: true,
+                ..facts()
+            }),
+            Status::Paused,
+        );
+        // Resolved or resolving, nothing carrying it yet: genuinely preparing.
+        assert_eq!(
+            status_for(StatusFacts {
+                importing: true,
+                ..facts()
+            }),
+            Status::Preparing,
+        );
+    }
 }
 
 #[cfg(test)]
