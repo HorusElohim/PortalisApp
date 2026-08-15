@@ -326,7 +326,14 @@ class _CollectionDetailState extends State<CollectionDetail> {
             name: _name,
             busy: _busy,
             autofocus: collection.isDraft,
-            onAdd: () => unawaited(_addSources()),
+            // A torrent being added for the first time is not being named:
+            // somebody pasted a link to fetch what is in it, and the name
+            // belongs to the torrent. Re-open it later and it is yours to
+            // rename like anything else.
+            showName: !(collection.isTorrent && collection.isDraft),
+            // Never for a torrent: its contents are fixed by its info hash,
+            // so an Add here could only fail.
+            onAdd: collection.isTorrent ? null : () => unawaited(_addSources()),
           ),
         CollectionOverview(
           collection: collection,
@@ -439,7 +446,6 @@ class _CollectionDetailState extends State<CollectionDetail> {
   }
 }
 
-
 /// What a collection is called, and how to put more in it.
 ///
 /// At the top because it is what a person came here to set, and because the
@@ -449,13 +455,21 @@ class _EditHeader extends StatelessWidget {
     required this.name,
     required this.busy,
     required this.autofocus,
+    required this.showName,
     required this.onAdd,
   });
 
   final TextEditingController name;
   final bool busy;
   final bool autofocus;
-  final VoidCallback onAdd;
+
+  /// Whether there is a name here to give. A torrent arriving for the first
+  /// time already has one, and it is not the person's to write.
+  final bool showName;
+
+  /// `null` where nothing can be added — a torrent's contents are its
+  /// identity, so there is no such act.
+  final VoidCallback? onAdd;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -463,38 +477,41 @@ class _EditHeader extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('COLLECTION NAME', style: monoLabel(size: 10)),
-            const SizedBox(height: 6),
-            TextField(
-              key: const Key('editCollectionName'),
-              controller: name,
-              autofocus: autofocus,
-              enabled: !busy,
-              textInputAction: TextInputAction.done,
-              style: displayText(size: 18),
-              decoration: InputDecoration(
-                isDense: true,
-                filled: true,
-                fillColor: AppColors.surfaceSunken,
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.inner),
-                  borderSide: BorderSide(color: AppColors.border),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.inner),
-                  borderSide: BorderSide(color: AppColors.signal),
+            if (showName) ...[
+              Text('COLLECTION NAME', style: monoLabel(size: 10)),
+              const SizedBox(height: 6),
+              TextField(
+                key: const Key('editCollectionName'),
+                controller: name,
+                autofocus: autofocus,
+                enabled: !busy,
+                textInputAction: TextInputAction.done,
+                style: displayText(size: 18),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: AppColors.surfaceSunken,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.inner),
+                    borderSide: BorderSide(color: AppColors.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.inner),
+                    borderSide: BorderSide(color: AppColors.signal),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-            PrimaryActionButton(
-              key: const Key('editAddSources'),
-              label: 'Add photos, files or a folder',
-              icon: Icons.add,
-              expand: true,
-              tone: ActionButtonTone.neutral,
-              onTap: busy ? null : onAdd,
-            ),
+              const SizedBox(height: 10),
+            ],
+            if (onAdd != null)
+              PrimaryActionButton(
+                key: const Key('editAddSources'),
+                label: 'Add photos, files or a folder',
+                icon: Icons.add,
+                expand: true,
+                tone: ActionButtonTone.neutral,
+                onTap: busy ? null : onAdd,
+              ),
           ],
         ),
       );

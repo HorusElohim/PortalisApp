@@ -172,7 +172,7 @@ void main() {
         home: CollectionRoute(collection: 9, controller: controller),
       ),
     );
-    repository.states.add(_torrentState(status: 'Draft'));
+    repository.states.add(_torrentState(status: 'Draft', nature: 'Native'));
     await tester.pump();
     repository.details.add(
       AppDetail(
@@ -273,6 +273,41 @@ void main() {
     await tester.tap(find.byKey(const Key('shareCollectionAction')));
     expect(created, isTrue);
   });
+  /// Pasting a torrent link is asking for what is in it, not making
+  /// something of your own — the name is the torrent's, and offering a field
+  /// for it invites a person to answer a question nobody asked. Re-open it
+  /// afterwards and it is theirs to rename like anything else.
+  testWidgets('a torrent arriving for the first time is not named',
+      (tester) async {
+    final repository = _Repository();
+    final controller = AppController(repository: repository);
+    await controller.start();
+    await tester.binding.setSurfaceSize(const Size(420, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CollectionRoute(collection: 9, controller: controller),
+      ),
+    );
+    repository.states.add(_torrentState(status: 'Draft'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Open for choosing files, with nothing to name and nothing to add:
+    // a torrent's contents are its identity.
+    expect(find.byKey(const Key('editCollectionName')), findsNothing);
+    expect(find.byKey(const Key('editAddSources')), findsNothing);
+    expect(find.text('Share this collection'), findsOneWidget);
+
+    // Once it is a collection rather than an arrival, the name is editable.
+    repository.states.add(_torrentState());
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('collectionCommandedit')));
+    await tester.pump();
+    expect(find.byKey(const Key('editCollectionName')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   /// An already-shared collection is only being edited, so its finishing
   /// move is Done — offering to share what is already shared would promise
   /// something that already happened.
@@ -541,7 +576,11 @@ AppSnapshot _state(String name) => AppSnapshot(
 
 /// One torrent import, downloading. `Torrent` is what makes its files a
 /// choice at all — see `EngineCollectionSource.supportsSelection`.
-AppSnapshot _torrentState({String status = 'Downloading'}) => AppSnapshot(
+AppSnapshot _torrentState({
+  String status = 'Downloading',
+  String nature = 'Torrent',
+}) =>
+    AppSnapshot(
       device: const AppDevice(
         name: 'Mina',
         handle: null,
@@ -554,7 +593,7 @@ AppSnapshot _torrentState({String status = 'Downloading'}) => AppSnapshot(
         AppCollection(
           id: 9,
           name: 'Big Buck Bunny',
-          nature: 'Torrent',
+          nature: nature,
           role: 'Owner',
           revision: BigInt.one,
           status: status,
