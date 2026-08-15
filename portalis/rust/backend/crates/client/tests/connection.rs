@@ -230,3 +230,27 @@ async fn draining_the_server_closes_live_connections() {
     client.shutdown().await;
     server.abort();
 }
+
+/// The app talks to a server process, not to one hosted inside its own test
+/// binary. This is the same handshake as the in-process case, made against a
+/// separately-launched executable, so what it proves is that the thing an
+/// operator actually runs is the thing a device can actually reach.
+#[tokio::test]
+#[ignore = "needs a server already listening; see tool/nexus_server.sh"]
+async fn reaches_a_separately_launched_server() {
+    let node_id = std::env::var("PORTALIS_NEXUS_NODE_ID").expect("a node id to dial");
+    let address = std::env::var("PORTALIS_NEXUS_ADDR").expect("an address to dial");
+
+    let endpoint =
+        portalis_nexus_client::EndpointAddr::new(node_id.parse().expect("a valid node id"))
+            .with_direct_addresses([address
+                .parse::<std::net::SocketAddr>()
+                .expect("a valid socket address")]);
+
+    let client = NexusClient::connect(&endpoint)
+        .await
+        .expect("connect to the running server");
+
+    let hello = client.hello().expect("a live connection has a hello");
+    assert_eq!(hello.challenge.len(), 32);
+}
