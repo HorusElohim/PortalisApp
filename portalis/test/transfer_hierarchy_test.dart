@@ -88,7 +88,6 @@ void main() {
       for (final command in CollectionCommand.values)
         find.byKey(Key('collectionCommand${command.name}')),
       find.byKey(const Key('collectionInvite')),
-      find.byKey(const Key('collectionAddMedia')),
     ];
     final dockCenters = [
       for (final finder in dockActions) tester.getCenter(finder).dy,

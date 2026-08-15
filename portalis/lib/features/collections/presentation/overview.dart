@@ -87,12 +87,6 @@ class CollectionOverview extends StatelessWidget {
             ),
             onTap: commandBusy ? null : onInvite,
           ),
-        if (collection.isShared)
-          PillButton(
-            label: 'Add media',
-            dim: true,
-            onTap: commandBusy ? null : onAddMedia,
-          ),
         if (collection.pendingMedia > 0)
           PillButton(
             label: 'Fetch ${collection.pendingMedia}',
@@ -104,7 +98,6 @@ class CollectionOverview extends StatelessWidget {
       busy: commandBusy,
       onCommand: onCommand,
       onInvite: collection.isShared ? onInvite : null,
-      onAddMedia: collection.isShared ? onAddMedia : null,
       onFetch: collection.pendingMedia > 0 ? onFetch : null,
       pendingMedia: collection.pendingMedia,
     );

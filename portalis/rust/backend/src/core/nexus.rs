@@ -836,6 +836,11 @@ impl Nexus {
         self.store
             .put_collection(&key, &stored)
             .map_err(persistence)?;
+        // Recording the intent is not applying it. The reconciler is what
+        // tells the engine, and it only runs when woken — without this the
+        // interface reported Paused while the bytes kept moving, which is
+        // exactly the kind of lie a pause must never be.
+        self.republish(handle, &key);
 
         self.update_collection(handle, |collection| {
             // The status is the whole report: a paused collection shows one
@@ -1612,6 +1617,79 @@ mod tests {
         nexus
             .command(&Command::PublishDraft { collection })
             .expect("stays accepting");
+        nexus.close().await;
+    }
+
+    /// Pausing has to reach the engine, not just the store.
+    ///
+    /// The reconciler is what applies stored intent, and it runs when woken.
+    /// Without the wake the flag was recorded, the status said Paused, and
+    /// the transfer carried on underneath it.
+    #[tokio::test]
+    async fn pausing_wakes_the_worker_that_tells_the_engine() {
+        let _state = crate::paths::redirect_to_temp();
+        let scratch = Scratch::new("pause-reaches");
+        let substrate = Arc::new(crate::substrate::Recorded::inspecting(
+            crate::substrate::Inspected {
+                info_hash: "33".repeat(20),
+                name: "Episode".to_owned(),
+                files: vec![crate::torrent::TorrentMetadataFile {
+                    label: "episode.mkv".to_owned(),
+                    bytes: 10,
+                }],
+                descriptor: b"descriptor".to_vec(),
+            },
+        ));
+        let nexus = open_with_substrate(&scratch, substrate.clone());
+
+        let accepted = nexus
+            .command(&Command::ImportTorrent {
+                source: "magnet:?xt=urn:btih:abc123".to_owned(),
+            })
+            .expect("records the source");
+        let collection = accepted.collection.expect("names its collection");
+        let mut watching = nexus.watch_detail(Some(collection));
+        settle(&nexus, &mut watching, |detail| {
+            detail.is_some_and(|detail| !detail.entries.is_empty())
+        })
+        .await;
+        nexus
+            .command(&Command::DownloadSelection {
+                collection,
+                entries: vec![Handle(1)],
+            })
+            .expect("chooses the file");
+        // Nothing can be paused before something is carrying it, so the
+        // acquire has to land first — otherwise this would be testing the
+        // race rather than the wake.
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while substrate.selections.lock().unwrap().is_empty() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("the download starts");
+
+        nexus
+            .command(&Command::SetPaused {
+                collection,
+                paused: true,
+            })
+            .expect("pauses");
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !substrate
+                .paused
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(_, paused)| *paused)
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("the engine is told to stop");
         nexus.close().await;
     }
 

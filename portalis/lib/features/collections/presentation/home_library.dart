@@ -4,8 +4,6 @@ import '../../../design/design.dart';
 import '../../../design/theme.dart';
 import '../domain/collection.dart';
 import 'commands.dart';
-import 'detail.dart';
-import 'source.dart';
 import 'views.dart';
 import 'list.dart';
 import 'share_action.dart';
@@ -33,8 +31,6 @@ class HomeLibrary extends StatelessWidget {
     required this.onCreateCollection,
     required this.onOpen,
     required this.onCommand,
-    this.openId,
-    this.openSource,
   });
 
   final bool wide;
@@ -47,12 +43,6 @@ class HomeLibrary extends StatelessWidget {
   /// The one collection currently grown into its own detail. Only meaningful
   /// wide — a narrow list has nowhere to grow a row into, so nothing here is
   /// ever "open" on it.
-  final int? openId;
-
-  /// Feeds the currently-open row's [CollectionDetail]. Present exactly when
-  /// [openId] is, and owned by whoever set [openId] — this widget only reads
-  /// it, matching how [CollectionSource] itself is owned.
-  final CollectionSource? openSource;
 
   List<AppCollection> get _collections => state?.collections ?? const [];
 
@@ -118,7 +108,6 @@ class HomeLibrary extends StatelessWidget {
     };
     return CollectionsList(
       collections: [for (final collection in _shown) _rowView(collection)],
-      openId: openId == null ? null : '$openId',
       onOpen: (row) => onOpen(byRowId[row.id]!),
       onCommand: (action) =>
           onCommand((byRowId[action.$1.id]!, action.$2)),
@@ -126,19 +115,6 @@ class HomeLibrary extends StatelessWidget {
       // the exception, because choosing happened on a screen of its own; it
       // happens on the collection itself, so there is nothing left that a row
       // cannot grow into.
-      detailFor: (row, level, inlineHeader, inlineStatus) => CollectionDetail(
-        key: ValueKey(row.id),
-        collection: row,
-        // Only reachable for an expandable row that `openId` names, and
-        // `openSource` is its owner's promise that a source exists exactly
-        // then — see this widget's own doc.
-        source: openSource!,
-        showCommands: true,
-        level: level,
-        showTitle: false,
-        inlineHeader: inlineHeader,
-        inlineStatus: inlineStatus,
-      ),
     );
   }
 

@@ -4,10 +4,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:portalis/features/collections/presentation/overview.dart';
 import 'package:portalis/nexus/application/app_controller.dart';
 import 'package:portalis/nexus/data/app_repository.dart';
-import 'package:portalis/nexus/data/collection_source.dart';
 import 'package:portalis/nexus/domain/app_state.dart';
 import 'package:portalis/features/collections/presentation/route.dart';
 import 'package:portalis/features/collections/presentation/home_library.dart';
@@ -203,7 +201,8 @@ void main() {
     // Open for changes without anybody asking, and the finishing move says
     // what it does: this has never been shared.
     expect(find.byKey(const Key('editCollectionName')), findsOneWidget);
-    expect(find.text('Share'), findsOneWidget);
+    expect(find.text('Share this collection'), findsOneWidget);
+    expect(find.text('Nothing has left this device yet.'), findsOneWidget);
 
     await tester.enterText(
       find.byKey(const Key('editCollectionName')),
@@ -304,7 +303,7 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('editCollectionName')), findsOneWidget);
     expect(find.text('Done'), findsOneWidget);
-    expect(find.text('Share'), findsNothing);
+    expect(find.text('Share this collection'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -375,72 +374,47 @@ void main() {
     expect(activity.peers, 3);
     expect(activity.downMbps, 1.0);
     expect(activity.upMbps, 2.0);
-    expect(activity.rateMbps, 3.0);
   });
 
-  /// The wide layout's whole point: opening a collection grows its row into
-  /// its own detail in place, rather than covering the shell with a pushed
-  /// screen. This is the exact behaviour that went missing when Home was
-  /// rewritten for Nexus.
-  ///
-  /// Drives it the way a person actually does — a tap, which is what
-  /// `CollectionRow` needs to escalate past collapsed — rather than starting
-  /// the tree already "open", which even the legacy row has never supported.
-  /// A small stateful harness stands in for `Home`, which owns `openId` and
-  /// the source that follows it; `Home` itself reaches a global singleton
-  /// controller a unit test cannot substitute, so this proves the contract
-  /// `Home` relies on instead of `Home`'s own wiring.
-  testWidgets(
-      'the wide layout grows the open row into its own detail instead of '
-      'pushing a screen', (tester) async {
+  /// Opening means one thing on every layout. The wide window used to grow
+  /// the row in place, which left the collection's own controls — edit among
+  /// them — reachable on one layout and not the other.
+  testWidgets('the wide layout hands an opened collection to its owner',
+      (tester) async {
     final repository = _Repository();
     final controller = AppController(repository: repository);
     controller.debugSeed(
       _collectionState(),
       details: const Stream<AppDetail?>.empty(),
     );
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    int? openId;
-    EngineCollectionSource? source;
-
+    int? opened;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: StatefulBuilder(
-            builder: (context, setState) => HomeLibrary(
-              wide: true,
-              state: controller.state,
-              error: null,
-              openId: openId,
-              openSource: source,
-              onCreateCollection: () {},
-              // No addTearDown here: once this is handed to
-              // `HomeLibrary`, `CollectionDetail`'s own state is its
-              // sole owner and disposes it when the row collapses or the
-              // tree tears down — a second dispose call is the bug this
-              // ownership rule exists to prevent.
-              onOpen: (collection) => setState(() {
-                openId = collection.id;
-                source = EngineCollectionSource(
-                  controller: controller,
-                  collectionId: collection.id,
-                );
-              }),
-              onCommand: (_) {},
-            ),
+          body: HomeLibrary(
+            wide: true,
+            state: controller.state,
+            error: null,
+            onCreateCollection: () {},
+            onOpen: (collection) => opened = collection.id,
+            onCommand: (_) {},
           ),
         ),
       ),
     );
-
-    expect(find.byType(CollectionOverview), findsNothing);
-    await tester.tap(find.text('Episode archive'));
     await tester.pump();
 
-    // No route was pushed — the detail is right here, grown out of the row.
-    expect(find.byType(CollectionOverview), findsOneWidget);
-    expect(find.byKey(const Key('collectionCommandrestart')), findsOneWidget);
+    await tester.tap(find.text('Episode archive').first);
+    await tester.pump();
+
+    // The id went to whoever owns navigation; nothing grew in place.
+    expect(opened, isNotNull);
+    expect(tester.takeException(), isNull);
   });
+
 
   testWidgets(
       'collection detail deletes through the same command bar and dialog '

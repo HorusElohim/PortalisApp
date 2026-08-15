@@ -76,18 +76,20 @@ class CollectionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surfaceDeep,
+      // No reading column: a collection is a grid of media beside a chart and
+      // a peer list, all of which reflow on their own. Centring it in a narrow
+      // column left a wide window mostly empty beside content that could have
+      // used it.
       body: SafeArea(
-        child: PageBody(
-          child: SingleChildScrollView(
-            padding:
-                const EdgeInsets.fromLTRB(kScreenGutter, 0, kScreenGutter, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                NavBackButton(onTap: () => Navigator.of(context).pop()),
-                CollectionDetail(collection: collection, source: source),
-              ],
-            ),
+        child: SingleChildScrollView(
+          padding:
+              const EdgeInsets.fromLTRB(kScreenGutter, 0, kScreenGutter, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              NavBackButton(onTap: () => Navigator.of(context).pop()),
+              CollectionDetail(collection: collection, source: source),
+            ],
           ),
         ),
       ),
@@ -108,6 +110,15 @@ class _CollectionDetailState extends State<CollectionDetail> {
   final _name = TextEditingController();
 
   bool get _isEditing => _editing ?? _collection.isDraft;
+
+  @override
+  void initState() {
+    super.initState();
+    // A draft opens in edit mode without anybody pressing anything, so its
+    // suggested name has to already be in the field. Read from the resolved
+    // collection rather than the seed: the seed is one frame stale.
+    _name.text = _collection.name;
+  }
 
   Collection get _collection => widget.source.resolve(widget.collection);
 
@@ -401,13 +412,11 @@ class _CollectionDetailState extends State<CollectionDetail> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (_isEditing)
-          _EditBar(
+          _EditHeader(
             name: _name,
             busy: _busy,
-            isDraft: collection.isDraft,
+            autofocus: collection.isDraft,
             onAdd: () => unawaited(_addSources()),
-            onShare: () => unawaited(_share()),
-            onDone: () => _toggleEditing(collection),
           ),
         CollectionOverview(
           collection: collection,
@@ -417,7 +426,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
           peerHistory: widget.source.peerHistoryFor(collection.id),
           showCommands: widget.showCommands,
           level: widget.level,
-          showTitle: widget.showTitle,
+          showTitle: widget.showTitle && !_isEditing,
           inlineHeader: widget.inlineHeader,
           inlineStatus: widget.inlineStatus,
           onInvite: _showInvite,
@@ -463,6 +472,15 @@ class _CollectionDetailState extends State<CollectionDetail> {
                     : null,
               ),
             ),
+        ],
+        if (_isEditing) ...[
+          const SizedBox(height: 20),
+          _EditFooter(
+            busy: _busy,
+            isDraft: collection.isDraft,
+            onShare: () => unawaited(_share()),
+            onDone: () => _toggleEditing(collection),
+          ),
         ],
       ],
     );
@@ -511,31 +529,22 @@ class _CollectionDetailState extends State<CollectionDetail> {
 }
 
 
-/// The controls that only exist while a collection is open for changes.
+/// What a collection is called, and how to put more in it.
 ///
-/// Kept as one strip above the collection rather than scattered through it,
-/// so that leaving edit mode removes every affordance at once and nothing is
-/// left behind looking tappable.
-class _EditBar extends StatelessWidget {
-  const _EditBar({
+/// At the top because it is what a person came here to set, and because the
+/// name has to be legible while they look at what they are naming.
+class _EditHeader extends StatelessWidget {
+  const _EditHeader({
     required this.name,
     required this.busy,
-    required this.isDraft,
+    required this.autofocus,
     required this.onAdd,
-    required this.onShare,
-    required this.onDone,
   });
 
   final TextEditingController name;
   final bool busy;
-
-  /// A draft has never been shared, so its finishing move is "Share". An
-  /// already-shared collection is only being edited, so its is "Done" — the
-  /// same button would otherwise promise something that already happened.
-  final bool isDraft;
+  final bool autofocus;
   final VoidCallback onAdd;
-  final VoidCallback onShare;
-  final VoidCallback onDone;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -548,7 +557,7 @@ class _EditBar extends StatelessWidget {
             TextField(
               key: const Key('editCollectionName'),
               controller: name,
-              autofocus: isDraft,
+              autofocus: autofocus,
               enabled: !busy,
               textInputAction: TextInputAction.done,
               style: displayText(size: 18),
@@ -567,34 +576,61 @@ class _EditBar extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: PrimaryActionButton(
-                    key: const Key('editAddSources'),
-                    label: 'Add',
-                    icon: Icons.add,
-                    expand: true,
-                    tone: ActionButtonTone.neutral,
-                    onTap: busy ? null : onAdd,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: PrimaryActionButton(
-                    key: const Key('editFinish'),
-                    label: isDraft ? 'Share' : 'Done',
-                    icon: isDraft ? Icons.ios_share : Icons.check,
-                    expand: true,
-                    tone: isDraft
-                        ? ActionButtonTone.ember
-                        : ActionButtonTone.neutral,
-                    onTap: busy ? null : (isDraft ? onShare : onDone),
-                  ),
-                ),
-              ],
+            PrimaryActionButton(
+              key: const Key('editAddSources'),
+              label: 'Add photos, files or a folder',
+              icon: Icons.add,
+              expand: true,
+              tone: ActionButtonTone.neutral,
+              onTap: busy ? null : onAdd,
             ),
           ],
         ),
+      );
+}
+
+/// The one irreversible thing edit mode does, at the end of the page.
+///
+/// Last because sharing is a decision about everything above it: the name,
+/// the files, and which of them are wanted. A button that sits before all of
+/// that asks for a commitment to something the person has not read yet.
+class _EditFooter extends StatelessWidget {
+  const _EditFooter({
+    required this.busy,
+    required this.isDraft,
+    required this.onShare,
+    required this.onDone,
+  });
+
+  final bool busy;
+
+  /// A draft has never been shared, so its finishing move is "Share". An
+  /// already-shared collection is only being edited, so its is "Done" — the
+  /// same button would otherwise promise something that already happened.
+  final bool isDraft;
+  final VoidCallback onShare;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PrimaryActionButton(
+            key: const Key('editFinish'),
+            label: isDraft ? 'Share this collection' : 'Done',
+            icon: isDraft ? Icons.ios_share : Icons.check,
+            expand: true,
+            tone: isDraft ? ActionButtonTone.ember : ActionButtonTone.neutral,
+            onTap: busy ? null : (isDraft ? onShare : onDone),
+          ),
+          if (isDraft) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Nothing has left this device yet.',
+              textAlign: TextAlign.center,
+              style: monoLabel(size: 10),
+            ),
+          ],
+        ],
       );
 }

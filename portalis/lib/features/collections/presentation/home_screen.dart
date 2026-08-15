@@ -21,16 +21,11 @@ class Home extends StatefulWidget {
   const Home({
     super.key,
     this.embedded = false,
-    this.openId,
     this.onOpen,
     this.onShare,
   });
 
   final bool embedded;
-
-  /// The one collection grown into its own detail in the wide list. `null`
-  /// on the compact layout, which has nowhere to grow a row into.
-  final int? openId;
 
   /// Supplied by the wide shell, which owns [openId] and toggles it in place
   /// of navigating. `null` on the compact layout, where opening a collection
@@ -45,40 +40,6 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   bool _dropBusy = false;
-
-  // Feeds the currently-open row's inline `CollectionDetail`. Owned here,
-  // one at a time, because Nexus's detail stream costs nothing until
-  // something asks for it — an inline-expanded row is exactly one such ask,
-  // and there is at most one open at a time.
-  EngineCollectionSource? _openSource;
-
-  @override
-  void initState() {
-    super.initState();
-    _syncOpenSource();
-  }
-
-  @override
-  void didUpdateWidget(Home oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.openId != oldWidget.openId) _syncOpenSource();
-  }
-
-  void _syncOpenSource() {
-    _openSource?.dispose();
-    _openSource = widget.openId == null
-        ? null
-        : EngineCollectionSource(
-            controller: AppControllers.engine,
-            collectionId: widget.openId!,
-          );
-  }
-
-  @override
-  void dispose() {
-    _openSource?.dispose();
-    super.dispose();
-  }
 
   void _push(Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
@@ -257,8 +218,6 @@ class _HomeState extends State<Home> {
           wide: widget.embedded,
           state: AppControllers.engine.state,
           error: AppControllers.engine.lastError,
-          openId: widget.openId,
-          openSource: _openSource,
           onOpen: _openCollection,
           onCommand: _handleCommand,
           onCreateCollection: () => _addCollection(),

@@ -21,10 +21,8 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     with WidgetsBindingObserver {
   int get tab => AppNavigation.tab.value;
   DesktopPane get pane => _pane;
-  int? get openId => _openId;
 
   DesktopPane _pane = DesktopPane.home;
-  int? _openId;
 
   @override
   void initState() {
@@ -68,29 +66,22 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     if (tab != null) AppNavigation.tab.value = tab;
   }
 
-  /// Opens one collection.
+  /// Opens one collection, on its own page.
   ///
-  /// `inline: false` pushes it as its own route — the compact layout, and
-  /// anywhere else with no list to grow a row into. `inline: true` toggles
-  /// which id [openId] names instead: a wide window grows the matching row
-  /// into its own detail rather than covering the whole shell, which is what
-  /// pushing from an embedded pane would otherwise do.
-  void openCollection(int id, {required bool inline}) {
-    if (!inline) {
-      final collection = AppControllers.engine.state?.collections
-          .where((item) => item.id == id)
-          .firstOrNull;
-      if (collection == null) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) =>
-              routeFor(collection, AppControllers.engine),
-        ),
-      );
-      return;
-    }
-    setState(() => _openId = _openId == id ? null : id);
-    selectPane(DesktopPane.home);
+  /// One answer for every window size. A wide window used to grow the row in
+  /// place instead, which made "open" mean two different things and left the
+  /// collection's own controls — edit among them — reachable on one layout
+  /// and not the other.
+  void openCollection(int id) {
+    final collection = AppControllers.engine.state?.collections
+        .where((item) => item.id == id)
+        .firstOrNull;
+    if (collection == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => routeFor(collection, AppControllers.engine),
+      ),
+    );
   }
 
 

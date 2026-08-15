@@ -31,11 +31,7 @@ class _RootShellState extends AdaptiveShellState<RootShell> {
         pane: pane,
         onPane: selectPane,
         liveRate: AppControllers.engine.activity.rateMbps,
-        home: Home(
-          embedded: true,
-          openId: openId,
-          onOpen: (id) => openCollection(id, inline: true),
-        ),
+        home: Home(embedded: true, onOpen: openCollection),
         content: _desktopContent(),
       );
 
