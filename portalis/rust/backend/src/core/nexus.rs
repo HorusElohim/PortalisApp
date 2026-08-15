@@ -420,6 +420,16 @@ impl Nexus {
         // recorded whether or not anybody is looking at it, which is the whole
         // difference between a chart that survives a restart and one that
         // begins when a person happens to navigate.
+        supervisor.start_now("service follower", {
+            let states = states.clone();
+            move |shutdown| {
+                super::service::follow_service(
+                    states,
+                    std::sync::Arc::new(super::service::Configured),
+                    shutdown,
+                )
+            }
+        });
         supervisor.start_now("transfer follower", {
             let store = Arc::clone(&store);
             let states = states.clone();
@@ -505,13 +515,10 @@ impl Nexus {
             return;
         }
         self.active = active;
-        let mut state = self.state();
-        state.connectivity = if active {
-            Connectivity::Connecting
-        } else {
-            Connectivity::LocalOnly
-        };
-        self.states.send_replace(state);
+        // Deliberately not touched here. Going to the background does not
+        // change what this device can reach, and coming back does not make a
+        // connection exist — `core::service` reports what a socket can do,
+        // and it is the only thing that may say.
     }
 
     /// The state stream. Always holds a complete snapshot.
@@ -2433,15 +2440,27 @@ mod tests {
         nexus.close().await;
     }
 
+    /// Going to the background does not change what this device can reach,
+    /// and coming back does not make a connection exist. Connectivity used to
+    /// be derived from this flag alone, so an app in the foreground reported
+    /// itself as connecting to a service nobody had configured — forever, and
+    /// without a socket ever being opened. `core::service` answers it now, by
+    /// having tried.
     #[tokio::test]
-    async fn foregrounding_and_backgrounding_change_only_connectivity() {
+    async fn foregrounding_does_not_invent_a_connection() {
         let scratch = Scratch::new("activity");
         let mut nexus = open(&scratch);
 
+        let before = nexus.state().connectivity;
         nexus.set_active(false);
-        assert_eq!(nexus.state().connectivity, Connectivity::LocalOnly);
+        assert_eq!(nexus.state().connectivity, before);
         nexus.set_active(true);
-        assert_eq!(nexus.state().connectivity, Connectivity::Connecting);
+        assert_eq!(nexus.state().connectivity, before);
+        assert_eq!(
+            before,
+            Connectivity::LocalOnly,
+            "nothing is configured in a scratch device"
+        );
 
         nexus.close().await;
     }

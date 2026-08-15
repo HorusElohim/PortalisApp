@@ -433,7 +433,8 @@ fn rate(bytes: u64, elapsed_ns: u64) -> u32 {
     u32::try_from(per_second).unwrap_or(u32::MAX)
 }
 
-fn unix_time_ns() -> u64 {
+/// Now, as the store and the projection both count it.
+pub(crate) fn unix_time_ns() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |since| {

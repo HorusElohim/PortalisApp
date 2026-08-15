@@ -9,13 +9,61 @@ class ServiceSection extends StatelessWidget {
   const ServiceSection({
     super.key,
     required this.config,
+    required this.connectivity,
     required this.onConfigure,
     required this.onClear,
   });
 
   final EndpointConfig config;
+
+  /// What the engine reports it can actually reach — see `core::service`.
+  /// A configuration is not a connection, and this row used to show one as
+  /// though it were the other.
+  final String connectivity;
   final VoidCallback onConfigure;
   final VoidCallback onClear;
+
+  /// What the engine says, as a person would put it.
+  ///
+  /// Read from the engine rather than from whether a Node ID has been typed:
+  /// a service that is configured and unreachable is a different situation
+  /// from one that was never set up, and the difference is the whole reason
+  /// somebody opens this screen.
+  ({String label, Color color, String detail}) get _reach {
+    if (connectivity.startsWith('Online')) {
+      return (
+        label: 'Connected',
+        color: AppColors.signal,
+        detail: 'Authenticated by its Node ID over a direct connection.',
+      );
+    }
+    if (connectivity.startsWith('Degraded')) {
+      return (
+        label: 'Not reachable',
+        color: AppColors.danger,
+        detail: 'Configured, but nothing answered. Portalis keeps trying.',
+      );
+    }
+    if (connectivity.startsWith('Connecting')) {
+      return (
+        label: 'Connecting…',
+        color: AppColors.ember,
+        detail: 'Dialling the configured service.',
+      );
+    }
+    return config.isConfigured
+        ? (
+            label: 'Not connected',
+            color: AppColors.textFaint,
+            detail: 'Configured, and not reaching it yet.',
+          )
+        : (
+            label: 'Not configured',
+            color: AppColors.textFaint,
+            detail:
+                'Add a server Node ID and direct address to enable online sharing.',
+          );
+  }
 
   @override
   Widget build(BuildContext context) => SettingsSection(
@@ -23,12 +71,9 @@ class ServiceSection extends StatelessWidget {
         children: [
           ValueRow(
             label: 'Connection',
-            value: config.isConfigured ? 'Ready to connect' : 'Not configured',
-            valueColor:
-                config.isConfigured ? AppColors.signal : AppColors.textFaint,
-            subtitle: config.isConfigured
-                ? 'Iroh will authenticate this server before Portalis signs in.'
-                : 'Add a server Node ID and direct address to enable online sharing.',
+            value: _reach.label,
+            valueColor: _reach.color,
+            subtitle: _reach.detail,
             onTap: onConfigure,
           ),
           if (config.isConfigured) ...[

@@ -42,6 +42,15 @@ pub struct Shutdown {
 }
 
 impl Shutdown {
+    /// Builds one from a signal a caller already owns.
+    ///
+    /// A test that only needs to stop one worker should not have to stand up
+    /// a whole supervisor to do it.
+    #[cfg(test)]
+    pub(crate) fn from_signal(signal: watch::Receiver<bool>) -> Self {
+        Self { signal }
+    }
+
     /// Resolves when shutdown has been requested, immediately if it already
     /// has.
     pub async fn requested(&mut self) {

@@ -368,7 +368,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: _SettingsScrollSurface(
         controller: _scrollController,
         child: ListenableBuilder(
-          listenable: Listenable.merge([_settings, _nexus]),
+          // The engine too: this screen now shows what it can reach, and a
+          // status that only repaints when a setting changes is a status
+          // that is wrong for as long as nobody touches one.
+          listenable: Listenable.merge([_settings, _nexus, AppControllers.engine]),
           builder: (context, _) {
             final s = _settings.settings;
             final error = _settings.lastError ?? _nexus.lastError;
@@ -426,6 +429,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       ServiceSection(
         config: _nexus.config,
+        // What the engine reaches, not what has been typed into it.
+        connectivity: AppControllers.engine.state?.connectivity ?? '',
         onConfigure: _configureNexus,
         onClear: _clearNexus,
       ),

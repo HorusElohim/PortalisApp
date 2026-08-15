@@ -1,0 +1,356 @@
+//! Whether this device is actually talking to a Nexus service.
+//!
+//! `Connectivity` used to be derived from whether the app was in the
+//! foreground: it read `Connecting` whenever the app was active and
+//! `LocalOnly` whenever it was not, without a socket ever being opened. A
+//! person who had configured no service at all was told the app was
+//! connecting to one, forever.
+//!
+//! This is the one place that answers the question, and it answers it by
+//! having tried. Nothing here infers a connection from a setting, from a
+//! lifecycle flag, or from the absence of an error.
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use tokio::sync::watch;
+
+use crate::core::events::{Connectivity, Path, PeerTrust, Security};
+use crate::projection::state::PortalisState;
+
+/// How long to wait before dialling again after a failure, and how often to
+/// check that a live connection is still live.
+///
+/// One interval for both because they are the same question asked from two
+/// states, and a person watching a status line is owed an answer at the same
+/// pace either way.
+pub const RETRY_INTERVAL: Duration = Duration::from_secs(5);
+
+/// What a service connection is, once it exists.
+///
+/// Direct because the app dials a direct address and the service disables
+/// relaying, so a connection that exists took the path the person configured.
+/// Known because they configured it: pasting a node id *is* comparing a
+/// fingerprint, and it is the only comparison this relationship has.
+const SERVICE_SECURITY: Security = Security {
+    path: Path::Direct,
+    peer: PeerTrust::Known,
+};
+
+/// What the app is able to reach right now.
+///
+/// Separated from the dialling so the decision can be tested without a
+/// network: given what was configured and what happened when it was tried,
+/// this is what a person should be told.
+#[must_use]
+pub fn connectivity_for(configured: bool, reached: bool, since_unix_ns: u64) -> Connectivity {
+    match (configured, reached) {
+        // Nothing to reach is not a failure to reach it. A first run has no
+        // service and is working exactly as intended.
+        (false, _) => Connectivity::LocalOnly,
+        (true, true) => Connectivity::Online(SERVICE_SECURITY),
+        // Configured and unreachable. Degraded rather than LocalOnly: the
+        // person expects a service, so saying "local only" would describe the
+        // symptom as though it were the arrangement.
+        (true, false) => Connectivity::Degraded { since_unix_ns },
+    }
+}
+
+/// Keeps the projection's connectivity equal to what a socket can do.
+pub(crate) async fn follow_service(
+    states: watch::Sender<PortalisState>,
+    endpoint: Arc<dyn ConfiguredEndpoint>,
+    mut shutdown: super::supervisor::Shutdown,
+) {
+    let mut client: Option<portalis_nexus_client::NexusClient> = None;
+    let mut failing_since = 0_u64;
+
+    loop {
+        let configured = endpoint.configured();
+        // A live client that has stopped being live is not a live client. Ask
+        // rather than remember: the socket knows and this does not.
+        if client.as_ref().is_some_and(|open| !open.is_connected()) {
+            client = None;
+        }
+        if !configured {
+            client = None;
+        } else if client.is_none() {
+            // Announced before dialling, because a dial can take a while and
+            // silence during it reads as nothing happening.
+            publish(&states, Connectivity::Connecting);
+            client = tokio::select! {
+                () = shutdown.requested() => return,
+                opened = endpoint.connect() => opened,
+            };
+        }
+
+        let reached = client.is_some();
+        if reached {
+            failing_since = 0;
+        } else if configured && failing_since == 0 {
+            failing_since = crate::core::transfers::unix_time_ns();
+        }
+        publish(
+            &states,
+            connectivity_for(configured, reached, failing_since),
+        );
+
+        tokio::select! {
+            () = shutdown.requested() => return,
+            () = tokio::time::sleep(RETRY_INTERVAL) => {}
+        }
+    }
+}
+
+fn publish(states: &watch::Sender<PortalisState>, connectivity: Connectivity) {
+    states.send_if_modified(|state| {
+        if state.connectivity == connectivity {
+            return false;
+        }
+        state.connectivity = connectivity;
+        true
+    });
+}
+
+/// What this device has been told to talk to, and how to reach it.
+///
+/// A trait so the worker can be driven without a network. Dialling a real
+/// service in a unit test would make the test a measurement of somebody's
+/// wifi, and the thing worth testing is what a person is told — which is
+/// decided here, not in the socket.
+#[async_trait::async_trait]
+pub(crate) trait ConfiguredEndpoint: Send + Sync {
+    /// Whether a service has been set up at all.
+    fn configured(&self) -> bool;
+
+    /// Dials it, answering `None` when that did not work.
+    async fn connect(&self) -> Option<portalis_nexus_client::NexusClient>;
+}
+
+/// The real one: whatever is in the device's settings, dialled for real.
+pub(crate) struct Configured;
+
+#[async_trait::async_trait]
+impl ConfiguredEndpoint for Configured {
+    fn configured(&self) -> bool {
+        crate::nexus_settings::nexus_endpoint_config()
+            .ok()
+            .and_then(|config| config.endpoint_addr().ok().flatten())
+            .is_some()
+    }
+
+    async fn connect(&self) -> Option<portalis_nexus_client::NexusClient> {
+        match crate::nexus::connect_configured().await {
+            Ok(client) => client,
+            Err(error) => {
+                crate::log::clog!("nexus", "could not reach the Nexus service: {error:#}");
+                None
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every answer this worker can give, and why each is the honest one.
+    #[test]
+    fn what_a_person_is_told_follows_from_what_was_tried() {
+        assert_eq!(
+            connectivity_for(false, false, 0),
+            Connectivity::LocalOnly,
+            "a first run has no service, which is not a failure to reach one"
+        );
+        assert_eq!(
+            connectivity_for(true, true, 0),
+            Connectivity::Online(SERVICE_SECURITY)
+        );
+        assert_eq!(
+            connectivity_for(true, false, 42),
+            Connectivity::Degraded { since_unix_ns: 42 },
+            "configured and unreachable is a fault, not an arrangement"
+        );
+    }
+
+    /// A configured service that cannot be reached says so, and keeps saying
+    /// so — the app used to report Connecting forever whether or not anything
+    /// was listening, and whether or not anything had been configured.
+    #[tokio::test]
+    async fn an_unreachable_service_is_reported_rather_than_awaited() {
+        struct Unreachable;
+
+        #[async_trait::async_trait]
+        impl ConfiguredEndpoint for Unreachable {
+            fn configured(&self) -> bool {
+                true
+            }
+            async fn connect(&self) -> Option<portalis_nexus_client::NexusClient> {
+                None
+            }
+        }
+
+        let states = watch::Sender::new(PortalisState {
+            connectivity: Connectivity::LocalOnly,
+            ..empty_state()
+        });
+        let mut watching = states.subscribe();
+        let (stop, shutdown) = shutdown_pair();
+        let worker = tokio::spawn(follow_service(states, Arc::new(Unreachable), shutdown));
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if matches!(
+                    watching.borrow_and_update().connectivity,
+                    Connectivity::Degraded { .. }
+                ) {
+                    return;
+                }
+                watching.changed().await.expect("the worker is running");
+            }
+        })
+        .await
+        .expect("an unreachable service is reported");
+
+        let _ = stop.send(true);
+        let _ = worker.await;
+    }
+
+    /// Nothing configured is local-only, and stays that way without dialling.
+    #[tokio::test]
+    async fn nothing_configured_is_not_a_connection_being_attempted() {
+        struct Absent;
+
+        #[async_trait::async_trait]
+        impl ConfiguredEndpoint for Absent {
+            fn configured(&self) -> bool {
+                false
+            }
+            async fn connect(&self) -> Option<portalis_nexus_client::NexusClient> {
+                panic!("nothing configured must not be dialled");
+            }
+        }
+
+        let states = watch::Sender::new(PortalisState {
+            connectivity: Connectivity::Connecting,
+            ..empty_state()
+        });
+        let mut watching = states.subscribe();
+        let (stop, shutdown) = shutdown_pair();
+        let worker = tokio::spawn(follow_service(states, Arc::new(Absent), shutdown));
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if watching.borrow_and_update().connectivity == Connectivity::LocalOnly {
+                    return;
+                }
+                watching.changed().await.expect("the worker is running");
+            }
+        })
+        .await
+        .expect("an unconfigured device is local only");
+
+        let _ = stop.send(true);
+        let _ = worker.await;
+    }
+
+    /// A shutdown signal a test can pull, without a whole supervisor.
+    fn shutdown_pair() -> (watch::Sender<bool>, super::super::supervisor::Shutdown) {
+        let (stop, signal) = watch::channel(false);
+        (
+            stop,
+            super::super::supervisor::Shutdown::from_signal(signal),
+        )
+    }
+
+    fn empty_state() -> PortalisState {
+        PortalisState {
+            device: crate::projection::state::DeviceState {
+                name: String::new(),
+                handle: None,
+                fingerprint: String::new(),
+                devices: 0,
+            },
+            connectivity: Connectivity::LocalOnly,
+            contacts: Vec::new(),
+            collections: Vec::new(),
+            alerts: Vec::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod live_tests {
+    use super::*;
+
+    /// Dials a service that is actually listening, through the same code the
+    /// app uses. Ignored by default because it needs one running — the point
+    /// is that "connected" means a handshake completed, and nothing short of
+    /// a real one can demonstrate that.
+    ///
+    /// ```text
+    /// tool/nexus_server.sh
+    /// PORTALIS_NEXUS_NODE_ID=… PORTALIS_NEXUS_ADDR=… \
+    ///   cargo test --lib reaches_a_running_service -- --ignored
+    /// ```
+    #[tokio::test]
+    #[ignore = "needs a service already listening; see tool/nexus_server.sh"]
+    async fn reaches_a_running_service() {
+        let node_id = std::env::var("PORTALIS_NEXUS_NODE_ID").expect("a node id to dial");
+        let address = std::env::var("PORTALIS_NEXUS_ADDR").expect("an address to dial");
+        let endpoint =
+            portalis_nexus_client::EndpointAddr::new(node_id.parse().expect("a valid node id"))
+                .with_direct_addresses([address
+                    .parse::<std::net::SocketAddr>()
+                    .expect("a valid socket address")]);
+
+        struct Listening(portalis_nexus_client::EndpointAddr);
+
+        #[async_trait::async_trait]
+        impl ConfiguredEndpoint for Listening {
+            fn configured(&self) -> bool {
+                true
+            }
+            async fn connect(&self) -> Option<portalis_nexus_client::NexusClient> {
+                crate::nexus::connect(self.0.clone()).await.ok()
+            }
+        }
+
+        let states = watch::Sender::new(crate::projection::state::PortalisState {
+            device: crate::projection::state::DeviceState {
+                name: String::new(),
+                handle: None,
+                fingerprint: String::new(),
+                devices: 0,
+            },
+            connectivity: Connectivity::LocalOnly,
+            contacts: Vec::new(),
+            collections: Vec::new(),
+            alerts: Vec::new(),
+        });
+        let mut watching = states.subscribe();
+        let (stop, signal) = watch::channel(false);
+        let worker = tokio::spawn(follow_service(
+            states,
+            Arc::new(Listening(endpoint)),
+            super::super::supervisor::Shutdown::from_signal(signal),
+        ));
+
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                if matches!(
+                    watching.borrow_and_update().connectivity,
+                    Connectivity::Online(_)
+                ) {
+                    return;
+                }
+                watching.changed().await.expect("the worker is running");
+            }
+        })
+        .await
+        .expect("a listening service is reached");
+
+        let _ = stop.send(true);
+        let _ = worker.await;
+    }
+}
