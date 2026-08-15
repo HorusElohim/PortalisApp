@@ -2,6 +2,31 @@
 
 use crate::v1::envelope::Payload;
 
+/// Whether a request changes durable state, as opposed to asking about it.
+///
+/// The line an operational log draws: a service says what changed, not what
+/// it was asked. Reads are frequent, uninteresting once they work, and would
+/// bury the handful of events that matter on anything busier than a test —
+/// they stay at debug, where `RUST_LOG` can still reach them.
+#[must_use]
+pub const fn payload_changes_state(payload: Option<&Payload>) -> bool {
+    matches!(
+        payload,
+        Some(
+            Payload::RegisterUser(_)
+                | Payload::LinkDevice(_)
+                | Payload::FriendCommand(_)
+                | Payload::PutKeyEnvelope(_)
+                | Payload::PublishShare(_)
+                | Payload::GrantShareAccess(_)
+                | Payload::RevokeShareAccess(_)
+                | Payload::ShareHandoff(_)
+                | Payload::AnnouncePeer(_)
+                | Payload::WithdrawPeer(_)
+        )
+    )
+}
+
 /// Returns only the protobuf variant name, never any payload content.
 ///
 /// Keeping this mapping beside the protocol gives clients and servers the
@@ -222,5 +247,34 @@ mod tests {
             39,
             "a new payload needs a name and a case here"
         );
+    }
+}
+
+#[cfg(test)]
+mod change_tests {
+    use super::*;
+    use crate::v1::{AnnouncePeer, ListSharesRequest, Ping, PublishShare, RegisterUser};
+
+    /// A service's log says what changed. Reads are frequent and dull once
+    /// they work; putting them at the same level as a publication buries it.
+    #[test]
+    fn writing_is_worth_saying_and_asking_is_not() {
+        assert!(payload_changes_state(Some(&Payload::PublishShare(
+            PublishShare::default()
+        ))));
+        assert!(payload_changes_state(Some(&Payload::RegisterUser(
+            RegisterUser::default()
+        ))));
+        assert!(payload_changes_state(Some(&Payload::AnnouncePeer(
+            AnnouncePeer::default()
+        ))));
+
+        assert!(!payload_changes_state(Some(&Payload::ListSharesRequest(
+            ListSharesRequest::default()
+        ))));
+        assert!(!payload_changes_state(Some(
+            &Payload::Ping(Ping::default())
+        )));
+        assert!(!payload_changes_state(None));
     }
 }

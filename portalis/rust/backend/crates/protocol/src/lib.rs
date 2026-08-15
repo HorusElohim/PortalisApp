@@ -59,7 +59,7 @@ pub use limits::{
     MESSAGE_ID_BYTES, MIN_USERNAME_CHARS, NANOS_PER_MILLI, SHARE_ID_BYTES, SIGNATURE_BYTES,
     SNAPSHOT_ID_BYTES, SWARM_LEASE_SECONDS, SWARM_REFRESH_SECONDS, USER_ID_BYTES,
 };
-pub use payload::payload_name;
+pub use payload::{payload_changes_state, payload_name};
 pub use sealing::{
     EnvelopeContext, SealError, SealedEnvelope, is_contributory_x25519_public_key,
     open as open_envelope, seal as seal_envelope,

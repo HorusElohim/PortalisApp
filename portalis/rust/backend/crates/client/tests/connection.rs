@@ -254,3 +254,27 @@ async fn reaches_a_separately_launched_server() {
     let hello = client.hello().expect("a live connection has a hello");
     assert_eq!(hello.challenge.len(), 32);
 }
+
+/// Registering against a separately-launched service, so what is exercised is
+/// the executable an operator runs rather than one hosted inside this binary.
+#[tokio::test]
+#[ignore = "needs a server already listening; see tool/nexus_server.sh"]
+async fn registers_against_a_separately_launched_server() {
+    let node_id = std::env::var("PORTALIS_NEXUS_NODE_ID").expect("a node id to dial");
+    let address = std::env::var("PORTALIS_NEXUS_ADDR").expect("an address to dial");
+    let endpoint =
+        portalis_nexus_client::EndpointAddr::new(node_id.parse().expect("a valid node id"))
+            .with_direct_addresses([address
+                .parse::<std::net::SocketAddr>()
+                .expect("a valid socket address")]);
+
+    let client = NexusClient::connect(&endpoint)
+        .await
+        .expect("connect to the running server");
+    let device = common::device(7);
+    let handle = format!("probe{}", std::process::id());
+    client
+        .register(&handle, &device)
+        .await
+        .expect("register a user");
+}

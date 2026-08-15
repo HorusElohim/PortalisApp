@@ -75,6 +75,10 @@ cat <<EOF
       cargo test -p portalis-nexus-client --test connection \\
       reaches_a_separately_launched_server -- --ignored
 
+  Devices arriving and leaving are logged. For every request as well:
+
+    RUST_LOG=info,portalis_nexus_server=debug tool/nexus_server.sh
+
   Ctrl-C to stop.
 
 EOF

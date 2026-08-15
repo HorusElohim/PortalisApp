@@ -10,10 +10,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use iroh::endpoint::{Connection, ConnectionType, RecvStream, SendStream};
 use portalis_nexus_protocol::{
     LENGTH_PREFIX_BYTES, MAX_OUTBOUND_QUEUE, decode_frame, format_id, frame_length, length_prefix,
-    payload_name,
+    payload_changes_state, payload_name,
 };
 use tokio::sync::{mpsc, watch};
-use tracing::{Instrument, debug, info_span, warn};
+use tracing::{Instrument, debug, info, info_span, warn};
 
 use crate::handlers::{departed, dispatch};
 use crate::messages::{binary_frame, hello_envelope, hello_payload};
@@ -64,13 +64,20 @@ pub async fn serve(connection: Connection, state: AppState, observed_ip: Option<
         let _ = outbound
             .send(binary_frame(&hello_envelope(hello, issued_at)))
             .await;
-        debug!("connection established");
+        // A device arriving and leaving is what a service is for, and the
+        // only thing that says one reached it at all. Individual requests
+        // stay at debug — one line each would bury this under its own
+        // traffic on anything busier than a test.
+        info!(
+            peer = observed_ip.map(tracing::field::display),
+            "device connected"
+        );
         read_inbound(receive, &outbound, &mut draining, &mut session, &state).await;
 
         departed(&session, &state, now_unix_ns()).await;
         drop(outbound);
         let _ = writer.await;
-        debug!("connection closed");
+        info!("device disconnected");
     }
     .instrument(span)
     .await;
@@ -116,7 +123,13 @@ async fn read_inbound(
             return;
         };
         let operation = payload_name(request.payload.as_ref());
-        debug!(operation, message_id = %format_id(&request.message_id), "request received");
+        let message_id = format_id(&request.message_id);
+        // What changed is worth saying; what was asked is worth keeping.
+        if payload_changes_state(request.payload.as_ref()) {
+            info!(operation, message_id = %message_id, "request received");
+        } else {
+            debug!(operation, message_id = %message_id, "request received");
+        }
 
         let response = dispatch(session, state, &request, now_unix_ns()).await;
         if outbound.send(binary_frame(&response)).await.is_err() {
