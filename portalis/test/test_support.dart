@@ -10,6 +10,7 @@ import 'package:portalis/features/settings/domain/engine.dart';
 import 'package:portalis/main.dart';
 import 'package:portalis/shell/navigation.dart';
 
+export 'package:portalis/nexus/domain/endpoint_config.dart';
 export 'dart:async' show unawaited;
 export 'package:flutter/material.dart';
 export 'package:flutter_test/flutter_test.dart';

@@ -65,6 +65,31 @@ void main() {
   });
 
   group('settings', () {
+    testWidgets('the Nexus service is configurable from the first screen',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 2400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      AppControllers.settings.debugSeed(buildEngineSettings());
+      await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('NEXUS SERVICE'), findsOneWidget);
+      expect(find.text('Connection'), findsOneWidget);
+      expect(
+        find.text('Not configured'),
+        findsOneWidget,
+        reason: 'nothing set up says so, rather than "ready to connect"',
+      );
+
+      // Opening it offers the local service, so running one on this machine
+      // is a single paste of its Node ID.
+      await tester.tap(find.text('Connection'));
+      await tester.pumpAndSettle();
+      expect(find.text(defaultDirectAddress), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('hides engine internals behind Network & engine',
         (tester) async {
       await tester.binding.setSurfaceSize(phoneSize);

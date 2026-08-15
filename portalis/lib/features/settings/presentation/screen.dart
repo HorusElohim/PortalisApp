@@ -185,8 +185,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _configureNexus() async {
     final current = _nexus.config;
     final nodeId = TextEditingController(text: current.nodeId ?? '');
-    final directAddress =
-        TextEditingController(text: current.directAddress ?? '');
+    // Opened with the local default, so setting up a service somebody is
+    // running on this machine is one paste rather than two.
+    final directAddress = TextEditingController(
+      text: current.directAddress ?? defaultDirectAddress,
+    );
     final next = await showDialog<EndpointConfig>(
       context: context,
       builder: (dialogContext) => AlertDialog(
