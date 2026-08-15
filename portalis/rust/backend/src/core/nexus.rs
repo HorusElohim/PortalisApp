@@ -666,6 +666,13 @@ impl Nexus {
                 },
             )
             .map_err(persistence)?;
+        // The projection has to say so too. Writing the pause and leaving the
+        // status alone left the interface offering Pause on something already
+        // paused — the button read as inverted because the state behind it
+        // and the state in front of it disagreed.
+        self.update_collection(collection, |collection| {
+            collection.status = Status::Paused;
+        })?;
         self.republish(collection, &key);
         Ok(())
     }
@@ -1150,6 +1157,15 @@ async fn publish_pending_collections(
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .handle(&key);
+                    // Publishing settles the revision, not the person's
+                    // decision about whether to transfer. A confirmed draft is
+                    // paused on purpose, and declaring it Available here made
+                    // the interface offer Pause on something already stopped.
+                    let paused = store
+                        .collection(&key)
+                        .ok()
+                        .flatten()
+                        .is_some_and(|stored| stored.paused);
                     if let Some(handle) = handle {
                         states.send_modify(|state| {
                             if let Some(projected) = state
@@ -1158,7 +1174,11 @@ async fn publish_pending_collections(
                                 .find(|projected| projected.id == handle)
                             {
                                 projected.revision = revision;
-                                projected.status = Status::Available;
+                                projected.status = if paused {
+                                    Status::Paused
+                                } else {
+                                    Status::Available
+                                };
                             }
                         });
                     }
@@ -1619,6 +1639,14 @@ mod tests {
         })
         .await
         .expect("publishes once confirmed");
+
+        // What the interface reads has to agree with what was stored, or the
+        // start/stop button offers the half that is already in force.
+        assert_eq!(
+            nexus.state().collections[0].status,
+            Status::Paused,
+            "confirmed and waiting to be started"
+        );
 
         // Confirming twice is a second tap on a button, not an error.
         nexus
@@ -2168,24 +2196,33 @@ mod tests {
             Status::Draft,
             "a new collection waits to be confirmed"
         );
+        // Read out before the call, not inside its arguments. A `borrow()`
+        // temporary lives to the end of the enclosing statement, so passing
+        // one as an argument holds the watch's read lock for the whole
+        // command — and the command publishes, which needs the write lock.
+        let collection = states.borrow().collections[0].id;
         nexus
-            .command(&Command::PublishDraft {
-                collection: states.borrow().collections[0].id,
-            })
+            .command(&Command::PublishDraft { collection })
             .expect("confirms the draft");
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
-                if states
-                    .borrow()
-                    .collections
-                    .first()
-                    .is_some_and(|collection| {
+                // Copied out before awaiting. `borrow()` holds the watch's
+                // read lock, and a lock held across an await blocks the
+                // publisher's own `send_modify` — a deadlock no timeout can
+                // cancel, because the block is on a std lock rather than on
+                // anything the runtime schedules. It turned a failing
+                // assertion into a hung suite: this test holds the serial
+                // state guard, so every other test waits behind it.
+                let settled = states.borrow().collections.first().is_some_and(
+                    |collection| {
                         // Published, and waiting to be started: confirming a
                         // draft finishes assembling it, which is not the same
                         // as saying "go now".
-                        collection.status == Status::Paused && collection.revision == 1
-                    })
-                {
+                        collection.status == Status::Paused
+                            && collection.revision == 1
+                    },
+                );
+                if settled {
                     break;
                 }
                 states.changed().await.expect("runtime remains open");

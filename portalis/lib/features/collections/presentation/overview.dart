@@ -21,10 +21,7 @@ class CollectionOverview extends StatelessWidget {
     this.showCommands = true,
     this.editing = false,
     this.paused = false,
-    this.level = CollectionDetailLevel.full,
     this.showTitle = true,
-    this.inlineHeader,
-    this.inlineStatus,
     required this.onInvite,
     required this.onAddMedia,
     required this.onFetch,
@@ -41,10 +38,7 @@ class CollectionOverview extends StatelessWidget {
 
   /// Which half of the start/stop pair the command bar offers.
   final bool paused;
-  final CollectionDetailLevel level;
   final bool showTitle;
-  final Widget? inlineHeader;
-  final Widget? inlineStatus;
   final VoidCallback onInvite;
   final VoidCallback onAddMedia;
   final VoidCallback onFetch;
@@ -85,13 +79,6 @@ class CollectionOverview extends StatelessWidget {
           ),
       ],
     );
-    final actionDock = CollectionActionDock(
-      busy: commandBusy,
-      onCommand: onCommand,
-      onInvite: collection.isShared ? onInvite : null,
-      onFetch: collection.pendingMedia > 0 ? onFetch : null,
-      pendingMedia: collection.pendingMedia,
-    );
     final hasTransfer = collection.totalBytes > 0 ||
         collection.downloadMbps > 0 ||
         collection.uploadMbps > 0 ||
@@ -99,7 +86,6 @@ class CollectionOverview extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (inlineHeader == null)
           _CollectionControls(
             collection: collection,
           ),
@@ -130,7 +116,7 @@ class CollectionOverview extends StatelessWidget {
           const SizedBox(height: 10),
           CollectionImportProgress(ingestion: ingestion),
         ],
-        if (inlineHeader != null || hasTransfer) ...[
+        if (hasTransfer) ...[
           const SizedBox(height: 10),
           TransferPanel(
             progress: collection.progress,
@@ -144,17 +130,14 @@ class CollectionOverview extends StatelessWidget {
             livePeers: collection.livePeers,
             etaLabel: collection.etaLabel,
             color: collection.hue,
-            leading: inlineHeader,
-            status: inlineStatus,
-            actions: inlineHeader != null && showCommands ? actionDock : null,
           ),
         ],
-        if (showCommands && inlineHeader == null) ...[
+        if (showCommands) ...[
           const SizedBox(height: 14),
           commandBar,
           const SizedBox(height: 12),
         ],
-        if (level == CollectionDetailLevel.full) ...[
+        ...[
           _CollectionIdentifiers(collection: collection),
           const SizedBox(height: 14),
           CollectionPeers(

@@ -33,10 +33,7 @@ class CollectionDetail extends StatefulWidget {
     required this.collection,
     required this.source,
     this.showCommands = true,
-    this.level = CollectionDetailLevel.full,
     this.showTitle = true,
-    this.inlineHeader,
-    this.inlineStatus,
   });
 
   final Collection collection;
@@ -46,16 +43,7 @@ class CollectionDetail extends StatefulWidget {
   /// default would be a quiet way to reintroduce a second.
   final CollectionSource source;
   final bool showCommands;
-
-  /// How much to show. Defaults to [CollectionDetailLevel.full] because most
-  /// callers (a standalone [CollectionScreen], the desktop pane) are already
-  /// a dedicated space for one collection — collapsing has nothing to save
-  /// there. Only an inline row in a list, which grows to hold this, has a
-  /// reason to ask for less.
-  final CollectionDetailLevel level;
   final bool showTitle;
-  final Widget? inlineHeader;
-  final Widget? inlineStatus;
 
   @override
   State<CollectionDetail> createState() => _CollectionDetailState();
@@ -425,10 +413,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
           history: widget.source.historyFor(collection.id),
           peerHistory: widget.source.peerHistoryFor(collection.id),
           showCommands: widget.showCommands,
-          level: widget.level,
           showTitle: widget.showTitle && !_isEditing,
-          inlineHeader: widget.inlineHeader,
-          inlineStatus: widget.inlineStatus,
           onInvite: _showInvite,
           onAddMedia: _addMedia,
           onFetch: _fetchPending,
@@ -442,7 +427,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
           ),
         // Files are the deepest layer — worth the extra tap they cost a
         // merely-mid row, the same trade the peers section makes.
-        if (widget.level == CollectionDetailLevel.full) ...[
+        ...[
           const SizedBox(height: 14),
           if (collection.media.isEmpty)
             Padding(

@@ -22,28 +22,12 @@ class CollectionRow extends StatefulWidget {
     required this.collection,
     required this.onTap,
     this.selected = false,
-    this.detail,
     this.onCommand,
   });
 
   final Collection collection;
   final VoidCallback onTap;
   final bool selected;
-
-  /// Built for whichever [CollectionDetailLevel] this row has cycled to, and
-  /// shown from [CollectionDetailLevel.mid] on. The builder also receives the
-  /// row identity so expanded detail can compose it into one horizontal live
-  /// header rather than stacking another section underneath it. Where a
-  /// window is wide enough, opening a collection means this card growing to
-  /// hold it — not a second panel beside the list describing the same thing
-  /// twice. `null` where there is nowhere to grow into (the compact list,
-  /// which pushes a separate screen instead) — the row then keeps its older,
-  /// simpler behaviour: a plain tap, and the command bar always showing.
-  final Widget Function(
-    CollectionDetailLevel level,
-    Widget inlineHeader,
-    Widget inlineStatus,
-  )? detail;
   final ValueChanged<CollectionCommand>? onCommand;
 
   @override
@@ -51,49 +35,14 @@ class CollectionRow extends StatefulWidget {
 }
 
 class _CollectionRowState extends State<CollectionRow> {
-  CollectionDetailLevel _level = CollectionDetailLevel.collapsed;
-
-  @override
-  void didUpdateWidget(CollectionRow oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // The list keeps at most one collection open at a time; when this row
-    // is no longer the open one (another was tapped, or this one was), its
-    // own notion of how far it had grown is stale.
-    if (!widget.selected) _level = CollectionDetailLevel.collapsed;
-  }
-
-  void _handleTap() {
-    if (widget.detail == null) {
-      widget.onTap();
-      return;
-    }
-    // Collapsed -> mid and full -> collapsed cross the accordion's own
-    // open/closed boundary, so the parent needs to hear about those; the
-    // middle step (mid -> full) is purely how much of an already-open row
-    // is showing, which this row can decide entirely on its own.
-    switch (_level) {
-      case CollectionDetailLevel.collapsed:
-        setState(() => _level = CollectionDetailLevel.mid);
-        widget.onTap();
-      case CollectionDetailLevel.mid:
-        setState(() => _level = CollectionDetailLevel.full);
-      case CollectionDetailLevel.full:
-        widget.onTap();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final collection = widget.collection;
     final torrent = !collection.isShared;
     final accent = torrent ? AppColors.ember : AppColors.signal;
-    final showsExtras =
-        widget.detail == null || _level != CollectionDetailLevel.collapsed;
-    final detailsOpen =
-        widget.detail != null && _level != CollectionDetailLevel.collapsed;
 
     return SurfaceCard(
-      onTap: _handleTap,
+      onTap: widget.onTap,
       // Energy by what it is genuinely doing: transferring glows brightest,
       // shared-and-standing-by glows calmly, everything else not at all. The
       // wash that separates a live row from the settled ones comes with it —
@@ -107,22 +56,18 @@ class _CollectionRowState extends State<CollectionRow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!detailsOpen) _row(),
-          if (widget.onCommand != null &&
-              widget.detail == null &&
-              showsExtras) ...[
+          _row(),
+          if (widget.onCommand != null) ...[
             const SizedBox(height: 12),
             CollectionCommandBar(
               onCommand: widget.onCommand!,
               busy: false,
+              paused: collection.isPaused,
+              // A row opens the collection to edit it; there is nowhere here
+              // to put a name field.
+              showEdit: false,
             ),
           ],
-          if (detailsOpen)
-            widget.detail!(
-              _level,
-              _row(showStatus: false),
-              _status(),
-            ),
         ],
       ),
     );
@@ -137,17 +82,7 @@ class _CollectionRowState extends State<CollectionRow> {
     // No metadata has arrived, so there is no total to measure against — an
     // indeterminate bar is the honest shape for "reaching out to a peer".
     final connecting = collection.isConnecting;
-    final detailsOpen =
-        widget.detail != null && _level != CollectionDetailLevel.collapsed;
-    final itemCount = collection.media.length;
-    final admins =
-        collection.collaborators.where((item) => item.isAdmin).length;
-    final subtitle = detailsOpen
-        ? [
-            '$itemCount item${itemCount == 1 ? '' : 's'}',
-            if (admins > 0) '$admins admin${admins == 1 ? '' : 's'}',
-          ].join(' · ')
-        : collection.subtitle;
+    final subtitle = collection.subtitle;
     return Row(
       children: [
         SizedBox(
@@ -186,7 +121,7 @@ class _CollectionRowState extends State<CollectionRow> {
                 overflow: TextOverflow.ellipsis,
                 style: monoLabel(size: 11, letterSpacing: 0.2),
               ),
-              if ((downloading || connecting) && !detailsOpen) ...[
+              if (downloading || connecting) ...[
                 const SizedBox(height: 9),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -213,13 +148,9 @@ class _CollectionRowState extends State<CollectionRow> {
   Widget _status() {
     final collection = widget.collection;
     final accent = collection.isShared ? AppColors.signal : AppColors.ember;
-    final detailsOpen =
-        widget.detail != null && _level != CollectionDetailLevel.collapsed;
     if (collection.state == 'downloading') {
       return StatusBadge(
-        label: detailsOpen
-            ? 'DOWNLOADING'
-            : formatProgressPercent(collection.progress),
+        label: formatProgressPercent(collection.progress),
         color: accent,
       );
     }
