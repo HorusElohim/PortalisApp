@@ -50,7 +50,6 @@ void main() {
         ),
       ],
       pieces: Uint8List(0),
-      samples: Uint8List(0),
       peers: const [],
     );
 
@@ -100,7 +99,6 @@ void main() {
           ),
         ],
         pieces: Uint8List(0),
-        samples: Uint8List(0),
         peers: const [],
       ),
     );
@@ -148,7 +146,6 @@ void main() {
           ),
         ],
         pieces: Uint8List(0),
-        samples: Uint8List(0),
         peers: const [],
       ),
     );
@@ -191,7 +188,6 @@ void main() {
           ),
         ],
         pieces: Uint8List(0),
-        samples: Uint8List(0),
         peers: const [],
       ),
     );
@@ -577,6 +573,7 @@ AppSnapshot _torrentState({String status = 'Downloading'}) => AppSnapshot(
 class _Repository implements AppRepository {
   final states = StreamController<AppSnapshot>.broadcast();
   final details = StreamController<AppDetail?>.broadcast();
+  final history = StreamController<Uint8List>.broadcast();
   final active = <bool>[];
   final detailCollections = <int?>[];
   final commands = <EngineCommand>[];
@@ -600,6 +597,7 @@ class _Repository implements AppRepository {
     stops++;
     await states.close();
     await details.close();
+    await history.close();
   }
 
   @override
@@ -607,6 +605,9 @@ class _Repository implements AppRepository {
     detailCollections.add(collection);
     return details.stream;
   }
+
+  @override
+  Stream<Uint8List> watchHistory(int collection) => history.stream;
 
   @override
   Stream<AppSnapshot> watchStates() => states.stream;

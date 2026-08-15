@@ -91,7 +91,6 @@ Collection buildCollection({
             id: id,
             entries: entries,
             pieces: Uint8List(0),
-            samples: Uint8List(0),
             peers: torrentPeers,
           ),
     contacts: contacts,

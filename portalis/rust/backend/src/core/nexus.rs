@@ -234,7 +234,6 @@ impl DetailSources {
                 })
                 .collect(),
             pieces: held.as_ref().map(pieces_of).unwrap_or_default(),
-            samples: recorded_samples(&self.store, &key),
             peers: held.map(|info| info.live_peer_addrs).unwrap_or_default(),
         })
     }
@@ -530,6 +529,19 @@ impl Nexus {
     ///
     /// The expensive tier costs nothing until this is called, and stops
     /// costing anything the moment it is called with `None`.
+    /// This collection's readings after `at`, packed, with the newest moment
+    /// they reach — or `None` when there is nothing newer.
+    ///
+    /// Answering "what do I not have yet?" rather than "what is there?" is
+    /// what keeps an append costing an append. See `portalis_api::watch_history`.
+    #[must_use]
+    pub fn history_after(&self, collection: Handle, at: u64) -> Option<(u64, Vec<u8>)> {
+        let key = self.collections.lock().ok()?.key(collection)?.to_owned();
+        let rows = self.store.samples_after(&key, at).ok()?;
+        let newest = rows.last()?.0;
+        Some((newest, packed_samples(rows)))
+    }
+
     pub fn watch_detail(&self, collection: Option<Handle>) -> watch::Receiver<Option<Detail>> {
         self.projector
             .lock()
@@ -1327,10 +1339,14 @@ async fn publish_collection_sources(
 /// Empty rather than absent when the history cannot be read: a chart with no
 /// points is a truthful "nothing recorded yet", and refusing the whole detail
 /// tier over it would blank a screen that has plenty else to show.
-fn recorded_samples(store: &Store, key: &[u8]) -> Vec<u8> {
-    store
-        .samples(key)
-        .map(|samples| {
+/// Packs readings for the wire, oldest first.
+///
+/// Only ever called with what a subscriber does not already hold — the
+/// history grows at the end, so re-sending the whole ring to append one row
+/// was thirty kilobytes a second for a screen already showing all of it.
+pub fn packed_samples(samples: Vec<(u64, crate::store::records::StoredSample)>) -> Vec<u8> {
+    {
+        {
             let mut packed = Vec::with_capacity(samples.len() * SAMPLE_ROW_BYTES);
             for (at_unix_ns, sample) in samples {
                 packed.extend_from_slice(&at_unix_ns.to_be_bytes());
@@ -1339,8 +1355,8 @@ fn recorded_samples(store: &Store, key: &[u8]) -> Vec<u8> {
                 packed.extend_from_slice(&progress_permille(&sample).to_be_bytes());
             }
             packed
-        })
-        .unwrap_or_default()
+        }
+    }
 }
 
 /// One packed history row: `at_unix_ns ‖ down ‖ up ‖ progress`.
@@ -1977,7 +1993,7 @@ mod tests {
         let key = nexus.collection_key(collection).expect("known");
 
         assert!(
-            recorded_samples(&nexus.store, &key).is_empty(),
+            nexus.history_after(collection, 0).is_none(),
             "nothing recorded yet is an empty chart, not a missing one"
         );
 
@@ -1988,7 +2004,8 @@ mod tests {
                 .expect("records");
         }
 
-        let packed = recorded_samples(&nexus.store, &key);
+        let (newest, packed) = nexus.history_after(collection, 0).expect("two readings");
+        assert_eq!(newest, 20, "the moment a subscriber has now reached");
         assert_eq!(packed.len(), 2 * SAMPLE_ROW_BYTES);
         // The newest row last, and carrying what it was told.
         let last = &packed[SAMPLE_ROW_BYTES..];
@@ -1996,6 +2013,10 @@ mod tests {
         assert_eq!(u32::from_be_bytes(last[8..12].try_into().unwrap()), 1);
         assert_eq!(u32::from_be_bytes(last[12..16].try_into().unwrap()), 2);
         assert_eq!(u16::from_be_bytes(last[16..18].try_into().unwrap()), 500);
+
+        // Asked again from where it got to, there is nothing to say — which
+        // is the whole point: an append costs an append, not a resend.
+        assert!(nexus.history_after(collection, newest).is_none());
         nexus.close().await;
     }
 
@@ -2377,7 +2398,6 @@ mod tests {
             id: Handle(1),
             entries: Vec::new(),
             pieces: vec![0xff; 8],
-            samples: Vec::new(),
             peers: Vec::new(),
         };
 

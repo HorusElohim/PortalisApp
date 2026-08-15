@@ -39,6 +39,26 @@ Stream<AppSnapshot> watchStates() =>
 Stream<AppDetail?> watchDetail({int? collection}) =>
     RustLib.instance.api.cratePortalisApiWatchDetail(collection: collection);
 
+/// One collection's transfer history, as it happens.
+///
+/// Its own stream rather than a field of the detail, because it changes for a
+/// different reason and at a different rate than everything else there. The
+/// detail describes what a collection *is* right now — its files, its verified
+/// pieces, who it is talking to — and all of that is replaced wholesale when
+/// any of it moves. The history only ever grows at the end.
+///
+/// Carrying it inside the detail meant appending one eighteen-byte reading
+/// re-read the entire ring from the store, re-packed up to thirty kilobytes,
+/// and marshalled all of it across the bridge — once a second, for a screen
+/// that was already showing every row of it.
+///
+/// The cursor lives here, in the loop, because it belongs to one subscriber
+/// rather than to the collection: two screens watching the same collection
+/// have each seen a different amount of it. The first message carries
+/// everything; each one after carries only what arrived since.
+Stream<Uint8List> watchHistory({required int collection}) =>
+    RustLib.instance.api.cratePortalisApiWatchHistory(collection: collection);
+
 /// What is on disk under the download directory, resolved against Nexus.
 ///
 /// Ownership is decided by the substrate handle a collection recorded when
@@ -291,9 +311,6 @@ class AppDetail {
   final List<AppEntry> entries;
   final Uint8List pieces;
 
-  /// Fixed-width history rows; see `core::nexus::SAMPLE_ROW_BYTES`.
-  final Uint8List samples;
-
   /// Swarm addresses, which are not contacts. See `Detail::peers`.
   final List<String> peers;
 
@@ -301,17 +318,12 @@ class AppDetail {
     required this.id,
     required this.entries,
     required this.pieces,
-    required this.samples,
     required this.peers,
   });
 
   @override
   int get hashCode =>
-      id.hashCode ^
-      entries.hashCode ^
-      pieces.hashCode ^
-      samples.hashCode ^
-      peers.hashCode;
+      id.hashCode ^ entries.hashCode ^ pieces.hashCode ^ peers.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -321,7 +333,6 @@ class AppDetail {
           id == other.id &&
           entries == other.entries &&
           pieces == other.pieces &&
-          samples == other.samples &&
           peers == other.peers;
 }
 

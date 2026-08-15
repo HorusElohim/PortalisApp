@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../bridge/portalis_api.dart' as bridge;
 import '../domain/app_state.dart';
 
@@ -14,6 +16,14 @@ abstract interface class AppRepository {
   Future<void> setActive(bool active);
   Stream<AppSnapshot> watchStates();
   Stream<AppDetail?> watchDetail(int? collection);
+
+  /// One collection's readings, as they are recorded.
+  ///
+  /// Arrives as the rows a subscriber has not seen yet, not as the whole ring
+  /// — the history only grows at the end, and re-sending all of it to append
+  /// one row was thirty kilobytes a second for a screen already showing it.
+  /// Whoever subscribes accumulates.
+  Stream<Uint8List> watchHistory(int collection);
   Future<AppAccepted> send(EngineCommand command);
 }
 
@@ -35,6 +45,10 @@ class FrbAppRepository implements AppRepository {
   @override
   Stream<AppDetail?> watchDetail(int? collection) =>
       bridge.watchDetail(collection: collection);
+
+  @override
+  Stream<Uint8List> watchHistory(int collection) =>
+      bridge.watchHistory(collection: collection);
 
   @override
   Future<AppAccepted> send(EngineCommand command) =>

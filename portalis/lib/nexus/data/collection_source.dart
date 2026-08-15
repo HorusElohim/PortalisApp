@@ -64,13 +64,23 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
       _detail = detail;
       notifyListeners();
     });
+    // The history arrives as what has not been seen yet, so this accumulates
+    // rather than replaces. Decoded once here, on arrival — reading it used to
+    // walk every row of the ring, and a frame reads it several times.
+    _historySubscription =
+        controller.watchHistory(collectionId).listen((packed) {
+      _readings.addAll(decodeReadings(packed));
+      notifyListeners();
+    });
   }
 
   final AppController controller;
   final int collectionId;
 
   AppDetail? _detail;
+  final List<Reading> _readings = [];
   late final StreamSubscription<AppDetail?> _detailSubscription;
+  late final StreamSubscription<Uint8List> _historySubscription;
 
   @override
   Listenable get listenable => this;
@@ -87,11 +97,15 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
       collection: collection,
       detail: _detail,
       contacts: controller.state?.contacts ?? const [],
+      lastReading: lastReading,
     );
   }
 
   @override
-  TransferHistory? historyFor(String id) => transferHistory(_detail);
+  TransferHistory? historyFor(String id) => transferHistory(_readings);
+
+  /// The newest reading, for a collection with nothing live to report.
+  Reading? get lastReading => _readings.isEmpty ? null : _readings.last;
 
   @override
   List<PeerObservation> peerHistoryFor(String id) {
@@ -181,6 +195,7 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
   void dispose() {
     controller.removeListener(notifyListeners);
     unawaited(_detailSubscription.cancel());
+    unawaited(_historySubscription.cancel());
     super.dispose();
   }
 }

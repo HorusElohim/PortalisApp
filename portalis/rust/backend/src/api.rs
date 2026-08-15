@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1225709876;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -722282663;
 
 // Section: executor
 
@@ -847,6 +847,47 @@ fn wire__crate__portalis_api__watch_detail_impl(
         },
     )
 }
+fn wire__crate__portalis_api__watch_history_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "watch_history",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_collection = <u32>::sse_decode(&mut deserializer);
+            let api_sink =
+                <StreamSink<Vec<u8>, flutter_rust_bridge::for_generated::SseCodec>>::sse_decode(
+                    &mut deserializer,
+                );
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok =
+                            crate::portalis_api::watch_history(api_collection, api_sink).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__portalis_api__watch_states_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -900,6 +941,14 @@ impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
 impl SseDecode
     for StreamSink<crate::portalis_api::AppSnapshot, flutter_rust_bridge::for_generated::SseCodec>
 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
+
+impl SseDecode for StreamSink<Vec<u8>, flutter_rust_bridge::for_generated::SseCodec> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut inner = <String>::sse_decode(deserializer);
@@ -1046,13 +1095,11 @@ impl SseDecode for crate::portalis_api::AppDetail {
         let mut var_id = <u32>::sse_decode(deserializer);
         let mut var_entries = <Vec<crate::portalis_api::AppEntry>>::sse_decode(deserializer);
         let mut var_pieces = <Vec<u8>>::sse_decode(deserializer);
-        let mut var_samples = <Vec<u8>>::sse_decode(deserializer);
         let mut var_peers = <Vec<String>>::sse_decode(deserializer);
         return crate::portalis_api::AppDetail {
             id: var_id,
             entries: var_entries,
             pieces: var_pieces,
-            samples: var_samples,
             peers: var_peers,
         };
     }
@@ -1666,7 +1713,8 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         23 => wire__crate__portalis_api__watch_detail_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__portalis_api__watch_states_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__portalis_api__watch_history_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__portalis_api__watch_states_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1809,7 +1857,6 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppDetail {
             self.id.into_into_dart().into_dart(),
             self.entries.into_into_dart().into_dart(),
             self.pieces.into_into_dart().into_dart(),
-            self.samples.into_into_dart().into_dart(),
             self.peers.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -2173,6 +2220,13 @@ impl SseEncode
     }
 }
 
+impl SseEncode for StreamSink<Vec<u8>, flutter_rust_bridge::for_generated::SseCodec> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
+    }
+}
+
 impl SseEncode
     for StreamSink<
         Option<crate::portalis_api::AppDetail>,
@@ -2262,7 +2316,6 @@ impl SseEncode for crate::portalis_api::AppDetail {
         <u32>::sse_encode(self.id, serializer);
         <Vec<crate::portalis_api::AppEntry>>::sse_encode(self.entries, serializer);
         <Vec<u8>>::sse_encode(self.pieces, serializer);
-        <Vec<u8>>::sse_encode(self.samples, serializer);
         <Vec<String>>::sse_encode(self.peers, serializer);
     }
 }

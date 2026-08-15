@@ -31,6 +31,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       dynamic raw);
 
   @protected
+  RustStreamSink<Uint8List> dco_decode_StreamSink_list_prim_u_8_strict_Sse(
+      dynamic raw);
+
+  @protected
   RustStreamSink<AppDetail?>
       dco_decode_StreamSink_opt_box_autoadd_app_detail_Sse(dynamic raw);
 
@@ -210,6 +214,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RustStreamSink<AppSnapshot> sse_decode_StreamSink_app_snapshot_Sse(
+      SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<Uint8List> sse_decode_StreamSink_list_prim_u_8_strict_Sse(
       SseDeserializer deserializer);
 
   @protected
@@ -408,6 +416,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_StreamSink_app_snapshot_Sse(
       RustStreamSink<AppSnapshot> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_StreamSink_list_prim_u_8_strict_Sse(
+      RustStreamSink<Uint8List> self, SseSerializer serializer);
 
   @protected
   void sse_encode_StreamSink_opt_box_autoadd_app_detail_Sse(

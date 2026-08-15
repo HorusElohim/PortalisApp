@@ -93,8 +93,6 @@ pub struct AppDetail {
     pub id: u32,
     pub entries: Vec<AppEntry>,
     pub pieces: Vec<u8>,
-    /// Fixed-width history rows; see `core::nexus::SAMPLE_ROW_BYTES`.
-    pub samples: Vec<u8>,
     /// Swarm addresses, which are not contacts. See `Detail::peers`.
     pub peers: Vec<String>,
 }
@@ -250,6 +248,50 @@ pub async fn watch_detail(
         if detail.changed().await.is_err() {
             return Ok(());
         }
+    }
+}
+
+/// One collection's transfer history, as it happens.
+///
+/// Its own stream rather than a field of the detail, because it changes for a
+/// different reason and at a different rate than everything else there. The
+/// detail describes what a collection *is* right now — its files, its verified
+/// pieces, who it is talking to — and all of that is replaced wholesale when
+/// any of it moves. The history only ever grows at the end.
+///
+/// Carrying it inside the detail meant appending one eighteen-byte reading
+/// re-read the entire ring from the store, re-packed up to thirty kilobytes,
+/// and marshalled all of it across the bridge — once a second, for a screen
+/// that was already showing every row of it.
+///
+/// The cursor lives here, in the loop, because it belongs to one subscriber
+/// rather than to the collection: two screens watching the same collection
+/// have each seen a different amount of it. The first message carries
+/// everything; each one after carries only what arrived since.
+pub async fn watch_history(collection: u32, sink: StreamSink<Vec<u8>>) -> Result<(), String> {
+    let handle = Handle(collection);
+    let mut held_through = 0_u64;
+    loop {
+        let rows = {
+            let runtime = locked_runtime()?;
+            let nexus = runtime
+                .as_ref()
+                .ok_or_else(|| "start Nexus before subscribing to history".to_owned())?;
+            nexus.history_after(handle, held_through)
+        };
+
+        // Nothing new is the ordinary case once a transfer settles, and it
+        // costs one range scan that returns immediately. Saying nothing is
+        // cheaper than saying the same thing again.
+        if let Some((newest, packed)) = rows {
+            held_through = newest;
+            // A closed sink is how a subscription ends, not a failure to
+            // report: the screen went away.
+            if sink.add(packed).is_err() {
+                return Ok(());
+            }
+        }
+        tokio::time::sleep(crate::core::transfers::POLL_INTERVAL).await;
     }
 }
 
@@ -524,7 +566,6 @@ fn detail_projection(detail: &Detail) -> AppDetail {
             })
             .collect(),
         pieces: detail.pieces.clone(),
-        samples: detail.samples.clone(),
         peers: detail.peers.clone(),
     }
 }

@@ -20,11 +20,19 @@ import '../../media/domain/item.dart';
 /// absent, [media] is empty rather than invented, and the counts come from the
 /// snapshot, which knows them without it.
 class Collection {
-  const Collection(this.source, {this.detail, this.contacts = const []});
+  const Collection(
+    this.source, {
+    this.detail,
+    this.contacts = const [],
+    this.lastReading,
+  });
 
   final AppCollection source;
   final AppDetail? detail;
   final List<AppContact> contacts;
+
+  /// The newest recorded reading, where something is accumulating them.
+  final Reading? lastReading;
 
   /// The process-local handle. `AppCollection` carries no durable public
   /// identifier yet, and inventing one here would be worse than showing the
@@ -66,7 +74,8 @@ class Collection {
   /// Zero to one. The engine's own reading while a transfer is live, and the
   /// recorded history's last reading once it is not — never an arithmetic
   /// guess of this interface's own.
-  double get progress => source.transfer?.progress ?? detail?.progress ?? 0;
+  double get progress =>
+      source.transfer?.progress ?? lastReading?.progress ?? 0;
 
   double get downloadMbps => _megabits(source.transfer?.downBytesPerSecond ?? 0);
   double get uploadMbps => _megabits(source.transfer?.upBytesPerSecond ?? 0);

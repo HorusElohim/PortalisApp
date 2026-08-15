@@ -20,6 +20,7 @@ class AppController extends ChangeNotifier {
 
   AppSnapshot? _state;
   Stream<AppDetail?>? _debugDetails;
+  Stream<Uint8List>? _debugHistory;
   AppSnapshot? get state => _state;
 
   /// What the engine is doing, derived from the one state this controller
@@ -94,6 +95,10 @@ class AppController extends ChangeNotifier {
   Stream<AppDetail?> watchDetail(int? collection) =>
       _debugDetails ?? _repository.watchDetail(collection);
 
+  /// The readings a subscriber has not seen yet — see [AppRepository].
+  Stream<Uint8List> watchHistory(int collection) =>
+      _debugHistory ?? _repository.watchHistory(collection);
+
   /// Seeds the projection for widgets that exercise app composition without a
   /// native runtime. Production state always arrives through [watchStates].
   @visibleForTesting
@@ -101,10 +106,15 @@ class AppController extends ChangeNotifier {
     AppSnapshot? state, {
     String? error,
     Stream<AppDetail?>? details,
+    Stream<Uint8List>? history,
   }) {
     _state = state;
     lastError = error;
     _debugDetails = details;
+    // Seeded means offline: a controller standing in for the runtime must not
+    // reach the bridge for anything, or a widget test discovers the native
+    // library is missing at the moment something happens to subscribe.
+    _debugHistory = history ?? const Stream<Uint8List>.empty();
     notifyListeners();
   }
 

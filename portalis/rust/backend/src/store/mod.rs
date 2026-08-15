@@ -607,6 +607,38 @@ impl Store {
         Ok(samples)
     }
 
+    /// A collection's readings after `at`, oldest first.
+    ///
+    /// The history only ever grows at the end, so a subscriber that already
+    /// holds everything up to a moment needs only what came after it. Sending
+    /// the whole ring to append one row meant thirty kilobytes crossing the
+    /// bridge every second for a screen that was already showing all of it.
+    ///
+    /// Exclusive of `at`, so passing back the newest moment already held asks
+    /// exactly the right question: "what do I not have yet?"
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the read fails or a row does not decode.
+    pub fn samples_after(
+        &self,
+        collection_id: &[u8],
+        at: u64,
+    ) -> Result<Vec<(u64, StoredSample)>, StoreError> {
+        let (_, high) = schema::range_of(collection_id);
+        // One past the moment held, which is where a range starting at the
+        // next representable key begins.
+        let low = schema::keyed(collection_id, at.saturating_add(1));
+        let read = self.database.begin_read()?;
+        let table = read.open_table(SAMPLES)?;
+        let mut samples = Vec::new();
+        for row in table.range(low.as_slice()..=high.as_slice())? {
+            let (key, value) = row?;
+            let moment = schema::number_of(key.value()).ok_or(StoreError::Malformed)?;
+            samples.push((moment, StoredSample::decode(value.value())?));
+        }
+        Ok(samples)
+    }
+
     /// Trims a collection's history to its newest `keep` readings.
     ///
     /// The history is a ring: it exists to draw a graph of the recent past,
@@ -870,6 +902,41 @@ mod tests {
             Some(collection("from before")),
             "and nothing was lost bringing it forward"
         );
+    }
+
+    /// The history only ever grows at the end, so a subscriber that has it all
+    /// up to a moment needs only what came after — which is what stops the
+    /// whole ring crossing the bridge once a second to append one row.
+    #[test]
+    fn a_history_answers_only_what_came_after_the_moment_asked_about() {
+        let scratch = Scratch::new("samples-after");
+        let store = Store::open(scratch.file()).expect("opens");
+
+        for at in [10_u64, 20, 30] {
+            store
+                .put_sample(&COLLECTION, at, &sample(at))
+                .expect("writes");
+        }
+        store.put_sample(&OTHER, 20, &sample(99)).expect("writes");
+
+        // Nothing held yet: everything, in order.
+        let all = store.samples_after(&COLLECTION, 0).expect("reads");
+        assert_eq!(
+            all.iter().map(|(at, _)| *at).collect::<Vec<_>>(),
+            [10, 20, 30]
+        );
+
+        // Exclusive of the moment held, so re-asking with the newest one
+        // already seen returns nothing rather than repeating it.
+        let after = store.samples_after(&COLLECTION, 20).expect("reads");
+        assert_eq!(after.iter().map(|(at, _)| *at).collect::<Vec<_>>(), [30]);
+        assert!(store
+            .samples_after(&COLLECTION, 30)
+            .expect("reads")
+            .is_empty());
+
+        // And a neighbour's readings are not somebody else's news.
+        assert_eq!(store.samples_after(&OTHER, 0).expect("reads").len(), 1);
     }
 
     /// Keys are sequential and reused, so anything left under a forgotten

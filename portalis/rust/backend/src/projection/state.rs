@@ -299,8 +299,6 @@ pub struct Detail {
     pub entries: Vec<EntryState>,
     /// One bit per piece, packed.
     pub pieces: Vec<u8>,
-    /// Fixed-width `(t, down, up, progress)` rows.
-    pub samples: Vec<u8>,
     /// Who this collection is currently moving with, as `ip:port`.
     ///
     /// Addresses and nothing else, deliberately. A swarm peer carries no

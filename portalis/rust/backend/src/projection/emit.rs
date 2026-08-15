@@ -55,9 +55,10 @@ impl Emission {
         let structure = self.state.as_ref().map_or(0, |state| {
             state.collections.len() * 96 + state.contacts.len() * 96 + state.alerts.len() * 16
         });
-        let detail = self.detail.as_ref().map_or(0, |detail| {
-            detail.entries.len() * 64 + detail.pieces.len() + detail.samples.len()
-        });
+        let detail = self
+            .detail
+            .as_ref()
+            .map_or(0, |detail| detail.entries.len() * 64 + detail.pieces.len());
         structure + detail
     }
 }
@@ -242,7 +243,6 @@ mod tests {
             id: COLLECTION,
             entries: Vec::new(),
             pieces: vec![pieces; 4],
-            samples: Vec::new(),
             peers: Vec::new(),
         }
     }

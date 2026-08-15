@@ -73,7 +73,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1225709876;
+  int get rustContentHash => -722282663;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -136,6 +136,8 @@ abstract class RustLibApi extends BaseApi {
       {required TorrentInfo that});
 
   Stream<AppDetail?> cratePortalisApiWatchDetail({int? collection});
+
+  Stream<Uint8List> cratePortalisApiWatchHistory({required int collection});
 
   Stream<AppSnapshot> cratePortalisApiWatchStates();
 }
@@ -712,6 +714,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Stream<Uint8List> cratePortalisApiWatchHistory({required int collection}) {
+    final sink = RustStreamSink<Uint8List>();
+    unawaited(handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_u_32(collection, serializer);
+        sse_encode_StreamSink_list_prim_u_8_strict_Sse(sink, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 24, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCratePortalisApiWatchHistoryConstMeta,
+      argValues: [collection, sink],
+      apiImpl: this,
+    )));
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCratePortalisApiWatchHistoryConstMeta =>
+      const TaskConstMeta(
+        debugName: "watch_history",
+        argNames: ["collection", "sink"],
+      );
+
+  @override
   Stream<AppSnapshot> cratePortalisApiWatchStates() {
     final sink = RustStreamSink<AppSnapshot>();
     unawaited(handler.executeNormal(NormalTask(
@@ -719,7 +749,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_StreamSink_app_snapshot_Sse(sink, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 24, port: port_);
+            funcId: 25, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -746,6 +776,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   RustStreamSink<AppSnapshot> dco_decode_StreamSink_app_snapshot_Sse(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
+  }
+
+  @protected
+  RustStreamSink<Uint8List> dco_decode_StreamSink_list_prim_u_8_strict_Sse(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     throw UnimplementedError();
@@ -848,14 +885,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppDetail dco_decode_app_detail(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return AppDetail(
       id: dco_decode_u_32(arr[0]),
       entries: dco_decode_list_app_entry(arr[1]),
       pieces: dco_decode_list_prim_u_8_strict(arr[2]),
-      samples: dco_decode_list_prim_u_8_strict(arr[3]),
-      peers: dco_decode_list_String(arr[4]),
+      peers: dco_decode_list_String(arr[3]),
     );
   }
 
@@ -1314,6 +1350,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RustStreamSink<Uint8List> sse_decode_StreamSink_list_prim_u_8_strict_Sse(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
+  }
+
+  @protected
   RustStreamSink<AppDetail?>
       sse_decode_StreamSink_opt_box_autoadd_app_detail_Sse(
           SseDeserializer deserializer) {
@@ -1436,14 +1479,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_id = sse_decode_u_32(deserializer);
     var var_entries = sse_decode_list_app_entry(deserializer);
     var var_pieces = sse_decode_list_prim_u_8_strict(deserializer);
-    var var_samples = sse_decode_list_prim_u_8_strict(deserializer);
     var var_peers = sse_decode_list_String(deserializer);
     return AppDetail(
-        id: var_id,
-        entries: var_entries,
-        pieces: var_pieces,
-        samples: var_samples,
-        peers: var_peers);
+        id: var_id, entries: var_entries, pieces: var_pieces, peers: var_peers);
   }
 
   @protected
@@ -2034,6 +2072,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_StreamSink_list_prim_u_8_strict_Sse(
+      RustStreamSink<Uint8List> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+        self.setupAndSerialize(
+            codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_AnyhowException,
+        )),
+        serializer);
+  }
+
+  @protected
   void sse_encode_StreamSink_opt_box_autoadd_app_detail_Sse(
       RustStreamSink<AppDetail?> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2118,7 +2169,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.id, serializer);
     sse_encode_list_app_entry(self.entries, serializer);
     sse_encode_list_prim_u_8_strict(self.pieces, serializer);
-    sse_encode_list_prim_u_8_strict(self.samples, serializer);
     sse_encode_list_String(self.peers, serializer);
   }
 

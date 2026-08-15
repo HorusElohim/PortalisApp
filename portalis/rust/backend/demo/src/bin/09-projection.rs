@@ -103,10 +103,9 @@ fn main() {
     projector.watch_detail(Some(handles.of(COLLECTION)));
     let watched = projector.tick(&forked, Some(&detail), Duration::from_secs(4));
     println!(
-        "  a view opens  → {} bytes ({} pieces, {} sample rows)",
+        "  a view opens  → {} bytes ({} pieces)",
         watched.size(),
-        detail.pieces.len() * 8,
-        detail.samples.len() / 16
+        detail.pieces.len() * 8
     );
     let again = projector.tick(&forked, Some(&detail), Duration::from_secs(5));
     println!("  unchanged     → {} bytes", again.size());
@@ -249,7 +248,6 @@ fn detail(id: Handle) -> backend::projection::state::Detail {
         // 8 192 pieces, one bit each.
         pieces: vec![0b1010_1010; 1_024],
         // 60 rows of packed (t, down, up, progress).
-        samples: vec![0; 60 * 16],
         peers: vec!["10.0.0.1:6881".to_owned(), "10.0.0.2:6881".to_owned()],
     }
 }

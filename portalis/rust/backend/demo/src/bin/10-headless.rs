@@ -114,9 +114,10 @@ async fn main() -> anyhow::Result<()> {
     );
     let held = details.borrow_and_update().clone();
     println!(
-        "  a view opens  → {} pieces, {} sample rows",
-        held.as_ref().map_or(0, |detail| detail.pieces.len() * 8),
-        held.as_ref().map_or(0, |detail| detail.samples.len() / 16)
+        // History is its own stream now — the detail describes what a
+        // collection is, and only that.
+        "  a view opens  → {} pieces",
+        held.as_ref().map_or(0, |detail| detail.pieces.len() * 8)
     );
     nexus.watch_detail(None);
     println!(
@@ -210,7 +211,6 @@ fn detail(id: Handle) -> Detail {
         id,
         entries: Vec::new(),
         pieces: vec![0b1010_1010; 1_024],
-        samples: vec![0; 60 * 16],
         peers: vec!["10.0.0.1:6881".to_owned(), "10.0.0.2:6881".to_owned()],
     }
 }

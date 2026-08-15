@@ -11,15 +11,20 @@ Collection collectionView({
   required AppCollection collection,
   required AppDetail? detail,
   required List<AppContact> contacts,
+  Reading? lastReading,
 }) =>
-    Collection(collection, detail: detail, contacts: contacts);
+    Collection(
+      collection,
+      detail: detail,
+      contacts: contacts,
+      lastReading: lastReading,
+    );
 
 /// The history the core recorded, as the type the overview reads.
 ///
 /// `null` when nothing has been recorded, so the overview hides the panel
 /// rather than drawing an empty chart.
-TransferHistory? transferHistory(AppDetail? detail) {
-  final readings = detail?.readings ?? const [];
+TransferHistory? transferHistory(List<Reading> readings) {
   if (readings.isEmpty) return null;
   return TransferHistory.restore(
     startedAt: readings.first.at,

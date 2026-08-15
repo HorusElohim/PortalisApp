@@ -286,6 +286,7 @@ fn publish(
         if collection.transfer == transfer
             && collection.status == status
             && collection.on_disk_bytes == info.progress_bytes
+            && collection.total_bytes == info.total_bytes
             && collection.uploaded_bytes == info.uploaded_bytes
         {
             return false;
@@ -293,6 +294,12 @@ fn publish(
         collection.transfer = transfer;
         collection.status = status;
         collection.on_disk_bytes = info.progress_bytes;
+        // The same reading the fraction is measured against. It used to be
+        // summed from the stored descriptor by a different worker on a
+        // different schedule, so the percentage and the "x of y" beside it had
+        // two denominators from two sources — nothing kept them equal, and a
+        // stale one showed 100% next to less than the whole.
+        collection.total_bytes = info.total_bytes;
         collection.uploaded_bytes = info.uploaded_bytes;
         true
     });

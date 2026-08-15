@@ -15,7 +15,6 @@ library;
 
 import 'dart:typed_data';
 
-import '../../design/transfer_graph.dart' show TransferPoint;
 import '../bridge/portalis_api.dart';
 
 export '../bridge/portalis_api.dart'
@@ -31,63 +30,12 @@ export '../bridge/portalis_api.dart'
         AppSourceFile,
         AppTransfer;
 
-/// The history and piece map a detail carries, decoded.
+/// The piece map a detail carries, decoded.
 ///
 /// An extension rather than a class, because the bytes come from the engine
 /// and only their reading is the app's business. Codegen owns the fields; this
 /// owns what they mean.
-extension DetailReadings on AppDetail {
-  /// The transfer history, decoded.
-  ///
-  /// Rows are `at_unix_ns(8) | down(4) | up(4) | progress_permille(2)`,
-  /// big-endian, packed by the core. Decoded here rather than accumulated as
-  /// the app observes readings: the core records whether or not a screen is
-  /// open, so this history survives a restart and every screen sees the same
-  /// one.
-  ///
-  /// Decoded into records rather than into any one widget's type, so a caller
-  /// that needs the progress column and a caller that needs only the rates
-  /// read the same bytes the same way.
-  List<({DateTime at, double downloadMbps, double uploadMbps, double progress})>
-      get readings {
-    const rowBytes = 18;
-    final rows = <
-        ({
-          DateTime at,
-          double downloadMbps,
-          double uploadMbps,
-          double progress
-        })>[];
-    for (var offset = 0;
-        offset + rowBytes <= samples.length;
-        offset += rowBytes) {
-      final bytes =
-          Uint8List.fromList(samples.sublist(offset, offset + rowBytes));
-      final row = ByteData.sublistView(bytes);
-      rows.add((
-        at: DateTime.fromMicrosecondsSinceEpoch(row.getUint64(0) ~/ 1000),
-        downloadMbps: _megabits(row.getUint32(8)),
-        uploadMbps: _megabits(row.getUint32(12)),
-        progress: row.getUint16(16) / 1000,
-      ));
-    }
-    return rows;
-  }
-
-  /// The history as the graph draws it.
-  List<TransferPoint> get history => [
-        for (final reading in readings)
-          TransferPoint(
-            at: reading.at,
-            downloadMbps: reading.downloadMbps,
-            uploadMbps: reading.uploadMbps,
-          ),
-      ];
-
-  /// How far along the newest reading was, zero to one, or null when there is
-  /// no history to say.
-  double? get progress => readings.isEmpty ? null : readings.last.progress;
-
+extension DetailPieces on AppDetail {
   /// Whether the bar at [index] is verified.
   bool pieceAt(int index) {
     final byte = index ~/ 8;
@@ -97,6 +45,48 @@ extension DetailReadings on AppDetail {
 
   /// How many bars the piece map carries.
   int get pieceCount => pieces.length * 8;
+}
+
+/// One recorded reading of a transfer.
+///
+/// The history is its own stream now, arriving as the rows a subscriber has
+/// not seen yet rather than as the whole ring — see `watch_history`. Decoded
+/// once, on arrival, instead of on every read: `progress` used to walk
+/// eighteen hundred rows to reach the last one, and it is read once per frame.
+class Reading {
+  const Reading({
+    required this.at,
+    required this.downloadMbps,
+    required this.uploadMbps,
+    required this.progress,
+  });
+
+  final DateTime at;
+  final double downloadMbps;
+  final double uploadMbps;
+  final double progress;
+}
+
+/// Decodes packed readings, oldest first.
+///
+/// Rows are `at_unix_ns(8) | down(4) | up(4) | progress_permille(2)`,
+/// big-endian, packed by the core. Recorded there rather than accumulated
+/// from what the app happened to observe: the core records whether or not a
+/// screen is open, so this history survives a restart and every screen sees
+/// the same one.
+List<Reading> decodeReadings(Uint8List packed) {
+  const rowBytes = 18;
+  final rows = <Reading>[];
+  for (var offset = 0; offset + rowBytes <= packed.length; offset += rowBytes) {
+    final row = ByteData.sublistView(packed, offset, offset + rowBytes);
+    rows.add(Reading(
+      at: DateTime.fromMicrosecondsSinceEpoch(row.getUint64(0) ~/ 1000),
+      downloadMbps: _megabits(row.getUint32(8)),
+      uploadMbps: _megabits(row.getUint32(12)),
+      progress: row.getUint16(16) / 1000,
+    ));
+  }
+  return rows;
 }
 
 extension EntryPreview on AppEntry {
