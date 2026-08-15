@@ -124,6 +124,9 @@ class _HomeState extends State<Home> {
         case CollectionCommand.pause:
           await sendSetPaused(AppControllers.engine, collection.id, paused: true);
         case CollectionCommand.delete:
+        // Editing needs the collection's own page; a row has nowhere to put
+        // a name field, so the row simply opens it instead.
+        case CollectionCommand.edit:
           return;
       }
       if (mounted) showToast(context, '${command.label} applied');

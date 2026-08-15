@@ -71,7 +71,9 @@ class HomeLibrary extends StatelessWidget {
   Widget _shareAction() => ShareCollectionAction(onTap: onCreateCollection);
 
   Widget _wide() => AppScreen(
-        title: 'Home',
+        // No title: this pane is the whole window, reached by the button that
+        // is always lit. Naming it "Home" spent a headline saying what a
+        // person was already looking at.
         subtitle: Text(_summary),
         embedded: true,
         width: ScreenWidth.full,

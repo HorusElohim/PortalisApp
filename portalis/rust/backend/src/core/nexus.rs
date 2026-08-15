@@ -655,6 +655,13 @@ impl Nexus {
                 &key,
                 &StoredCollection {
                     draft: false,
+                    // Confirmed, and waiting to be started. Finishing the
+                    // assembly of something is not the same as saying "go
+                    // now" — a person who has just chosen twenty files may
+                    // want to plug in first. One deliberate tap begins it,
+                    // and the button that does so is the one already there
+                    // for stopping it again.
+                    paused: true,
                     ..stored
                 },
             )
@@ -2173,7 +2180,10 @@ mod tests {
                     .collections
                     .first()
                     .is_some_and(|collection| {
-                        collection.status == Status::Available && collection.revision == 1
+                        // Published, and waiting to be started: confirming a
+                        // draft finishes assembling it, which is not the same
+                        // as saying "go now".
+                        collection.status == Status::Paused && collection.revision == 1
                     })
                 {
                     break;

@@ -88,6 +88,8 @@ String _legacyState(AppCollection collection, AppTransfer? transfer) {
   switch (collection.status) {
     case 'Downloading':
       return 'downloading';
+    case 'Paused':
+      return 'paused';
     // Chosen but not shared. Its own word, because every other state
     // describes something the engine is doing and this one describes
     // something it is deliberately not doing yet.

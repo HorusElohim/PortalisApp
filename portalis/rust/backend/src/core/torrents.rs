@@ -49,7 +49,14 @@ enum Pending {
         key: Vec<u8>,
         handle: String,
         paused: bool,
-        files: Vec<usize>,
+        /// Which files to fetch, where that is a choice at all.
+        ///
+        /// `None` for a collection this device published: it owns every file,
+        /// so there is nothing to choose and nothing to assert. An empty list
+        /// would mean the opposite — fetch none of them — which for something
+        /// that is seeding is the one instruction that must never be sent by
+        /// accident.
+        files: Option<Vec<usize>>,
     },
 }
 
@@ -118,6 +125,19 @@ fn pending_work(store: &Store) -> Result<Vec<Pending>, crate::store::StoreError>
     let mut pending = Vec::new();
     for (key, stored) in store.collections()? {
         let Some(source) = store.torrent_import(&key)? else {
+            // Not an import, but still possibly something the engine is
+            // carrying: a collection this device published seeds under a
+            // handle of its own, and pausing it has to reach the engine
+            // exactly as it does for a download. Without this the reconciler
+            // covered only half the collections there are.
+            if let Some(handle) = stored.substrate_handle {
+                pending.push(Pending::Reconcile {
+                    key,
+                    handle,
+                    paused: stored.paused,
+                    files: None,
+                });
+            }
             continue;
         };
         let entries = store.torrent_import_entries(&key)?;
@@ -142,7 +162,7 @@ fn pending_work(store: &Store) -> Result<Vec<Pending>, crate::store::StoreError>
                 key,
                 handle,
                 paused: stored.paused,
-                files,
+                files: Some(files),
             });
             continue;
         }
@@ -175,7 +195,9 @@ async fn perform(
             // Selection before pause: a paused torrent accepts the update, and
             // applying it first means resuming never briefly fetches a file
             // that was deselected while it was stopped.
-            substrate.set_selection(handle, files).await?;
+            if let Some(files) = files {
+                substrate.set_selection(handle, files).await?;
+            }
             substrate.set_paused(handle, *paused).await
         }
     }
@@ -410,7 +432,7 @@ mod tests {
         assert!(matches!(
             pending_work(&store).expect("scans").as_slice(),
             [Pending::Reconcile { handle, paused: false, files, .. }]
-                if handle == "abc" && files == &[1]
+                if handle == "abc" && files.as_deref() == Some(&[1][..])
         ));
 
         // Changing the choice on a collection that is already downloading is
@@ -435,7 +457,8 @@ mod tests {
             .expect("writes");
         assert!(matches!(
             pending_work(&store).expect("scans").as_slice(),
-            [Pending::Reconcile { files, .. }] if files == &[0, 1]
+            [Pending::Reconcile { files, .. }]
+                if files.as_deref() == Some(&[0, 1][..])
         ));
 
         let _ = std::fs::remove_dir_all(dir);
@@ -456,7 +479,7 @@ mod tests {
                 key: b"a".to_vec(),
                 handle: "abc".to_owned(),
                 paused: true,
-                files: vec![0, 2],
+                files: Some(vec![0, 2]),
             },
         )
         .await

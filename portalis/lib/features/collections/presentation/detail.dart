@@ -432,8 +432,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
           onInvite: _showInvite,
           onAddMedia: _addMedia,
           onFetch: _fetchPending,
-          onEdit: () => _toggleEditing(collection),
           editing: _isEditing,
+          paused: collection.isPaused,
         ),
         if (_busy)
           const Padding(
@@ -513,6 +513,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
       unawaited(_delete());
       return;
     }
+    if (command == CollectionCommand.edit) {
+      _toggleEditing(_collection);
+      return;
+    }
     unawaited(_run(() async {
       final id = _collection.id;
       switch (command) {
@@ -521,6 +525,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
         case CollectionCommand.pause:
           await widget.source.pause(id);
         case CollectionCommand.delete:
+        case CollectionCommand.edit:
           return;
       }
       _toast('${command.label} applied');

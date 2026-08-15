@@ -87,6 +87,10 @@ class Collection {
   bool get isComplete => progress >= 1.0 && pendingMedia == 0;
   /// Chosen but not shared: private to this device, and free to abandon.
   bool get isDraft => state == 'draft';
+
+  /// Told to stop. A person's decision, so it outranks whatever the numbers
+  /// are doing — and it decides which half of the start/stop pair is offered.
+  bool get isPaused => state == 'paused';
   bool get isSharing => state == 'seeding' && media.isNotEmpty;
   bool get isConnecting => state == 'connecting';
   bool get isMoving =>

@@ -48,7 +48,7 @@ enum ScreenWidth {
 class AppScreen extends StatelessWidget {
   const AppScreen({
     super.key,
-    required this.title,
+    this.title,
     required this.body,
     this.subtitle,
     this.titleLeading,
@@ -60,7 +60,7 @@ class AppScreen extends StatelessWidget {
     this.wideMaxWidth,
   });
 
-  final String title;
+  final String? title;
 
   /// A line under the title — usually what the screen is currently showing
   /// ("3 collaborators…", "12.4 GB across 6 items"). A widget rather than a
@@ -154,12 +154,18 @@ class AppScreen extends StatelessWidget {
 class ScreenHeader extends StatelessWidget {
   const ScreenHeader({
     super.key,
-    required this.title,
+    this.title,
     this.subtitle,
     this.leading,
   });
 
-  final String title;
+  /// `null` where the screen needs no name of its own.
+  ///
+  /// A pane that is already the whole window, reached by the button that is
+  /// always lit, is not somewhere a person can be lost — a title there names
+  /// what they are plainly looking at, and costs the height of a headline to
+  /// do it.
+  final String? title;
   final Widget? subtitle;
   final Widget? leading;
 
@@ -171,19 +177,21 @@ class ScreenHeader extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           // The window decides the scale, not the screen — see [AppScreen].
-          if (leading == null)
-            ImpactTitle(title, size: window.isSpacious ? 46 : 34)
-          else
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                leading!,
-                const SizedBox(width: 14),
-                Flexible(
-                  child: ImpactTitle(title, size: window.isSpacious ? 46 : 34),
-                ),
-              ],
-            ),
+          if (title != null)
+            if (leading == null)
+              ImpactTitle(title!, size: window.isSpacious ? 46 : 34)
+            else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  leading!,
+                  const SizedBox(width: 14),
+                  Flexible(
+                    child:
+                        ImpactTitle(title!, size: window.isSpacious ? 46 : 34),
+                  ),
+                ],
+              ),
           if (subtitle != null) ...[
             const SizedBox(height: 10),
             DefaultTextStyle(

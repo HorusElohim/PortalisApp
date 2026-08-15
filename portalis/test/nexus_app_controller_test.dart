@@ -299,7 +299,7 @@ void main() {
     // Closed until asked: nothing is editable just because it is open.
     expect(find.byKey(const Key('editCollectionName')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('collectionEditToggle')));
+    await tester.tap(find.byKey(const Key('collectionCommandedit')));
     await tester.pump();
     expect(find.byKey(const Key('editCollectionName')), findsOneWidget);
     expect(find.text('Done'), findsOneWidget);
@@ -479,19 +479,29 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const Key('collectionCommandrestart')));
-    await tester.pump();
-    expect(repository.commands.last.kind, 'setPaused');
-    expect(repository.commands.last.paused, isFalse);
-
+    // Running, so the pair offers Pause and nothing else. Start appears only
+    // once it is stopped — one button, never both.
+    expect(find.byKey(const Key('collectionCommandrestart')), findsNothing);
     await tester.tap(find.byKey(const Key('collectionCommandpause')));
     await tester.pump();
     expect(repository.commands.last.kind, 'setPaused');
     expect(repository.commands.last.paused, isTrue);
+
+    // And once paused, the other half — the same command, the other way.
+    controller.debugSeed(
+      _collectionState(status: 'Paused'),
+      details: const Stream<AppDetail?>.empty(),
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('collectionCommandpause')), findsNothing);
+    await tester.tap(find.byKey(const Key('collectionCommandrestart')));
+    await tester.pump();
+    expect(repository.commands.last.kind, 'setPaused');
+    expect(repository.commands.last.paused, isFalse);
   });
 }
 
-AppSnapshot _collectionState() => AppSnapshot(
+AppSnapshot _collectionState({String status = 'Available'}) => AppSnapshot(
       device: const AppDevice(
         name: 'Mina',
         handle: null,
@@ -507,7 +517,7 @@ AppSnapshot _collectionState() => AppSnapshot(
           nature: 'Native',
           role: 'Owner',
           revision: BigInt.one,
-          status: 'Available',
+          status: status,
           members: Uint32List(0),
           entries: 0,
           totalBytes: BigInt.zero,

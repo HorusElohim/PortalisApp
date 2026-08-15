@@ -19,8 +19,8 @@ class CollectionOverview extends StatelessWidget {
     required this.onCommand,
     this.history,
     this.showCommands = true,
-    this.onEdit,
     this.editing = false,
+    this.paused = false,
     this.level = CollectionDetailLevel.full,
     this.showTitle = true,
     this.inlineHeader,
@@ -37,10 +37,10 @@ class CollectionOverview extends StatelessWidget {
   final TransferHistory? history;
   final bool showCommands;
 
-  /// Opens or closes edit mode. `null` where a collection cannot be edited —
-  /// a row in a list has nowhere to put the controls it would reveal.
-  final VoidCallback? onEdit;
   final bool editing;
+
+  /// Which half of the start/stop pair the command bar offers.
+  final bool paused;
   final CollectionDetailLevel level;
   final bool showTitle;
   final Widget? inlineHeader;
@@ -65,18 +65,9 @@ class CollectionOverview extends StatelessWidget {
     final commandBar = CollectionCommandBar(
       busy: commandBusy,
       onCommand: onCommand,
+      editing: editing,
+      paused: paused,
       trailingActions: [
-        if (onEdit != null)
-          PillButton(
-            key: const Key('collectionEditToggle'),
-            label: editing ? 'Editing' : 'Edit',
-            icon: Icon(
-              editing ? Icons.edit : Icons.edit_outlined,
-              size: 16,
-              color: editing ? AppColors.ember : AppColors.textDim,
-            ),
-            onTap: onEdit,
-          ),
         if (collection.isShared)
           PillButton(
             label: 'Invite',
