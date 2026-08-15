@@ -317,6 +317,16 @@ class _CollectionDetailState extends State<CollectionDetail> {
     setState(() => _editing = true);
   }
 
+  /// Whether edit mode is offering a name field for this collection.
+  ///
+  /// A torrent being added for the first time is not being named: somebody
+  /// pasted a link to fetch what is in it, and the name belongs to the
+  /// torrent. Its title stays on screen — it is the only thing saying what
+  /// arrived — it simply is not a field. Re-open it later and it is theirs to
+  /// rename like anything else.
+  bool _namesInHeader(Collection collection) =>
+      _isEditing && !(collection.isTorrent && collection.isDraft);
+
   Widget _detail(Collection collection) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -326,11 +336,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
             name: _name,
             busy: _busy,
             autofocus: collection.isDraft,
-            // A torrent being added for the first time is not being named:
-            // somebody pasted a link to fetch what is in it, and the name
-            // belongs to the torrent. Re-open it later and it is yours to
-            // rename like anything else.
-            showName: !(collection.isTorrent && collection.isDraft),
+            showName: _namesInHeader(collection),
             // Never for a torrent: its contents are fixed by its info hash,
             // so an Add here could only fail.
             onAdd: collection.isTorrent ? null : () => unawaited(_addSources()),
@@ -342,7 +348,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
           history: widget.source.historyFor(collection.id),
           peerHistory: widget.source.peerHistoryFor(collection.id),
           showCommands: widget.showCommands,
-          showTitle: widget.showTitle && !_isEditing,
+          // The title steps aside only when a field has replaced it. A
+          // torrent that cannot be renamed still has to say what it is.
+          showTitle: widget.showTitle && !_namesInHeader(collection),
           onAddMedia: _addMedia,
           onFetch: _fetchPending,
           editing: _isEditing,

@@ -298,6 +298,8 @@ void main() {
     expect(find.byKey(const Key('editCollectionName')), findsNothing);
     expect(find.byKey(const Key('editAddSources')), findsNothing);
     expect(find.text('Share this collection'), findsOneWidget);
+    // But it still says what arrived. Not editable is not invisible.
+    expect(find.text('Big Buck Bunny'), findsWidgets);
 
     // Once it is a collection rather than an arrival, the name is editable.
     repository.states.add(_torrentState());
