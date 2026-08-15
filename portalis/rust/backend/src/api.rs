@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1290072541;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1225709876;
 
 // Section: executor
 
@@ -771,6 +771,41 @@ fn wire__crate__torrent__storage_usage_bytes_impl(
         },
     )
 }
+fn wire__crate__torrent__torrent_info_knows_progress_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "torrent_info_knows_progress",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <crate::torrent::TorrentInfo>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(
+                        crate::torrent::TorrentInfo::knows_progress(&api_that),
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__portalis_api__watch_detail_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1043,6 +1078,7 @@ impl SseDecode for crate::portalis_api::AppEntry {
         let mut var_bytes = <u64>::sse_decode(deserializer);
         let mut var_selected = <bool>::sse_decode(deserializer);
         let mut var_available = <bool>::sse_decode(deserializer);
+        let mut var_downloadedBytes = <u64>::sse_decode(deserializer);
         let mut var_path = <Option<String>>::sse_decode(deserializer);
         return crate::portalis_api::AppEntry {
             id: var_id,
@@ -1050,6 +1086,7 @@ impl SseDecode for crate::portalis_api::AppEntry {
             bytes: var_bytes,
             selected: var_selected,
             available: var_available,
+            downloaded_bytes: var_downloadedBytes,
             path: var_path,
         };
     }
@@ -1629,8 +1666,14 @@ fn pde_ffi_dispatcher_primary_impl(
         19 => wire__crate__portalis_api__stop_impl(port, ptr, rust_vec_len, data_len),
         20 => wire__crate__portalis_api__storage_breakdown_impl(port, ptr, rust_vec_len, data_len),
         21 => wire__crate__torrent__storage_usage_bytes_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__portalis_api__watch_detail_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__portalis_api__watch_states_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__torrent__torrent_info_knows_progress_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        23 => wire__crate__portalis_api__watch_detail_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__portalis_api__watch_states_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1820,6 +1863,7 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppEntry {
             self.bytes.into_into_dart().into_dart(),
             self.selected.into_into_dart().into_dart(),
             self.available.into_into_dart().into_dart(),
+            self.downloaded_bytes.into_into_dart().into_dart(),
             self.path.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -2246,6 +2290,7 @@ impl SseEncode for crate::portalis_api::AppEntry {
         <u64>::sse_encode(self.bytes, serializer);
         <bool>::sse_encode(self.selected, serializer);
         <bool>::sse_encode(self.available, serializer);
+        <u64>::sse_encode(self.downloaded_bytes, serializer);
         <Option<String>>::sse_encode(self.path, serializer);
     }
 }

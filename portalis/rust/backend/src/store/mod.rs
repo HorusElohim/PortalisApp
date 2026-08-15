@@ -241,12 +241,27 @@ impl Store {
         Ok(collections)
     }
 
+    /// Removes a collection and everything recorded under its key.
+    ///
+    /// The history and the revisions go with it. Keys are handed out in
+    /// sequence and reused, so anything left behind is inherited by the next
+    /// collection to take the key: a torrent added after a delete opened with
+    /// the deleted one's transfer chart already drawn, showing a download it
+    /// had never done.
+    ///
     /// # Errors
     /// Returns [`StoreError`] when the write fails.
     pub fn forget_collection(&self, collection_id: &[u8]) -> Result<(), StoreError> {
+        let (low, high) = schema::range_of(collection_id);
         let write = self.database.begin_write()?;
         {
             write.open_table(COLLECTIONS)?.remove(collection_id)?;
+            write
+                .open_table(SAMPLES)?
+                .retain_in(low.as_slice()..=high.as_slice(), |_, _| false)?;
+            write
+                .open_table(REVISIONS)?
+                .retain_in(low.as_slice()..=high.as_slice(), |_, _| false)?;
         }
         write.commit()?;
         Ok(())
@@ -852,6 +867,30 @@ mod tests {
             Some(collection("from before")),
             "and nothing was lost bringing it forward"
         );
+    }
+
+    /// Keys are sequential and reused, so anything left under a forgotten
+    /// collection's key becomes the next collection's. A torrent added after a
+    /// delete opened with a transfer chart already drawn for a download it had
+    /// never done.
+    #[test]
+    fn forgetting_a_collection_forgets_what_was_recorded_under_it() {
+        let scratch = Scratch::new("forget-scoped");
+        let store = Store::open(scratch.file()).expect("opens");
+
+        store.put_revision(&COLLECTION, 1, b"ours").expect("writes");
+        store.put_sample(&COLLECTION, 1, &sample(1)).expect("writes");
+        store.put_revision(&OTHER, 1, b"theirs").expect("writes");
+        store.put_sample(&OTHER, 1, &sample(2)).expect("writes");
+
+        store.forget_collection(&COLLECTION).expect("forgets");
+
+        assert!(store.collection(&COLLECTION).expect("reads").is_none());
+        assert!(store.samples(&COLLECTION).expect("reads").is_empty());
+        assert_eq!(store.current_revision(&COLLECTION).expect("reads"), None);
+        // The neighbour is untouched: one key's range, not the whole table.
+        assert_eq!(store.samples(&OTHER).expect("reads").len(), 1);
+        assert!(store.current_revision(&OTHER).expect("reads").is_some());
     }
 
     #[test]

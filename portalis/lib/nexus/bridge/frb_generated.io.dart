@@ -98,6 +98,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   NexusEndpointConfig dco_decode_box_autoadd_nexus_endpoint_config(dynamic raw);
 
   @protected
+  TorrentInfo dco_decode_box_autoadd_torrent_info(dynamic raw);
+
+  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
 
   @protected
@@ -281,6 +284,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   NexusEndpointConfig sse_decode_box_autoadd_nexus_endpoint_config(
       SseDeserializer deserializer);
+
+  @protected
+  TorrentInfo sse_decode_box_autoadd_torrent_info(SseDeserializer deserializer);
 
   @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
@@ -482,6 +488,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_nexus_endpoint_config(
       NexusEndpointConfig self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_torrent_info(
+      TorrentInfo self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);

@@ -346,6 +346,14 @@ class AppEntry {
   final bool selected;
   final bool available;
 
+  /// How much of this entry is here.
+  ///
+  /// Carried per entry because several files of one torrent download at
+  /// once and finish at different times: without this the interface can only
+  /// say "not here" or "here", and a multi-file torrent shows nothing at all
+  /// until the last byte of the last file lands.
+  final BigInt downloadedBytes;
+
   /// Where the bytes landed, once they have, so the interface can show a
   /// preview rather than a filename.
   final String? path;
@@ -356,6 +364,7 @@ class AppEntry {
     required this.bytes,
     required this.selected,
     required this.available,
+    required this.downloadedBytes,
     this.path,
   });
 
@@ -366,6 +375,7 @@ class AppEntry {
       bytes.hashCode ^
       selected.hashCode ^
       available.hashCode ^
+      downloadedBytes.hashCode ^
       path.hashCode;
 
   @override
@@ -378,6 +388,7 @@ class AppEntry {
           bytes == other.bytes &&
           selected == other.selected &&
           available == other.available &&
+          downloadedBytes == other.downloadedBytes &&
           path == other.path;
 }
 

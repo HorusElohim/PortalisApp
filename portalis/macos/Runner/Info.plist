@@ -35,5 +35,11 @@
 		<string>_portalis._tcp</string>
 		<string>_portalis._udp</string>
 	</array>
+	<!-- Opts out of the engine running the platform and UI threads merged.
+	     Flutter defaults it on and labels it Experimental, announcing itself
+	     on every launch; this app has no reason to be the one testing it, and
+	     the log line was the only thing it had ever said to us. -->
+	<key>FLTEnableMergedPlatformUIThread</key>
+	<false/>
 </dict>
 </plist>

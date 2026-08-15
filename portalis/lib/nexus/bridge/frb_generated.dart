@@ -73,7 +73,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1290072541;
+  int get rustContentHash => -1225709876;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -131,6 +131,9 @@ abstract class RustLibApi extends BaseApi {
   Future<List<AppStorageEntry>> cratePortalisApiStorageBreakdown();
 
   Future<BigInt> crateTorrentStorageUsageBytes();
+
+  Future<bool> crateTorrentTorrentInfoKnowsProgress(
+      {required TorrentInfo that});
 
   Stream<AppDetail?> cratePortalisApiWatchDetail({int? collection});
 
@@ -655,6 +658,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<bool> crateTorrentTorrentInfoKnowsProgress(
+      {required TorrentInfo that}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_box_autoadd_torrent_info(that, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 22, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateTorrentTorrentInfoKnowsProgressConstMeta,
+      argValues: [that],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateTorrentTorrentInfoKnowsProgressConstMeta =>
+      const TaskConstMeta(
+        debugName: "torrent_info_knows_progress",
+        argNames: ["that"],
+      );
+
+  @override
   Stream<AppDetail?> cratePortalisApiWatchDetail({int? collection}) {
     final sink = RustStreamSink<AppDetail?>();
     unawaited(handler.executeNormal(NormalTask(
@@ -663,7 +692,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_opt_box_autoadd_u_32(collection, serializer);
         sse_encode_StreamSink_opt_box_autoadd_app_detail_Sse(sink, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 22, port: port_);
+            funcId: 23, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -690,7 +719,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_StreamSink_app_snapshot_Sse(sink, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 23, port: port_);
+            funcId: 24, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -846,15 +875,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppEntry dco_decode_app_entry(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return AppEntry(
       id: dco_decode_u_32(arr[0]),
       label: dco_decode_String(arr[1]),
       bytes: dco_decode_u_64(arr[2]),
       selected: dco_decode_bool(arr[3]),
       available: dco_decode_bool(arr[4]),
-      path: dco_decode_opt_String(arr[5]),
+      downloadedBytes: dco_decode_u_64(arr[5]),
+      path: dco_decode_opt_String(arr[6]),
     );
   }
 
@@ -975,6 +1005,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_nexus_endpoint_config(raw);
+  }
+
+  @protected
+  TorrentInfo dco_decode_box_autoadd_torrent_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_torrent_info(raw);
   }
 
   @protected
@@ -1434,6 +1470,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_bytes = sse_decode_u_64(deserializer);
     var var_selected = sse_decode_bool(deserializer);
     var var_available = sse_decode_bool(deserializer);
+    var var_downloadedBytes = sse_decode_u_64(deserializer);
     var var_path = sse_decode_opt_String(deserializer);
     return AppEntry(
         id: var_id,
@@ -1441,6 +1478,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         bytes: var_bytes,
         selected: var_selected,
         available: var_available,
+        downloadedBytes: var_downloadedBytes,
         path: var_path);
   }
 
@@ -1558,6 +1596,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_nexus_endpoint_config(deserializer));
+  }
+
+  @protected
+  TorrentInfo sse_decode_box_autoadd_torrent_info(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_torrent_info(deserializer));
   }
 
   @protected
@@ -2104,6 +2149,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_64(self.bytes, serializer);
     sse_encode_bool(self.selected, serializer);
     sse_encode_bool(self.available, serializer);
+    sse_encode_u_64(self.downloadedBytes, serializer);
     sse_encode_opt_String(self.path, serializer);
   }
 
@@ -2206,6 +2252,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       NexusEndpointConfig self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_nexus_endpoint_config(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_torrent_info(
+      TorrentInfo self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_torrent_info(self, serializer);
   }
 
   @protected

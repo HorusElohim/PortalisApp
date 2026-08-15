@@ -158,18 +158,34 @@ List<PeerObservation> peerObservations({
   ];
 }
 
-MediaItem _media(AppEntry entry) => MediaItem(
-      entryId: entry.id,
-      selected: entry.selected,
-      label: entry.label,
-      // A Nexus entry is addressed by its collection and handle. The torrent
-      // hash is the substrate's business and does not belong in the interface.
-      infoHash: '',
-      localPath: entry.path,
-      progress: entry.available ? 1 : 0,
-      sizeBytes: entry.bytes.toInt(),
-      downloadedBytes: entry.available ? entry.bytes.toInt() : 0,
-      fetched: entry.available,
-    );
+/// One file, as the grid and the viewer read it.
+///
+/// Progress is the engine's own per-file byte count. It used to be derived
+/// from `available` alone, which made every file binary: nothing at all until
+/// the very end, then everything. A torrent of ten files showed ten empty
+/// tiles for the whole download, which is precisely the question a person is
+/// asking while they wait.
+MediaItem _media(AppEntry entry) {
+  final total = entry.bytes.toInt();
+  final done = entry.downloadedBytes.toInt();
+  return MediaItem(
+    entryId: entry.id,
+    selected: entry.selected,
+    label: entry.label,
+    // A Nexus entry is addressed by its collection and handle. The torrent
+    // hash is the substrate's business and does not belong in the interface.
+    infoHash: '',
+    // Only once it is whole. A torrent's pieces arrive out of order, so a path
+    // to a half-written file would render as a broken preview rather than as
+    // the honest placeholder a person expects while waiting.
+    localPath: entry.available ? entry.path : null,
+    progress: total == 0 ? 0 : (done / total).clamp(0.0, 1.0),
+    sizeBytes: total,
+    downloadedBytes: done,
+    // "Something of this is here", not "all of it is": a file that has begun
+    // arriving reports how far along it is, rather than claiming nothing.
+    fetched: entry.available || done > 0,
+  );
+}
 
 double _megabits(int bytesPerSecond) => bytesPerSecond * 8 / 1000000;

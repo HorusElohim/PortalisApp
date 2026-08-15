@@ -162,6 +162,10 @@ class TorrentInfo {
   final String infoHash;
   final String name;
   final String state;
+
+  /// Bytes confirmed present, or zero while the engine is still checking
+  /// and does not yet know. Use [`TorrentInfo::knows_progress`] before
+  /// treating a zero here as a measurement.
   final BigInt progressBytes;
   final BigInt totalBytes;
   final BigInt uploadedBytes;
@@ -196,6 +200,18 @@ class TorrentInfo {
     required this.livePeers,
     required this.livePeerAddrs,
   });
+
+  /// Whether [`Self::progress_bytes`] is a measurement rather than a
+  /// placeholder.
+  ///
+  /// A torrent being verified reports nothing rather than the scan cursor,
+  /// which would climb to full and then collapse. Correct for a status, and
+  /// wrong to record: written into the history it became a zero between two
+  /// real readings, and a chart drew the transfer as having restarted.
+  Future<bool> knowsProgress() =>
+      RustLib.instance.api.crateTorrentTorrentInfoKnowsProgress(
+        that: this,
+      );
 
   @override
   int get hashCode =>

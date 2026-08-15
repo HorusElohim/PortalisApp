@@ -98,6 +98,13 @@ pub struct AppEntry {
     pub bytes: u64,
     pub selected: bool,
     pub available: bool,
+    /// How much of this entry is here.
+    ///
+    /// Carried per entry because several files of one torrent download at
+    /// once and finish at different times: without this the interface can only
+    /// say "not here" or "here", and a multi-file torrent shows nothing at all
+    /// until the last byte of the last file lands.
+    pub downloaded_bytes: u64,
     /// Where the bytes landed, once they have, so the interface can show a
     /// preview rather than a filename.
     pub path: Option<String>,
@@ -495,6 +502,7 @@ fn detail_projection(detail: &Detail) -> AppDetail {
                 bytes: entry.bytes,
                 selected: entry.selected,
                 available: entry.available,
+                downloaded_bytes: entry.downloaded_bytes,
                 path: entry.path.clone(),
             })
             .collect(),

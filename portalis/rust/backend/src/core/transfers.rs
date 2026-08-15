@@ -123,8 +123,13 @@ pub(crate) async fn follow_transfers(
             let Some(info) = by_handle.get(handle.as_str()) else {
                 continue;
             };
-            let sample = record(&store, &key, info, written.get(&key));
-            written.insert(key.clone(), sample);
+            // A torrent still checking itself has no progress to report, and
+            // recording the placeholder zero put a false restart in the middle
+            // of the chart every time the app reopened.
+            if info.knows_progress() {
+                let sample = record(&store, &key, info, written.get(&key));
+                written.insert(key.clone(), sample);
+            }
             current.insert(key.clone(), (*info).clone());
 
             let projected = collections
@@ -326,6 +331,21 @@ mod tests {
             live_peers: 3,
             live_peer_addrs: vec!["10.0.0.1:6881".to_owned()],
         }
+    }
+
+    /// A torrent being verified reports zero progress by design — the scan
+    /// cursor would climb and then collapse, which is worse. Recording that
+    /// zero put a false restart between two real readings, and the chart drew
+    /// one transfer as two with a dead flat stretch between them.
+    #[test]
+    fn a_torrent_still_checking_itself_has_no_reading_to_record() {
+        let mut checking = info(0, 100, false);
+        checking.state = "Initializing".to_owned();
+        assert!(!checking.knows_progress());
+
+        let mut live = info(40, 100, false);
+        live.state = "live".to_owned();
+        assert!(live.knows_progress());
     }
 
     /// A finished collection reports identical numbers every second for as

@@ -1,4 +1,6 @@
+import 'dart:typed_data';
 import 'test_support.dart';
+import 'package:portalis/nexus/data/collection_view.dart';
 
 import 'package:portalis/features/collections/domain/picked_file.dart';
 import 'package:portalis/features/collections/domain/transfer_history.dart';
@@ -442,6 +444,85 @@ void main() {
       expect(find.text('a.jpg'), findsOneWidget);
       expect(find.text('Sunday'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('a downloading file', () {
+    /// The engine counts bytes per file because several arrive at once and
+    /// finish at different times. That count was computed, then dropped at the
+    /// bridge, so every file was binary — nothing at all until the last byte
+    /// of the whole torrent landed, which is exactly when a person has stopped
+    /// needing to know.
+    test('reports how far along it is, not merely whether it finished', () {
+      final view = collectionView(
+        collection: buildNexusCollection(id: 1, status: 'Downloading'),
+        detail: AppDetail(
+          id: 1,
+          entries: [
+            AppEntry(
+              id: 1,
+              label: 'episode.mkv',
+              bytes: BigInt.from(1000),
+              selected: true,
+              available: false,
+              downloadedBytes: BigInt.from(450),
+            ),
+            AppEntry(
+              id: 2,
+              label: 'extras.mkv',
+              bytes: BigInt.from(1000),
+              selected: true,
+              available: true,
+              downloadedBytes: BigInt.from(1000),
+              path: '/downloads/extras.mkv',
+            ),
+          ],
+          pieces: Uint8List(0),
+          samples: Uint8List(0),
+          peers: const [],
+        ),
+        contacts: const [],
+      );
+
+      final partial = view.media.first;
+      expect(partial.progress, closeTo(0.45, 0.001));
+      expect(partial.downloadedBytes, 450);
+      expect(partial.fetched, isTrue, reason: 'bytes are arriving');
+      // A torrent's pieces land out of order, so a path to a half-written file
+      // would preview as breakage rather than as an honest placeholder.
+      expect(partial.localPath, isNull);
+      expect(partial.isReady, isFalse);
+
+      final whole = view.media.last;
+      expect(whole.progress, 1);
+      expect(whole.localPath, '/downloads/extras.mkv');
+      expect(whole.isReady, isTrue);
+    });
+
+    test('a file nothing has arrived for claims nothing', () {
+      final view = collectionView(
+        collection: buildNexusCollection(id: 1, status: 'Downloading'),
+        detail: AppDetail(
+          id: 1,
+          entries: [
+            AppEntry(
+              id: 1,
+              label: 'queued.mkv',
+              bytes: BigInt.from(1000),
+              selected: true,
+              available: false,
+              downloadedBytes: BigInt.zero,
+            ),
+          ],
+          pieces: Uint8List(0),
+          samples: Uint8List(0),
+          peers: const [],
+        ),
+        contacts: const [],
+      );
+
+      expect(view.media.single.progress, 0);
+      expect(view.media.single.fetched, isFalse);
     });
   });
 }
