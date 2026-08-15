@@ -12,6 +12,7 @@ import 'package:portalis/features/settings/domain/engine.dart';
 import 'package:portalis/main.dart';
 import 'package:portalis/shell/navigation.dart';
 
+export 'dart:async' show unawaited;
 export 'package:flutter/material.dart';
 export 'package:flutter_test/flutter_test.dart';
 export 'package:portalis/app/app_controllers.dart';
@@ -20,8 +21,8 @@ export 'package:portalis/features/collections/domain/collection.dart';
 export 'package:portalis/features/collections/domain/import_state.dart';
 export 'package:portalis/features/collections/domain/paste.dart';
 export 'package:portalis/features/collections/presentation/detail.dart';
-export 'package:portalis/features/collections/presentation/share.dart';
-export 'package:portalis/features/collections/presentation/command_bar.dart';
+export 'package:portalis/features/collections/presentation/add_sources.dart';
+export 'package:portalis/features/collections/domain/draft_names.dart';
 export 'package:portalis/features/media/domain/item.dart';
 export 'package:portalis/features/media/presentation/viewer_screen.dart';
 export 'package:portalis/nexus/domain/app_state.dart';

@@ -4,9 +4,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:portalis/features/collections/domain/picked_file.dart';
 import 'package:portalis/features/collections/presentation/overview.dart';
-import 'package:portalis/features/collections/presentation/share.dart';
 import 'package:portalis/nexus/application/app_controller.dart';
 import 'package:portalis/nexus/data/app_repository.dart';
 import 'package:portalis/nexus/data/collection_source.dart';
@@ -80,7 +78,7 @@ void main() {
         home: CollectionRoute(collection: 9, controller: controller),
       ),
     );
-    repository.states.add(_torrentState());
+    repository.states.add(_torrentState(status: 'Draft'));
     await tester.pump();
     repository.details.add(
       AppDetail(
@@ -136,7 +134,7 @@ void main() {
         home: CollectionRoute(collection: 9, controller: controller),
       ),
     );
-    repository.states.add(_torrentState());
+    repository.states.add(_torrentState(status: 'Draft'));
     await tester.pump();
     repository.details.add(
       AppDetail(
@@ -164,53 +162,66 @@ void main() {
 
     expect(repository.commands, isEmpty);
   });
-
-  /// Sharing local files needs a no-copy picker, which Android and iOS do
-  /// not have — and a Flutter test reports Android unless told otherwise, so
-  /// without this the screen correctly refuses and the test looks broken.
-  /// The magnet test below deliberately does *not* do this: importing a
-  /// torrent must work on every platform.
-  testWidgets('the existing New share page creates a Nexus collection',
+  /// A draft opens ready to be changed, because it exists only because
+  /// somebody is halfway through assembling it. The name is a suggestion
+  /// already in the field rather than a question asked of an empty screen.
+  testWidgets('a draft collection opens in edit mode and shares on confirm',
       (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     final repository = _Repository();
     final controller = AppController(repository: repository);
-    var closed = false;
+    await controller.start();
+    await tester.binding.setSurfaceSize(const Size(420, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
-        home: ShareScreen(
-          controller: controller,
-          onClose: () => closed = true,
-          initialFiles: const [
-            PickedFile(
-              name: 'episode.mp4',
-              path: '/media/episode.mp4',
-              lengthBytes: 42,
-            ),
-          ],
-        ),
+        home: CollectionRoute(collection: 9, controller: controller),
       ),
     );
-    await tester.enterText(
-      find.byKey(const Key('collectionNameField')),
-      'Episode archive',
+    repository.states.add(_torrentState(status: 'Draft'));
+    await tester.pump();
+    repository.details.add(
+      AppDetail(
+        id: 9,
+        entries: [
+          AppEntry(
+            id: 1,
+            label: 'clip.mp4',
+            bytes: BigInt.from(5),
+            selected: true,
+            available: false,
+            downloadedBytes: BigInt.zero,
+          ),
+        ],
+        pieces: Uint8List(0),
+        samples: Uint8List(0),
+        peers: const [],
+      ),
     );
     await tester.pump();
-    await tester.tap(find.byKey(const Key('createShareButton')));
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
-    expect(repository.commands, hasLength(1));
-    final command = repository.commands.single;
-    expect(command.kind, 'createCollection');
-    expect(command.name, 'Episode archive');
-    expect(command.files.single.name, 'episode.mp4');
-    expect(command.files.single.path, '/media/episode.mp4');
-    expect(command.files.single.bytes, BigInt.from(42));
-    expect(closed, isTrue);
-    // Reset inline: the framework asserts this is unset by the time the test
-    // body returns, which is before any tear-down would run.
-    debugDefaultTargetPlatformOverride = null;
+    // Open for changes without anybody asking, and the finishing move says
+    // what it does: this has never been shared.
+    expect(find.byKey(const Key('editCollectionName')), findsOneWidget);
+    expect(find.text('Share'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('editCollectionName')),
+      'Lisbon trip',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('editFinish')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // The rename lands before the publish: sharing something under a name
+    // the person just replaced would share the wrong name.
+    expect(repository.commands.map((command) => command.kind).toList(),
+        ['renameCollection', 'publishDraft']);
+    expect(repository.commands.first.name, 'Lisbon trip');
+    expect(tester.takeException(), isNull);
   });
+
 
   testWidgets(
       'Home renders Nexus collections through the shared legacy row, '
@@ -250,9 +261,6 @@ void main() {
               alerts: const [],
             ),
             error: null,
-            query: '',
-            onSearch: (_) {},
-            onImportTorrent: (_) async {},
             onCreateCollection: () => created = true,
             onOpen: (value) => opened = value,
             onCommand: (_) {},
@@ -270,33 +278,36 @@ void main() {
     await tester.tap(find.byKey(const Key('shareCollectionAction')));
     expect(created, isTrue);
   });
-
-  testWidgets('New share imports a magnet without needing a name or files',
+  /// An already-shared collection is only being edited, so its finishing
+  /// move is Done — offering to share what is already shared would promise
+  /// something that already happened.
+  testWidgets('a shared collection edits without offering to share again',
       (tester) async {
     final repository = _Repository();
     final controller = AppController(repository: repository);
-    var closed = false;
+    await controller.start();
+    await tester.binding.setSurfaceSize(const Size(420, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
-        home: ShareScreen(controller: controller, onClose: () => closed = true),
+        home: CollectionRoute(collection: 9, controller: controller),
       ),
     );
+    repository.states.add(_torrentState());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
-    await tester.tap(find.byKey(const Key('shareAddTorrent')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('sharePasteMagnet')));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'magnet:?xt=urn:btih:abc');
-    await tester.tap(find.text('Add').last);
-    await tester.pumpAndSettle();
+    // Closed until asked: nothing is editable just because it is open.
+    expect(find.byKey(const Key('editCollectionName')), findsNothing);
 
-    // A torrent is fetched rather than shared, so it needs neither the
-    // collection name nor a file list this screen otherwise insists on.
-    expect(repository.commands, hasLength(1));
-    expect(repository.commands.single.kind, 'importTorrent');
-    expect(repository.commands.single.source, 'magnet:?xt=urn:btih:abc');
-    expect(closed, isTrue, reason: 'and it hands over to the selection step');
+    await tester.tap(find.byKey(const Key('collectionEditToggle')));
+    await tester.pump();
+    expect(find.byKey(const Key('editCollectionName')), findsOneWidget);
+    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('Share'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
+
 
   /// The bug this exists to prevent: the shell reported "1 ACTIVE TRANSFER"
   /// above a Home showing no collections, because the chrome counted from the
@@ -400,11 +411,8 @@ void main() {
               wide: true,
               state: controller.state,
               error: null,
-              query: '',
               openId: openId,
               openSource: source,
-              onSearch: (_) {},
-              onImportTorrent: (_) async {},
               onCreateCollection: () {},
               // No addTearDown here: once this is handed to
               // `HomeLibrary`, `CollectionDetail`'s own state is its
@@ -553,7 +561,7 @@ AppSnapshot _state(String name) => AppSnapshot(
 
 /// One torrent import, downloading. `Torrent` is what makes its files a
 /// choice at all — see `EngineCollectionSource.supportsSelection`.
-AppSnapshot _torrentState() => AppSnapshot(
+AppSnapshot _torrentState({String status = 'Downloading'}) => AppSnapshot(
       device: const AppDevice(
         name: 'Mina',
         handle: null,
@@ -569,7 +577,7 @@ AppSnapshot _torrentState() => AppSnapshot(
           nature: 'Torrent',
           role: 'Owner',
           revision: BigInt.one,
-          status: 'Downloading',
+          status: status,
           members: Uint32List(0),
           entries: 2,
           totalBytes: BigInt.from(39),

@@ -7,4 +7,3 @@ export 'overview.dart';
 export 'peers.dart';
 export 'views.dart';
 export 'list.dart';
-export 'command_bar.dart';

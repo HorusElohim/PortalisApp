@@ -8,7 +8,6 @@ import 'detail.dart';
 import 'source.dart';
 import 'views.dart';
 import 'list.dart';
-import 'command_bar.dart';
 import 'share_action.dart';
 import '../../../nexus/data/collection_view.dart';
 import '../../../nexus/domain/app_state.dart';
@@ -31,9 +30,6 @@ class HomeLibrary extends StatelessWidget {
     required this.wide,
     required this.state,
     required this.error,
-    required this.query,
-    required this.onSearch,
-    required this.onImportTorrent,
     required this.onCreateCollection,
     required this.onOpen,
     required this.onCommand,
@@ -44,9 +40,6 @@ class HomeLibrary extends StatelessWidget {
   final bool wide;
   final AppSnapshot? state;
   final String? error;
-  final String query;
-  final ValueChanged<String> onSearch;
-  final Future<void> Function(String source) onImportTorrent;
   final VoidCallback onCreateCollection;
   final ValueChanged<AppCollection> onOpen;
   final ValueChanged<(AppCollection, CollectionCommand)> onCommand;
@@ -68,8 +61,7 @@ class HomeLibrary extends StatelessWidget {
       .toList(growable: false);
 
   bool _matchesQuery(AppCollection collection) =>
-      query.isEmpty ||
-      collection.name.toLowerCase().contains(query.toLowerCase());
+      true;
 
   /// The row summary for one collection — cheap, and never a subscription:
   /// see [collectionView]'s own doc for what a missing detail costs it.
@@ -81,11 +73,6 @@ class HomeLibrary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => wide ? _wide() : _compact();
-
-  Widget _toolbar() => PortalisCommandBar(
-        onSearch: onSearch,
-        onImportTorrent: onImportTorrent,
-      );
 
   /// Sharing is the one thing a person can always do, so it is never in a
   /// list that might be empty. With collections it sits above them; without
@@ -100,15 +87,6 @@ class HomeLibrary extends StatelessWidget {
         width: ScreenWidth.full,
         body: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                kScreenGutter,
-                0,
-                kScreenGutter,
-                16,
-              ),
-              child: _toolbar(),
-            ),
             if (_shown.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -168,12 +146,6 @@ class HomeLibrary extends StatelessWidget {
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(child: _compactHeader()),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
-                child: _toolbar(),
-              ),
-            ),
             if (_shown.isNotEmpty)
               SliverToBoxAdapter(
                 child: Padding(
@@ -249,25 +221,17 @@ class HomeLibrary extends StatelessWidget {
   }
 
   Widget _emptyState() {
-    final searching = query.isNotEmpty;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 22),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Not while searching: an empty result is a fact about the
-            // query, and offering to create something answers a question
-            // nobody asked.
-            if (!searching) ...[
-              _shareAction(),
-              const SizedBox(height: 18),
-            ],
+            _shareAction(),
+            const SizedBox(height: 18),
             Text(
-              searching
-                  ? 'Nothing matches "$query".'
-                  : 'Share files, import a .torrent file, or paste a magnet URI '
-                      'to begin.',
+              'Share photos or files, or fetch a torrent. Nothing leaves this '
+              'device until you say so.',
               textAlign: TextAlign.center,
               style: AppText.body(color: AppColors.textDim),
             ),

@@ -34,6 +34,22 @@ abstract class CollectionSource {
   Future<void> delete(String id);
   Future<void> deleteWithFiles(String id);
 
+  /// Renames the collection.
+  ///
+  /// Separate from every other edit because it is the one a person makes
+  /// while looking at the thing they are naming, so it has to land without
+  /// leaving the screen.
+  Future<void> rename(String id, String name) async =>
+      throw const SourceUnsupported('this collection cannot be renamed');
+
+  /// Says a draft is finished and may be shared.
+  ///
+  /// The point of no return, and the only irreversible thing edit mode does:
+  /// before it the collection is private to this device, after it somebody
+  /// may hold its descriptor.
+  Future<void> publishDraft(String id) async =>
+      throw const SourceUnsupported('this collection is already shared');
+
   /// Whether the files of this collection can be chosen individually.
   ///
   /// False for a collection that owns its files — there is nothing to choose,

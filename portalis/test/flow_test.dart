@@ -3,54 +3,81 @@ import 'test_support.dart';
 void main() {
   tearDown(resetTestState);
 
-  group('flows still surface backend errors', () {
-    testWidgets('command bar surfaces magnet backend errors', (tester) async {
+  group('adding a collection', () {
+    /// The New Share page is gone: choosing what to put in a collection is a
+    /// sheet, and the collection itself is where naming and adjusting happen.
+    /// So this is the whole of "create" now — one question with a few answers.
+    testWidgets('asks what to add and offers each way of answering',
+        (tester) async {
       await tester.binding.setSurfaceSize(phoneSize);
       addTearDown(() => tester.binding.setSurfaceSize(null));
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PortalisCommandBar(
-              onSearch: (_) {},
-              onImportTorrent: (_) async {},
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
 
-      await tester.enterText(
-        find.byKey(const Key('commandBarField')),
-        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
-      );
-      await tester.pump();
-      expect(find.text('ADD TORRENT'), findsOneWidget);
+      late BuildContext sheetContext;
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(builder: (context) {
+          sheetContext = context;
+          return const Scaffold(body: SizedBox.expand());
+        }),
+      ));
 
-      await tester.tap(find.byKey(const Key('commandBarSubmit')));
+      unawaited(showAddSourcesSheet(sheetContext));
       await tester.pump();
-      // RustLib isn't initialized, so the add is expected to fail â€” inline
-      // error, screen stays open, no uncaught exception.
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.byKey(const Key('commandBarField')), findsOneWidget);
+
+      // Files is always offered — a device that cannot share its own files
+      // can still fetch a torrent, and that is what the entry is for.
+      expect(find.byKey(const Key('addFiles')), findsOneWidget);
+      expect(find.byKey(const Key('addMagnet')), findsOneWidget);
+      expect(
+        find.text('A .torrent here is fetched, not shared'),
+        findsOneWidget,
+        reason: 'the one place a person could be surprised says so',
+      );
       expect(tester.takeException(), isNull);
     });
 
-
-    testWidgets('share screen requires a name and files', (tester) async {
+    /// Backing out is not the same as adding nothing: the sheet answers with
+    /// null, and no collection is created for somebody who changed their mind.
+    testWidgets('answers with nothing when dismissed', (tester) async {
       await tester.binding.setSurfaceSize(phoneSize);
       addTearDown(() => tester.binding.setSurfaceSize(null));
-      await tester.pumpWidget(const MaterialApp(home: ShareScreen()));
-      await tester.pump();
 
-      expect(find.text('Nothing added yet'), findsOneWidget);
-      await tester.enterText(
-          find.byKey(const Key('collectionNameField')), 'Trip to Lisbon');
-      await tester.pump();
+      late BuildContext sheetContext;
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(builder: (context) {
+          sheetContext = context;
+          return const Scaffold(body: SizedBox.expand());
+        }),
+      ));
 
-      final button = tester
-          .widget<FilledButton>(find.byKey(const Key('createShareButton')));
-      expect(button.onPressed, isNull);
+      ChosenSources? answer;
+      var settled = false;
+      unawaited(showAddSourcesSheet(sheetContext).then((value) {
+        answer = value;
+        settled = true;
+      }));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      Navigator.of(sheetContext).pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(settled, isTrue);
+      expect(answer, isNull);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('draft names', () {
+    test('every default is distinct and says nothing about the content', () {
+      expect(draftNames.toSet().length, draftNames.length);
+      expect(draftNames.length, greaterThanOrEqualTo(50));
+      expect(
+        draftNames.every((name) => name.trim() == name && name.isNotEmpty),
+        isTrue,
+      );
+      expect(draftNames, contains(randomDraftName()));
     });
   });
 }

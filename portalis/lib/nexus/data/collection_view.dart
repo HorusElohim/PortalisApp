@@ -87,6 +87,11 @@ String _legacyState(AppCollection collection, AppTransfer? transfer) {
   switch (collection.status) {
     case 'Downloading':
       return 'downloading';
+    // Chosen but not shared. Its own word, because every other state
+    // describes something the engine is doing and this one describes
+    // something it is deliberately not doing yet.
+    case 'Draft':
+      return 'draft';
     case 'Preparing':
       return 'importing';
     // No content key has arrived — there is nothing to show progress

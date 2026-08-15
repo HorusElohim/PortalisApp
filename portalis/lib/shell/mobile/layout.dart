@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_controllers.dart';
 import '../../design/design.dart';
-import '../../features/collections/domain/picked_file.dart';
 import 'bottom_nav.dart';
 import '../../design/theme.dart';
 import '../../features/collections/presentation/home_screen.dart';
@@ -16,12 +15,10 @@ class MobileShellLayout extends StatelessWidget {
     super.key,
     required this.index,
     required this.onSelected,
-    required this.onShare,
   });
 
   final int index;
   final ValueChanged<int> onSelected;
-  final void Function([List<PickedFile>?]) onShare;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -35,7 +32,7 @@ class MobileShellLayout extends StatelessWidget {
               children: [
                 TickerMode(
                   enabled: index == 0,
-                  child: Home(onShare: onShare),
+                  child: const Home(),
                 ),
                 TickerMode(
                   enabled: index == 1,

@@ -4,10 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../app/app_controllers.dart';
 import '../design/design.dart';
-import '../features/collections/domain/picked_file.dart';
 import 'navigation.dart';
 import 'desktop/pane.dart';
-import '../features/collections/presentation/share.dart';
 import '../features/collections/presentation/route.dart';
 
 /// The one stateful shell for every window size.
@@ -24,11 +22,9 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
   int get tab => AppNavigation.tab.value;
   DesktopPane get pane => _pane;
   int? get openId => _openId;
-  List<PickedFile>? get pendingShareFiles => _pendingShareFiles;
 
   DesktopPane _pane = DesktopPane.home;
   int? _openId;
-  List<PickedFile>? _pendingShareFiles;
 
   @override
   void initState() {
@@ -97,24 +93,8 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     selectPane(DesktopPane.home);
   }
 
-  void openShare([List<PickedFile>? initialFiles, bool inline = false]) {
-    if (!inline) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ShareScreen(initialFiles: initialFiles),
-        ),
-      );
-      return;
-    }
-    setState(() => _pendingShareFiles = initialFiles);
-    selectPane(DesktopPane.share);
-  }
 
 
-  void closeShare() {
-    setState(() => _pendingShareFiles = null);
-    selectPane(DesktopPane.home);
-  }
 
 
   @protected
@@ -162,6 +142,5 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
         DesktopPane.user => 1,
         DesktopPane.people => 2,
         DesktopPane.settings => 3,
-        DesktopPane.share => null,
       };
 }

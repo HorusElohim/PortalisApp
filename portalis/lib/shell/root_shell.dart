@@ -6,7 +6,6 @@ import 'desktop/pane.dart';
 import 'desktop/layout.dart';
 import '../features/collections/presentation/home_screen.dart';
 import 'mobile/layout.dart';
-import '../features/collections/presentation/share.dart';
 import '../features/people/presentation/screen.dart';
 import '../features/settings/presentation/screen.dart';
 import '../features/identity/presentation/user_screen.dart';
@@ -24,17 +23,7 @@ class RootShell extends AdaptiveShell {
 class _RootShellState extends AdaptiveShellState<RootShell> {
   @override
   Widget buildCompactLayout(BuildContext context) {
-    if (pane == DesktopPane.share) {
-      return ShareScreen(
-        initialFiles: pendingShareFiles,
-        onClose: closeShare,
-      );
-    }
-    return MobileShellLayout(
-      index: tab,
-      onSelected: selectTab,
-      onShare: ([files]) => openShare(files, false),
-    );
+    return MobileShellLayout(index: tab, onSelected: selectTab);
   }
 
   @override
@@ -46,7 +35,6 @@ class _RootShellState extends AdaptiveShellState<RootShell> {
           embedded: true,
           openId: openId,
           onOpen: (id) => openCollection(id, inline: true),
-          onShare: ([files]) => openShare(files, true),
         ),
         content: _desktopContent(),
       );
@@ -56,11 +44,6 @@ class _RootShellState extends AdaptiveShellState<RootShell> {
         DesktopPane.people => const PeopleScreen(embedded: true),
         DesktopPane.user => const UserScreen(embedded: true),
         DesktopPane.settings => const SettingsScreen(embedded: true),
-        DesktopPane.share => ShareScreen(
-            key: ValueKey(pendingShareFiles),
-            initialFiles: pendingShareFiles,
-            onClose: closeShare,
-          ),
         DesktopPane.home => const SizedBox.shrink(),
       };
 }

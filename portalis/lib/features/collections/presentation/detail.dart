@@ -16,6 +16,7 @@ import '../domain/picked_file.dart';
 import '../platform/no_copy_source_picker.dart';
 import '../platform/photo_library_picker.dart';
 import '../platform/source_access.dart';
+import 'add_sources.dart';
 import 'contents.dart';
 import 'commands.dart';
 import 'overview.dart';
@@ -96,6 +97,17 @@ class CollectionScreen extends StatelessWidget {
 
 class _CollectionDetailState extends State<CollectionDetail> {
   bool _busy = false;
+
+  /// Whether the collection is open for changes.
+  ///
+  /// `null` until the first build decides, because the answer depends on the
+  /// collection: a draft opens in edit mode, since it exists only because
+  /// somebody is in the middle of assembling it. Everything else opens closed
+  /// and waits to be asked.
+  bool? _editing;
+  final _name = TextEditingController();
+
+  bool get _isEditing => _editing ?? _collection.isDraft;
 
   Collection get _collection => widget.source.resolve(widget.collection);
 
@@ -321,6 +333,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
 
   @override
   void dispose() {
+    _name.dispose();
     // The source is not disposed here. Whoever constructed it owns it, and
     // some of them — the wide Home, which keeps one source for whichever row
     // is open — outlive any single detail. Disposing a borrowed source is how
@@ -336,10 +349,66 @@ class _CollectionDetailState extends State<CollectionDetail> {
     );
   }
 
+  /// Adds sources to this collection through the same sheet Home uses.
+  ///
+  /// A torrent chosen here is refused rather than silently starting a second
+  /// download: this collection is what the person is adding to, and a magnet
+  /// is not something that can be added to anything.
+  Future<void> _addSources() async {
+    final chosen = await showAddSourcesSheet(context);
+    if (chosen == null || !mounted) return;
+    if (chosen is! LocalSources) {
+      _toast('A torrent becomes its own collection — add it from Home');
+      return;
+    }
+    await _run(() => widget.source.addMedia(
+          _collection.id,
+          'Added ${DateTime.now().toIso8601String().substring(0, 10)}',
+          chosen.files,
+        ));
+  }
+
+  /// Renames only when the text actually changed, so leaving edit mode
+  /// without touching the field never writes anything.
+  Future<void> _commitName() async {
+    final wanted = _name.text.trim();
+    if (wanted.isEmpty || wanted == _collection.name) return;
+    await _run(() => widget.source.rename(_collection.id, wanted));
+  }
+
+  Future<void> _share() async {
+    await _commitName();
+    if (!mounted) return;
+    await _run(() => widget.source.publishDraft(_collection.id));
+    if (mounted) {
+      setState(() => _editing = false);
+      _toast('Shared', severity: ToastSeverity.success);
+    }
+  }
+
+  void _toggleEditing(Collection collection) {
+    if (_isEditing) {
+      unawaited(_commitName());
+      setState(() => _editing = false);
+      return;
+    }
+    _name.text = collection.name;
+    setState(() => _editing = true);
+  }
+
   Widget _detail(Collection collection) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_isEditing)
+          _EditBar(
+            name: _name,
+            busy: _busy,
+            isDraft: collection.isDraft,
+            onAdd: () => unawaited(_addSources()),
+            onShare: () => unawaited(_share()),
+            onDone: () => _toggleEditing(collection),
+          ),
         CollectionOverview(
           collection: collection,
           busy: _busy,
@@ -354,6 +423,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
           onInvite: _showInvite,
           onAddMedia: _addMedia,
           onFetch: _fetchPending,
+          onEdit: () => _toggleEditing(collection),
+          editing: _isEditing,
         ),
         if (_busy)
           const Padding(
@@ -384,7 +455,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
               child: CollectionContents(
                 collection: collection,
                 onOpenMedia: (media) => _openMedia(collection, media),
-                onToggleWanted: widget.source.supportsSelection
+                // Only while editing: a tap that changes what downloads is
+                // not something a person should be able to do by brushing
+                // past a tile they were only looking at.
+                onToggleWanted: _isEditing && widget.source.supportsSelection
                     ? (media) => _toggleWanted(collection, media)
                     : null,
               ),
@@ -434,4 +508,93 @@ class _CollectionDetailState extends State<CollectionDetail> {
       _toast('${command.label} applied');
     }));
   }
+}
+
+
+/// The controls that only exist while a collection is open for changes.
+///
+/// Kept as one strip above the collection rather than scattered through it,
+/// so that leaving edit mode removes every affordance at once and nothing is
+/// left behind looking tappable.
+class _EditBar extends StatelessWidget {
+  const _EditBar({
+    required this.name,
+    required this.busy,
+    required this.isDraft,
+    required this.onAdd,
+    required this.onShare,
+    required this.onDone,
+  });
+
+  final TextEditingController name;
+  final bool busy;
+
+  /// A draft has never been shared, so its finishing move is "Share". An
+  /// already-shared collection is only being edited, so its is "Done" — the
+  /// same button would otherwise promise something that already happened.
+  final bool isDraft;
+  final VoidCallback onAdd;
+  final VoidCallback onShare;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('COLLECTION NAME', style: monoLabel(size: 10)),
+            const SizedBox(height: 6),
+            TextField(
+              key: const Key('editCollectionName'),
+              controller: name,
+              autofocus: isDraft,
+              enabled: !busy,
+              textInputAction: TextInputAction.done,
+              style: displayText(size: 18),
+              decoration: InputDecoration(
+                isDense: true,
+                filled: true,
+                fillColor: AppColors.surfaceSunken,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.inner),
+                  borderSide: BorderSide(color: AppColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.inner),
+                  borderSide: BorderSide(color: AppColors.signal),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: PrimaryActionButton(
+                    key: const Key('editAddSources'),
+                    label: 'Add',
+                    icon: Icons.add,
+                    expand: true,
+                    tone: ActionButtonTone.neutral,
+                    onTap: busy ? null : onAdd,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: PrimaryActionButton(
+                    key: const Key('editFinish'),
+                    label: isDraft ? 'Share' : 'Done',
+                    icon: isDraft ? Icons.ios_share : Icons.check,
+                    expand: true,
+                    tone: isDraft
+                        ? ActionButtonTone.ember
+                        : ActionButtonTone.neutral,
+                    onTap: busy ? null : (isDraft ? onShare : onDone),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
 }

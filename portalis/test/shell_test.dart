@@ -154,50 +154,14 @@ void main() {
       await tester.tap(find.byKey(const Key('headerHomeButton')));
       await tester.pump();
 
-      // One primary action beside one field, plus the one thing a paste
-      // cannot express. The sidebar's own New share, Join, magnet field,
-      // Paste, Add and .torrent picker are all gone â€” the command bar takes any
-      // of them as a paste.
+      // One way in. The sidebar's New share, Join, magnet field, Paste and
+      // .torrent picker are all gone, and so is the command bar that briefly
+      // replaced them: adding anything is one sheet, asked from one button.
       expect(find.text('New share'), findsNothing);
       expect(find.text('Join with a key'), findsNothing);
       expect(find.byKey(const Key('sidebarMagnetField')), findsNothing);
-      expect(find.byKey(const Key('commandBarField')), findsOneWidget);
+      expect(find.byKey(const Key('commandBarField')), findsNothing);
       expect(find.byKey(const Key('addTorrentButton')), findsNothing);
-      // A .torrent is a file, so it is the one thing the bar cannot absorb
-      // as a paste â€” it keeps an affordance, or desktop loses the capability.
-      expect(find.byKey(const Key('commandBarTorrentFile')), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('the command bar dispatches on what was pasted',
-        (tester) async {
-      await pumpApp(tester, size: desktopSize, engineCollections: [
-        buildNexusCollection(name: 'Iceland trip'),
-        buildNexusCollection(id: 2, name: 'Band demos'),
-      ]);
-
-      final field = find.byKey(const Key('commandBarField'));
-
-      // A magnet is unmistakable, so the bar offers to act on it.
-      await tester.enterText(field, 'magnet:?xt=urn:btih:${'a' * 40}');
-      await tester.pump();
-      expect(find.text('ADD TORRENT'), findsOneWidget);
-      // ...and does not treat it as a search: both collections stay.
-      expect(find.text('Iceland trip'), findsOneWidget);
-      expect(find.text('Band demos'), findsOneWidget);
-
-      // Anything that is neither a magnet nor a code was meant as a filter,
-      // applied as you type with nothing to press.
-      await tester.enterText(field, 'iceland');
-      await tester.pump();
-      expect(find.text('FILTERING'), findsOneWidget);
-      expect(find.text('Iceland trip'), findsOneWidget);
-      expect(find.text('Band demos'), findsNothing);
-
-      // Emptying it restores the list whatever the text used to be.
-      await tester.enterText(field, '');
-      await tester.pump();
-      expect(find.text('Band demos'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

@@ -8,7 +8,8 @@ import '../../../design/collection_deletion_dialog.dart';
 import '../../../design/design.dart';
 import '../domain/picked_file.dart';
 import 'commands.dart';
-import 'share.dart';
+import 'add_sources.dart';
+import '../domain/draft_names.dart';
 import '../../../nexus/data/collection_source.dart';
 import '../../../nexus/domain/app_state.dart';
 import 'route.dart';
@@ -43,7 +44,6 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  String _query = '';
   bool _dropBusy = false;
 
   // Feeds the currently-open row's inline `CollectionDetail`. Owned here,
@@ -84,21 +84,63 @@ class _HomeState extends State<Home> {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
-  void _openShare([List<PickedFile>? initialFiles]) {
-    if (widget.onShare != null) {
-      widget.onShare!(initialFiles);
-    } else {
-      _push(ShareScreen(initialFiles: initialFiles));
+  /// Asks what to put in a new collection, makes one, and opens it.
+  ///
+  /// The collection is a draft, so this costs nothing until the person says
+  /// to share it — which is why there is no page in between asking and
+  /// having. What used to be a New Share screen is the collection itself,
+  /// open for changes.
+  Future<void> _addCollection([List<PickedFile>? dropped]) async {
+    final chosen = dropped != null
+        ? LocalSources(dropped)
+        : await showAddSourcesSheet(context);
+    if (chosen == null || !mounted) return;
+    try {
+      final collection = switch (chosen) {
+        LocalSources(:final files) when files.isEmpty => null,
+        LocalSources(:final files) => await _createDraft(files),
+        TorrentSource(:final source) => await _importTorrent(source),
+      };
+      if (collection == null || !mounted) return;
+      _openCollectionById(collection);
+    } catch (error) {
+      if (mounted) {
+        showToast(context, '$error', severity: ToastSeverity.error);
+      }
     }
   }
 
+  Future<int?> _createDraft(List<PickedFile> files) async {
+    final accepted = await AppControllers.engine.send(
+      EngineCommand(
+        kind: 'createCollection',
+        name: randomDraftName(),
+        files: [
+          for (final file in files)
+            AppSourceFile(
+              name: file.name,
+              path: file.path,
+              bytes: BigInt.from(file.lengthBytes),
+            ),
+        ],
+      ),
+    );
+    return accepted.collection;
+  }
 
-  void _openCollection(AppCollection collection) {
+
+  void _openCollection(AppCollection collection) =>
+      _openCollectionById(collection.id);
+
+  void _openCollectionById(int collection) {
     if (widget.onOpen != null) {
-      widget.onOpen!(collection.id);
+      widget.onOpen!(collection);
       return;
     }
-    _push(routeFor(collection, AppControllers.engine));
+    _push(CollectionRoute(
+      collection: collection,
+      controller: AppControllers.engine,
+    ));
   }
 
   void _handleCommand((AppCollection, CollectionCommand) action) {
@@ -190,10 +232,10 @@ class _HomeState extends State<Home> {
           name: file.name,
           nativePath: file.path,
         )));
-    if (mounted) _openShare(picked);
+    if (mounted) _addCollection(picked);
   }
 
-  Future<void> _importTorrent(String source) async {
+  Future<int?> _importTorrent(String source) async {
     final accepted = await AppControllers.engine.send(
       EngineCommand.importTorrent(source),
     );
@@ -201,15 +243,9 @@ class _HomeState extends State<Home> {
     if (collection == null) {
       throw StateError('The engine did not identify the imported torrent');
     }
-    // Straight to the collection, whether the source was a magnet or a
-    // descriptor. A magnet's file list arrives from the swarm a moment later
-    // and the screen fills in; a descriptor's is already there. Waiting for
-    // the difference used to mean a magnet import landed nowhere at all.
-    if (!mounted) return;
-    _push(CollectionRoute(
-      collection: collection,
-      controller: AppControllers.engine,
-    ));
+    // The caller opens it. A magnet's file list arrives from the swarm a
+    // moment later and the screen fills in; a descriptor's is already there.
+    return collection;
   }
 
   @override
@@ -221,14 +257,11 @@ class _HomeState extends State<Home> {
           wide: widget.embedded,
           state: AppControllers.engine.state,
           error: AppControllers.engine.lastError,
-          query: _query,
           openId: widget.openId,
           openSource: _openSource,
           onOpen: _openCollection,
           onCommand: _handleCommand,
-          onSearch: (query) => setState(() => _query = query),
-          onImportTorrent: _importTorrent,
-          onCreateCollection: () => _openShare(),
+          onCreateCollection: () => _addCollection(),
         );
         if (!widget.embedded) return library;
         return DropTarget(

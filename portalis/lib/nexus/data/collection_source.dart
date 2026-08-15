@@ -75,13 +75,13 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
   @override
   Listenable get listenable => this;
 
-  AppCollection? get _nexusCollection => controller.state?.collections
+  AppCollection? get _live => controller.state?.collections
       .where((item) => item.id == collectionId)
       .firstOrNull;
 
   @override
   Collection resolve(Collection seed) {
-    final collection = _nexusCollection;
+    final collection = _live;
     if (collection == null) return seed;
     return collectionView(
       collection: collection,
@@ -95,7 +95,7 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
 
   @override
   List<PeerObservation> peerHistoryFor(String id) {
-    final collection = _nexusCollection;
+    final collection = _live;
     if (collection == null) return const [];
     return peerObservations(collection: collection, detail: _detail);
   }
@@ -132,10 +132,24 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
   Future<void> pause(String id) =>
       sendSetPaused(controller, collectionId, paused: true);
 
+  @override
+  Future<void> rename(String id, String name) => controller.send(
+        EngineCommand(
+          kind: 'renameCollection',
+          collection: collectionId,
+          name: name,
+        ),
+      );
+
+  @override
+  Future<void> publishDraft(String id) => controller.send(
+        EngineCommand(kind: 'publishDraft', collection: collectionId),
+      );
+
   /// Only a torrent import has files to choose between: a collection this
   /// device published owns all of them, and there is nothing to fetch.
   @override
-  bool get supportsSelection => _nexusCollection?.nature == 'Torrent';
+  bool get supportsSelection => _live?.nature == 'Torrent';
 
   /// The same command whether or not the download has started. The core
   /// records the choice and its worker states it to the engine — beginning a

@@ -76,6 +76,8 @@ class Collection {
 
   bool get isShared => kind == CollectionKind.shared;
   bool get isComplete => progress >= 1.0 && pendingMedia == 0;
+  /// Chosen but not shared: private to this device, and free to abandon.
+  bool get isDraft => state == 'draft';
   bool get isSharing => state == 'seeding' && media.isNotEmpty;
   bool get isConnecting => state == 'connecting';
   bool get isMoving =>
