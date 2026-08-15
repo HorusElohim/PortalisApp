@@ -30,8 +30,8 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, watch};
 
 use crate::projection::state::{Handle, PortalisState, Status};
-use crate::store::Store;
 use crate::store::records::{StoredCollection, StoredImportEntry};
+use crate::store::Store;
 use crate::substrate::Substrate;
 
 /// One collection this worker has something to do for.
@@ -176,11 +176,7 @@ fn pending_work(store: &Store) -> Result<Vec<Pending>, crate::store::StoreError>
     Ok(pending)
 }
 
-async fn perform(
-    store: &Store,
-    substrate: &dyn Substrate,
-    work: &Pending,
-) -> anyhow::Result<()> {
+async fn perform(store: &Store, substrate: &dyn Substrate, work: &Pending) -> anyhow::Result<()> {
     match work {
         Pending::Resolve { key, source } => resolve(store, substrate, key, source).await,
         Pending::Acquire { key, source, files } => {
@@ -211,10 +207,7 @@ async fn resolve(
     source: &str,
 ) -> anyhow::Result<()> {
     let inspected = substrate.inspect(source).await?;
-    anyhow::ensure!(
-        !inspected.files.is_empty(),
-        "that source names no files"
-    );
+    anyhow::ensure!(!inspected.files.is_empty(), "that source names no files");
 
     let entries = inspected
         .files
@@ -273,12 +266,7 @@ async fn acquire(
 }
 
 /// Brings one collection's projected row back in line with its stored facts.
-fn republish(
-    store: &Store,
-    states: &watch::Sender<PortalisState>,
-    handle: Handle,
-    key: &[u8],
-) {
+fn republish(store: &Store, states: &watch::Sender<PortalisState>, handle: Handle, key: &[u8]) {
     let Ok(Some(stored)) = store.collection(key) else {
         return;
     };
@@ -332,10 +320,7 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("a scratch directory");
-        (
-            Store::open(dir.join("portalis.redb")).expect("opens"),
-            dir,
-        )
+        (Store::open(dir.join("portalis.redb")).expect("opens"), dir)
     }
 
     fn collection(store: &Store, key: &[u8], source: &str) {

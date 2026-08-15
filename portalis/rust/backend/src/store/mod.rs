@@ -880,7 +880,9 @@ mod tests {
         let store = Store::open(scratch.file()).expect("opens");
 
         store.put_revision(&COLLECTION, 1, b"ours").expect("writes");
-        store.put_sample(&COLLECTION, 1, &sample(1)).expect("writes");
+        store
+            .put_sample(&COLLECTION, 1, &sample(1))
+            .expect("writes");
         store.put_revision(&OTHER, 1, b"theirs").expect("writes");
         store.put_sample(&OTHER, 1, &sample(2)).expect("writes");
 

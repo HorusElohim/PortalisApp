@@ -92,7 +92,6 @@ pub(crate) trait Substrate: Send + Sync {
 
     /// Everything held right now.
     async fn holdings(&self) -> Vec<TorrentInfo>;
-
 }
 
 /// The real one.
@@ -143,7 +142,6 @@ impl Substrate for Torrents {
     async fn holdings(&self) -> Vec<TorrentInfo> {
         crate::torrent::list_torrents().await.unwrap_or_default()
     }
-
 }
 
 static CURRENT: Mutex<Option<Arc<dyn Substrate>>> = Mutex::new(None);
@@ -271,7 +269,6 @@ impl Substrate for Recorded {
             .map(held_torrent)
             .collect()
     }
-
 }
 
 #[cfg(test)]

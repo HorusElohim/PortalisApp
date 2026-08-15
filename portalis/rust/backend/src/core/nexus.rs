@@ -34,9 +34,7 @@ use crate::projection::state::{
     Accepted, CollectionState, Command, CommandError, Connectivity, Detail, DeviceState, Handle,
     LocalFile, Nature, PortalisState, Role, Status,
 };
-use crate::store::records::{
-    Role as StoredRole, StoredCollection, StoredSourceFile,
-};
+use crate::store::records::{Role as StoredRole, StoredCollection, StoredSourceFile};
 use crate::store::{Store, StoreError};
 
 /// Where the core keeps its file, and who it is.
@@ -109,7 +107,9 @@ pub(crate) struct DetailSources {
 
 impl std::fmt::Debug for DetailSources {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.debug_struct("DetailSources").finish_non_exhaustive()
+        formatter
+            .debug_struct("DetailSources")
+            .finish_non_exhaustive()
     }
 }
 
@@ -621,9 +621,7 @@ impl Nexus {
             Command::SetPaused { collection, paused } => {
                 self.set_paused(*collection, *paused).map(|()| None)
             }
-            Command::PublishDraft { collection } => {
-                self.publish_draft(*collection).map(|()| None)
-            }
+            Command::PublishDraft { collection } => self.publish_draft(*collection).map(|()| None),
             Command::DeleteFiles { collection } => self.delete_files(*collection).map(|()| None),
             Command::ImportTorrent { source } => self.import_torrent(source).map(Some),
             Command::DownloadSelection {
@@ -1436,8 +1434,7 @@ fn validate(command: &Command) -> Result<(), CommandError> {
             "choose a magnet URI or .torrent file"
         }
         Command::ImportTorrent { source }
-            if !crate::torrent::is_magnet(source)
-                && !crate::torrent::is_torrent_path(source) =>
+            if !crate::torrent::is_magnet(source) && !crate::torrent::is_torrent_path(source) =>
         {
             "choose a magnet URI or a .torrent file"
         }
@@ -2213,15 +2210,16 @@ mod tests {
                 // anything the runtime schedules. It turned a failing
                 // assertion into a hung suite: this test holds the serial
                 // state guard, so every other test waits behind it.
-                let settled = states.borrow().collections.first().is_some_and(
-                    |collection| {
+                let settled = states
+                    .borrow()
+                    .collections
+                    .first()
+                    .is_some_and(|collection| {
                         // Published, and waiting to be started: confirming a
                         // draft finishes assembling it, which is not the same
                         // as saying "go now".
-                        collection.status == Status::Paused
-                            && collection.revision == 1
-                    },
-                );
+                        collection.status == Status::Paused && collection.revision == 1
+                    });
                 if settled {
                     break;
                 }
@@ -2469,7 +2467,10 @@ mod tests {
 
         // The worker resolved it: the real name, the real files, all chosen.
         let resolved = nexus.state().collections[0].clone();
-        assert_eq!(resolved.name, "Bundle", "the source's own name replaces the placeholder");
+        assert_eq!(
+            resolved.name, "Bundle",
+            "the source's own name replaces the placeholder"
+        );
         assert_eq!(resolved.entries, 2);
         assert_eq!(resolved.total_bytes, 12);
         let detail = watching.borrow().clone().expect("a selection");

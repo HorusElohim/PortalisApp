@@ -264,7 +264,10 @@ mod validation_tests {
     #[test]
     fn a_local_descriptor_is_a_path_and_a_url_never_is() {
         assert!(is_torrent_path("/Users/ada/Downloads/bundle.torrent"));
-        assert!(is_torrent_path("relative/bundle.TORRENT"), "case is not identity");
+        assert!(
+            is_torrent_path("relative/bundle.TORRENT"),
+            "case is not identity"
+        );
         assert!(!is_torrent_path("/Users/ada/Downloads/bundle.mkv"));
 
         for remote in [
@@ -499,9 +502,9 @@ pub(crate) fn is_magnet(source: &str) -> bool {
 pub(crate) fn is_remote_source(source: &str) -> bool {
     const REMOTE: [&str; 3] = ["magnet:", "http://", "https://"];
     let source = source.trim_start();
-    REMOTE
-        .iter()
-        .any(|scheme| source.len() >= scheme.len() && source[..scheme.len()].eq_ignore_ascii_case(scheme))
+    REMOTE.iter().any(|scheme| {
+        source.len() >= scheme.len() && source[..scheme.len()].eq_ignore_ascii_case(scheme)
+    })
 }
 
 /// Resolves what a `.torrent` path or magnet URI contains, fetching no
@@ -1227,7 +1230,10 @@ mod native {
 
     /// A hard link, or — only where and only because the OS refuses one — a
     /// copy-on-write clone. Never a byte-for-byte copy.
-    fn same_bytes_new_name(source: &std::path::Path, destination: &std::path::Path) -> std::io::Result<()> {
+    fn same_bytes_new_name(
+        source: &std::path::Path,
+        destination: &std::path::Path,
+    ) -> std::io::Result<()> {
         let error = match std::fs::hard_link(source, destination) {
             Ok(()) => return Ok(()),
             Err(error) => error,
@@ -1766,10 +1772,7 @@ mod native {
         Ok(())
     }
 
-    pub(super) async fn set_selection(
-        info_hash_hex: &str,
-        files: &[usize],
-    ) -> anyhow::Result<()> {
+    pub(super) async fn set_selection(info_hash_hex: &str, files: &[usize]) -> anyhow::Result<()> {
         let session = session().await?;
         let id = TorrentIdOrHash::try_from(info_hash_hex)
             .map_err(|e| anyhow::anyhow!("{info_hash_hex} isn't a valid info hash: {e}"))?;
@@ -1991,7 +1994,9 @@ mod native {
             // refuses a link, so this asserts the fallback ran and failed the
             // same honest way, not that it silently produced a file.
             let error = result.expect_err("neither a link nor a clone can land here");
-            assert!(error.to_string().contains("Portalis will not copy source bytes"));
+            assert!(error
+                .to_string()
+                .contains("Portalis will not copy source bytes"));
         }
     }
 }

@@ -142,7 +142,6 @@ mod native {
         *CACHE.lock().unwrap() = Some(info.clone());
         Ok(info)
     }
-
 }
 
 #[cfg(test)]

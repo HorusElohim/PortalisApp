@@ -556,8 +556,8 @@ mod tests {
         const LOCAL_FACTS: usize = 1 + 8;
         const ABSENT_HANDLE: usize = 4;
         const DRAFT_FLAG: usize = 1;
-        let schema_four = &current
-            [..current.len() - SOURCE_COUNT - LOCAL_FACTS - ABSENT_HANDLE - DRAFT_FLAG];
+        let schema_four =
+            &current[..current.len() - SOURCE_COUNT - LOCAL_FACTS - ABSENT_HANDLE - DRAFT_FLAG];
         assert_eq!(
             StoredCollection::decode(schema_four)
                 .expect("older rows decode without invented sources")

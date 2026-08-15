@@ -278,9 +278,12 @@ pub async fn storage_breakdown() -> Result<Vec<AppStorageEntry>, String> {
     let by_path: Vec<(std::path::PathBuf, &str)> = holdings
         .iter()
         .filter_map(|info| {
-            info.files
-                .first()
-                .map(|file| (std::path::PathBuf::from(&file.absolute_path), info.info_hash.as_str()))
+            info.files.first().map(|file| {
+                (
+                    std::path::PathBuf::from(&file.absolute_path),
+                    info.info_hash.as_str(),
+                )
+            })
         })
         .collect();
 

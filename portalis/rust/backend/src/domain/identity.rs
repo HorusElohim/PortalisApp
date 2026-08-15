@@ -72,10 +72,6 @@ impl DeviceIdentity {
 mod tests {
     use super::*;
 
-
-
-
-
     #[test]
     fn identity_bytes_round_trip_to_same_device_id() {
         let identity = DeviceIdentity::generate();

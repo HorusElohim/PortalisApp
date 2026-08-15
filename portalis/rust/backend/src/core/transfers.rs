@@ -105,15 +105,14 @@ pub(crate) async fn follow_transfers(
         // is what let the interface report an active transfer with nothing
         // on screen to explain it, so it is released here rather than left
         // for somebody to notice.
-        let claimed: std::collections::HashSet<&str> =
-            carried.iter().map(|(_, handle, _)| handle.as_str()).collect();
+        let claimed: std::collections::HashSet<&str> = carried
+            .iter()
+            .map(|(_, handle, _)| handle.as_str())
+            .collect();
         for info in &reported {
             if !claimed.contains(info.info_hash.as_str()) {
                 if let Err(error) = substrate.release(&info.info_hash).await {
-                    crate::log::clog!(
-                        "nexus",
-                        "could not release an unclaimed torrent: {error}"
-                    );
+                    crate::log::clog!("nexus", "could not release an unclaimed torrent: {error}");
                 }
             }
         }
@@ -183,7 +182,12 @@ fn carried_collections(
 ///
 /// A failure is logged and dropped rather than propagated: losing a point of a
 /// chart is not a reason to stop reporting the transfer it describes.
-fn record(store: &Store, key: &[u8], info: &TorrentInfo, last: Option<&StoredSample>) -> StoredSample {
+fn record(
+    store: &Store,
+    key: &[u8],
+    info: &TorrentInfo,
+    last: Option<&StoredSample>,
+) -> StoredSample {
     let sample = StoredSample {
         done: info.progress_bytes,
         total: info.total_bytes,
