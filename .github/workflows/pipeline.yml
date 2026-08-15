@@ -18,6 +18,10 @@ concurrency:
 
 env:
   WORKING_DIR: portalis
+  # Nothing here is ever rebuilt incrementally — every job starts from a cold
+  # or restored cache — so incremental artifacts are pure disk cost, and disk
+  # is the thing this workspace runs out of.
+  CARGO_INCREMENTAL: 0
 
 jobs:
   backend:
@@ -25,6 +29,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The backend builds this workspace three times in one job — clippy,
+      # then tests, then an instrumented coverage build that compiles every
+      # crate twice again, with and without cfg(test). With iroh, ring and a
+      # vendored librqbit underneath, that overran the runner's ~14 GB and
+      # failed as "No space left on device" in whichever crate happened to be
+      # compiling. None of what is removed here is used by any job.
+      - name: Make room for the workspace
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h / | tail -1
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt, llvm-tools-preview
