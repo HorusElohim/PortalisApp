@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'theme_controller.dart';
@@ -311,6 +312,22 @@ class AppTheme {
       ),
       dividerColor: AppColors.border,
       splashFactory: InkRipple.splashFactory,
+      // One way in and one way back, on every platform. A pushed page slides
+      // in from the right over a page that parallaxes away, and comes back
+      // the same way — including by dragging from the left edge, which is the
+      // gesture people already have in their hands.
+      //
+      // Set here rather than per route: `MaterialPageRoute` reads it, so
+      // every push in the app gets it without a single call site knowing.
+      // Applied to every platform on purpose — Portalis is one product, and a
+      // window dragged between layouts should not change how leaving a page
+      // feels.
+      pageTransitionsTheme: PageTransitionsTheme(
+        builders: {
+          for (final platform in TargetPlatform.values)
+            platform: const CupertinoPageTransitionsBuilder(),
+        },
+      ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.surface,
         contentTextStyle: AppText.body(),

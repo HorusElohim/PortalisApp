@@ -38,6 +38,7 @@ class Collection {
     this.totalBytes = 0,
     this.downloadedBytes = 0,
     this.uploadedBytes = 0,
+    this.revision = 0,
     this.downloadMbps = 0.0,
     this.uploadMbps = 0.0,
     this.livePeers = 0,
@@ -58,6 +59,14 @@ class Collection {
   final int totalBytes;
   final int downloadedBytes;
   final int uploadedBytes;
+
+  /// Which version of this collection's contents this is.
+  ///
+  /// Adding or removing a file changes what the torrent hashes to, so it
+  /// mints a new revision rather than editing the old one in place. Worth
+  /// showing because it is the only thing that tells two collections with the
+  /// same name and different contents apart.
+  final int revision;
   final double downloadMbps;
   final double uploadMbps;
   final int livePeers;

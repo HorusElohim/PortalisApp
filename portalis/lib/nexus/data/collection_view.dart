@@ -58,6 +58,7 @@ Collection collectionView({
     totalBytes: collection.totalBytes.toInt(),
     downloadedBytes: collection.onDiskBytes.toInt(),
     uploadedBytes: collection.uploadedBytes.toInt(),
+    revision: collection.revision.toInt(),
     downloadMbps: _megabits(transfer?.downBytesPerSecond ?? 0),
     uploadMbps: _megabits(transfer?.upBytesPerSecond ?? 0),
     livePeers: transfer?.peers ?? swarm.length,

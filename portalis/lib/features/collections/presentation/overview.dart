@@ -226,6 +226,14 @@ class _CollectionIdentifiers extends StatelessWidget {
                 label: 'Uploaded',
                 value: formatBytesPrecise(collection.uploadedBytes),
               ),
+            // Only once there is one: a draft has never been published, and
+            // "revision 0" would read as a version rather than as none.
+            if (collection.revision > 0)
+              InfoRow(
+                label: 'Revision',
+                value: '${collection.revision}',
+                monospace: true,
+              ),
             InfoRow(
               label: collection.isShared ? 'Collection id' : 'Info hash',
               value: collection.id,
