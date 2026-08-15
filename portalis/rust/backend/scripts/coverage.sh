@@ -82,7 +82,7 @@ set -euo pipefail
 # and kept working. Step 9 replaces the bridge and deletes the file, and this
 # line goes with it.
 ignore='apps/server/src/(main|socket)\.rs|crates/storage/src/mongo/mod\.rs|crates/storage/src/(identity|collections|friends|envelopes|mailbox|directory|store)\.rs|crates/client/src/transport/.*\.rs|crates/client/tests/.*\.rs|demo/src/.*\.rs|backend/src/[^/]*\.rs|backend/src/domain/.*\.rs|backend/src/collections/legacy\.rs|portalis\.protocol\.v1\.rs'
-lcov="$(mktemp -t nexus-coverage)"
+lcov="$(mktemp -t nexus-coverage.XXXXXX)"
 trap 'rm -f "$lcov"' EXIT
 
 # `--all-features` turns on the application's `local-integration` feature,
