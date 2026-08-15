@@ -1,201 +1,133 @@
+import '../../../nexus/domain/app_state.dart';
 import '../../media/domain/item.dart';
-import 'import_state.dart';
 
-/// Pure collection state used by the Flutter application.
+/// One collection, as the interface reads it.
 ///
-/// This model deliberately knows nothing about Flutter widgets, colours, text
-/// formatting, or Flutter-Rust Bridge. It is the stable shape controllers and
-/// screens share; adapters map native DTOs into it and presentation extensions
-/// decide how to render it.
-enum CollectionKind { shared, torrent }
-
-class Collaborator {
-  const Collaborator({
-    required this.deviceId,
-    required this.name,
-    this.isAdmin = false,
-  });
-
-  final String deviceId;
-  final String name;
-  final bool isAdmin;
-
-  String get initials => name.isEmpty ? '?' : name[0].toUpperCase();
-}
-
-/// One user-visible collection: either an invite-based shared collection or
-/// one plain torrent. The backend owns the state labels and figures; this type
-/// exposes only semantic queries derived from those facts.
+/// A view over the engine's own projection, not a copy of it. Every getter
+/// below reads through to [source] or [detail]; nothing is stored, so nothing
+/// can disagree with what the engine said.
+///
+/// It used to be a copy, built by a translation that restated every number and
+/// rewrote every status word into a second vocabulary. Each restatement was a
+/// place for two answers to drift, and all of them did: a bar measured the
+/// selected files' progress against every file's size, a paused collection
+/// reported itself as importing because one word had no mapping, and a list
+/// row with no entries was handed a list of fabricated empty ones so the type
+/// would be satisfied. None of those are possible to write here.
+///
+/// [detail] is absent for a row in a list, which has not asked for one — Nexus
+/// charges nothing for a detail until something subscribes. Where it is
+/// absent, [media] is empty rather than invented, and the counts come from the
+/// snapshot, which knows them without it.
 class Collection {
-  const Collection({
-    required this.id,
-    required this.name,
-    required this.kind,
-    required this.collaborators,
-    required this.media,
-    this.inviteCode,
-    this.progress = 0.0,
-    this.totalBytes = 0,
-    this.downloadedBytes = 0,
-    this.uploadedBytes = 0,
-    this.revision = 0,
-    this.downloadMbps = 0.0,
-    this.uploadMbps = 0.0,
-    this.livePeers = 0,
-    this.torrentPeers = const [],
-    this.pendingMedia = 0,
-    this.etaSecs,
-    this.state = '',
-    this.ingestion,
-  });
+  const Collection(this.source, {this.detail, this.contacts = const []});
 
-  final String id;
-  final String name;
-  final CollectionKind kind;
-  final String? inviteCode;
-  final List<Collaborator> collaborators;
-  final List<MediaItem> media;
-  final double progress;
-  final int totalBytes;
-  final int downloadedBytes;
-  final int uploadedBytes;
+  final AppCollection source;
+  final AppDetail? detail;
+  final List<AppContact> contacts;
 
-  /// Which version of this collection's contents this is.
-  ///
-  /// Adding or removing a file changes what the torrent hashes to, so it
-  /// mints a new revision rather than editing the old one in place. Worth
-  /// showing because it is the only thing that tells two collections with the
-  /// same name and different contents apart.
-  final int revision;
-  final double downloadMbps;
-  final double uploadMbps;
-  final int livePeers;
+  /// The process-local handle. `AppCollection` carries no durable public
+  /// identifier yet, and inventing one here would be worse than showing the
+  /// handle the rest of the interface already uses.
+  String get id => '${source.id}';
+  String get name => source.name;
 
-  /// `"ip:port"` of this collection's live swarm peers — `torrent` kind
-  /// only. Anonymous: BitTorrent carries no identity beyond a network
-  /// address, so there is no name to show, only that someone is there.
-  final List<String> torrentPeers;
-  final int pendingMedia;
-  final int? etaSecs;
+  /// The engine's own word, not a translation of it. Comparing against these
+  /// directly is what keeps a status that nobody remembered to map from
+  /// silently reading as every question's `false`.
+  String get state => source.status;
 
-  /// Backend-defined state, including native `importing` and `import_failed`
-  /// publication states.
-  final String state;
-  final CollectionImport? ingestion;
+  bool get isTorrent => source.nature == 'Torrent';
+  bool get isShared => !isTorrent;
 
-  bool get isShared => kind == CollectionKind.shared;
-  bool get isComplete => progress >= 1.0 && pendingMedia == 0;
   /// Chosen but not shared: private to this device, and free to abandon.
-  bool get isDraft => state == 'draft';
+  bool get isDraft => state == 'Draft';
 
   /// Told to stop. A person's decision, so it outranks whatever the numbers
   /// are doing — and it decides which half of the start/stop pair is offered.
-  bool get isPaused => state == 'paused';
-  bool get isSharing => state == 'seeding' && media.isNotEmpty;
-  bool get isConnecting => state == 'connecting';
-  bool get isMoving =>
-      downloadMbps > 0 ||
-      uploadMbps > 0 ||
-      state == 'downloading' ||
-      (ingestion != null && !ingestion!.failed) ||
-      pendingMedia > 0;
+  bool get isPaused => state == 'Paused';
+  bool get isConnecting => state == 'WaitingForOwner';
+  bool get isDownloading => state == 'Downloading';
+  bool get isPreparing => state == 'Preparing';
 
-  /// The entries that made this collection grow, regrouped from its flat media
-  /// list in the order the backend projected them.
-  List<CollectionEntry> get entries {
-    final byHash = <String, List<MediaItem>>{};
-    for (final mediaItem in media) {
-      byHash.putIfAbsent(mediaItem.infoHash, () => []).add(mediaItem);
-    }
-    return [
-      for (final entry in byHash.entries)
-        CollectionEntry(
-          infoHash: entry.key,
-          addedBy: entry.value.first.addedBy,
-          media: entry.value,
-        ),
-    ];
-  }
+  /// Complete, and with something to serve. Nothing to serve means nothing is
+  /// being served — telling somebody their photos are available when the
+  /// collection is empty is the kind of claim this interface must not make.
+  bool get isSharing => isComplete && entryCount > 0;
 
-  /// A complete value fingerprint for the polling controller. Keeping it here
-  /// avoids making rendering depend on object identity while still including
-  /// every value current UI can display.
-  int get signature => Object.hash(
-        id,
-        name,
-        kind,
-        inviteCode,
-        progress,
-        totalBytes,
-        downloadedBytes,
-        uploadedBytes,
-        downloadMbps,
-        uploadMbps,
-        livePeers,
-        pendingMedia,
-        etaSecs,
-        state,
-        ingestion == null
-            ? null
-            : Object.hash(
-                ingestion!.stage,
-                ingestion!.progress,
-                ingestion!.processedBytes,
-                ingestion!.totalBytes,
-                ingestion!.completedPieces,
-                ingestion!.totalPieces,
-                ingestion!.error,
-              ),
-        Object.hashAll(
-          collaborators.map((c) => Object.hash(c.deviceId, c.name, c.isAdmin)),
-        ),
-        Object.hashAll(torrentPeers),
-        Object.hashAll(
-          media.map(
-            (m) => Object.hash(
-              m.label,
-              m.entryLabel,
-              m.infoHash,
-              m.localPath,
-              m.progress,
-              m.sizeBytes,
-              m.downloadedBytes,
-              Object.hashAll(
-                m.pieceRuns.map(
-                  (run) => Object.hash(
-                    run.offsetBytes,
-                    run.lengthBytes,
-                    run.verified,
-                    Object.hashAll(run.peers),
-                  ),
-                ),
-              ),
-              m.fetched,
-              m.addedBy,
-            ),
-          ),
-        ),
-      );
+  bool get isComplete => state == 'Available';
+  bool get isMoving => isDownloading || downloadMbps > 0 || uploadMbps > 0;
+
+  int get totalBytes => source.totalBytes.toInt();
+  int get downloadedBytes => source.onDiskBytes.toInt();
+  int get uploadedBytes => source.uploadedBytes.toInt();
+  int get revision => source.revision.toInt();
+
+  /// Zero to one. The engine's own reading while a transfer is live, and the
+  /// recorded history's last reading once it is not — never an arithmetic
+  /// guess of this interface's own.
+  double get progress => source.transfer?.progress ?? detail?.progress ?? 0;
+
+  double get downloadMbps => _megabits(source.transfer?.downBytesPerSecond ?? 0);
+  double get uploadMbps => _megabits(source.transfer?.upBytesPerSecond ?? 0);
+  int get livePeers => source.transfer?.peers ?? torrentPeers.length;
+  int? get etaSecs => source.transfer?.etaSecs;
+
+  /// `"ip:port"` of this collection's live swarm peers. Anonymous: BitTorrent
+  /// carries no identity beyond a network address, so there is no name to
+  /// show, only that somebody is there.
+  List<String> get torrentPeers => detail?.peers ?? const [];
+
+  /// The people this collection is shared with, resolved against the contacts
+  /// the snapshot already carries.
+  List<AppContact> get collaborators => [
+        for (final member in source.members)
+          for (final contact in contacts.where((item) => item.id == member))
+            contact,
+      ];
+
+  /// How many entries there are, which the snapshot knows without a detail.
+  int get entryCount => source.entries;
+
+  /// Files, once something has asked for them. Empty rather than fabricated
+  /// where nothing has: a row that did not subscribe does not have them, and
+  /// saying so is cheaper than inventing placeholders that claim nothing.
+  List<MediaItem> get media => [
+        for (final entry in detail?.entries ?? const <AppEntry>[])
+          mediaItemFor(entry),
+      ];
+
+  /// Entries wanted but not yet here.
+  int get pendingMedia => detail == null
+      ? 0
+      : detail!.entries.where((entry) => !entry.available).length;
 }
 
-/// One signed manifest entry, represented by the torrent that carries its
-/// files. A not-yet-fetched entry is a single placeholder media item.
-class CollectionEntry {
-  const CollectionEntry({
-    required this.infoHash,
-    required this.media,
-    this.addedBy,
-  });
-
-  final String infoHash;
-  final List<MediaItem> media;
-  final String? addedBy;
-
-  bool get fetched => media.any((item) => item.fetched);
-  int get totalBytes => media.fold(0, (sum, item) => sum + item.sizeBytes);
-  int get downloadedBytes =>
-      media.fold(0, (sum, item) => sum + item.downloadedBytes);
-  double get progress =>
-      totalBytes == 0 ? 0.0 : (downloadedBytes / totalBytes).clamp(0.0, 1.0);
-  String get label => media.isEmpty ? infoHash : media.first.entryLabel;
+/// One file, as the grid and the viewer read it.
+///
+/// Progress is the engine's own per-file byte count. Deriving it from
+/// availability alone made every file binary: nothing at all until the very
+/// end, then everything — for a ten-file torrent, ten empty tiles for the
+/// whole download, which is precisely the question a person is asking while
+/// they wait.
+MediaItem mediaItemFor(AppEntry entry) {
+  final total = entry.bytes.toInt();
+  final done = entry.downloadedBytes.toInt();
+  return MediaItem(
+    entryId: entry.id,
+    selected: entry.selected,
+    label: entry.label,
+    // Only once it is whole. A torrent's pieces arrive out of order, so a path
+    // to a half-written file would render as a broken preview rather than as
+    // the honest placeholder a person expects while waiting.
+    localPath: entry.available ? entry.path : null,
+    progress: total == 0 ? 0 : (done / total).clamp(0.0, 1.0),
+    sizeBytes: total,
+    downloadedBytes: done,
+    // "Something of this is here", not "all of it is": a file that has begun
+    // arriving reports how far along it is, rather than claiming nothing.
+    fetched: entry.available || done > 0,
+  );
 }
+
+double _megabits(int bytesPerSecond) => bytesPerSecond * 8 / 1000000;

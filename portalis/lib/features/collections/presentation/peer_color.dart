@@ -50,9 +50,6 @@ extension CollectionPresentation on Collection {
   String get peersLabel => '$livePeers peer${livePeers == 1 ? '' : 's'}';
 
   String get copiesLabel {
-    if (ingestion != null) {
-      return ingestion!.failed ? 'Import failed' : 'Preparing locally in Rust';
-    }
     if (!isComplete) {
       final eta = etaLabel;
       final completed = formatProgressPercent(progress);

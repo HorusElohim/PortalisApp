@@ -3,7 +3,6 @@
 class MediaItem {
   const MediaItem({
     required this.label,
-    required this.infoHash,
     String? entryLabel,
     this.localPath,
     this.progress = 0.0,
@@ -18,7 +17,6 @@ class MediaItem {
 
   final String label;
   final String? _entryLabel;
-  final String infoHash;
   final String? localPath;
   final double progress;
   final int sizeBytes;

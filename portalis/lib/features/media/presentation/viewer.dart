@@ -235,14 +235,6 @@ class _MediaDetails extends StatelessWidget {
                 value: formatBytesPrecise(media.sizeBytes),
                 dense: true,
               ),
-            if (media.infoHash.isNotEmpty)
-              InfoRow(
-                label: 'Info hash',
-                value: media.infoHash,
-                monospace: true,
-                copyable: true,
-                dense: true,
-              ),
             if (media.localPath != null)
               InfoRow(
                 label: 'File path',

@@ -269,9 +269,9 @@ void main() {
     );
 
     expect(find.text('Episode archive'), findsOneWidget);
-    // Preparing maps onto the legacy backend's own "importing" vocabulary —
-    // the same word `CollectionRow`'s badge has always shown for it.
-    expect(find.text('IMPORTING'), findsOneWidget);
+    // The engine's own word, shown as it is — there is no second vocabulary
+    // between the two any more, and so nothing that can disagree.
+    expect(find.text('PREPARING'), findsOneWidget);
     await tester.tap(find.text('Episode archive'));
     expect(opened, same(collection));
     await tester.tap(find.byKey(const Key('shareCollectionAction')));

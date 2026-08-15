@@ -6,7 +6,6 @@ import '../domain/collection.dart';
 import '../domain/peer_observation.dart';
 import '../domain/transfer_history.dart';
 import 'commands.dart';
-import 'import_progress.dart';
 import 'peers.dart';
 import 'peer_color.dart';
 
@@ -22,7 +21,6 @@ class CollectionOverview extends StatelessWidget {
     this.editing = false,
     this.paused = false,
     this.showTitle = true,
-    required this.onInvite,
     required this.onAddMedia,
     required this.onFetch,
     this.peerHistory = const [],
@@ -39,7 +37,6 @@ class CollectionOverview extends StatelessWidget {
   /// Which half of the start/stop pair the command bar offers.
   final bool paused;
   final bool showTitle;
-  final VoidCallback onInvite;
   final VoidCallback onAddMedia;
   final VoidCallback onFetch;
   final List<PeerObservation> peerHistory;
@@ -54,24 +51,13 @@ class CollectionOverview extends StatelessWidget {
           uploadMbps: sample.uploadMbps,
         ),
     ];
-    final ingestion = collection.ingestion;
-    final commandBusy = busy || (ingestion != null && !ingestion.failed);
+    final commandBusy = busy;
     final commandBar = CollectionCommandBar(
       busy: commandBusy,
       onCommand: onCommand,
       editing: editing,
       paused: paused,
       trailingActions: [
-        if (collection.isShared)
-          PillButton(
-            label: 'Invite',
-            icon: Icon(
-              Icons.people_alt_outlined,
-              size: 16,
-              color: AppColors.signalSoft,
-            ),
-            onTap: commandBusy ? null : onInvite,
-          ),
         if (collection.pendingMedia > 0)
           PillButton(
             label: 'Fetch ${collection.pendingMedia}',
@@ -111,10 +97,6 @@ class CollectionOverview extends StatelessWidget {
             label: collection.copiesLabel,
             fontSize: 13,
           ),
-        ],
-        if (ingestion != null) ...[
-          const SizedBox(height: 10),
-          CollectionImportProgress(ingestion: ingestion),
         ],
         if (hasTransfer) ...[
           const SizedBox(height: 10),
@@ -159,7 +141,7 @@ class _CollectionControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final admins =
-        collection.collaborators.where((item) => item.isAdmin).length;
+        0;
     return Row(
       children: [
         if (admins > 0)

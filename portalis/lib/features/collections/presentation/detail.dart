@@ -2,9 +2,7 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart' hide PickedFile;
-import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../design/collection_deletion_dialog.dart';
 import '../../../design/design.dart';
@@ -123,82 +121,6 @@ class _CollectionDetailState extends State<CollectionDetail> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<void> _showInvite() async {
-    final override = widget.source.showInvite;
-    if (override != null) {
-      await override(context, _collection);
-      return;
-    }
-
-    final code = _collection.inviteCode;
-    if (code == null) return;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Invite a collaborator'),
-        content: SizedBox(
-          width: 260,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Share this code — anyone who enters it can join and add media.',
-                style: AppText.secondary(color: AppColors.textDim),
-              ),
-              const SizedBox(height: 14),
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(AppRadius.inner),
-                  ),
-                  child: QrImageView(
-                    data: code,
-                    version: QrVersions.auto,
-                    size: 200,
-                    backgroundColor: Colors.white,
-                    eyeStyle: const QrEyeStyle(
-                      eyeShape: QrEyeShape.square,
-                      color: Colors.black,
-                    ),
-                    dataModuleStyle: const QrDataModuleStyle(
-                      dataModuleShape: QrDataModuleShape.square,
-                      color: Colors.black,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              SelectableText(code,
-                  style: monoLabel(size: 12, letterSpacing: 0)),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: code));
-              showToast(
-                dialogContext,
-                'Invite code copied',
-                severity: ToastSeverity.success,
-              );
-            },
-            child: const Text('Copy'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _addMedia() async {
@@ -414,7 +336,6 @@ class _CollectionDetailState extends State<CollectionDetail> {
           peerHistory: widget.source.peerHistoryFor(collection.id),
           showCommands: widget.showCommands,
           showTitle: widget.showTitle && !_isEditing,
-          onInvite: _showInvite,
           onAddMedia: _addMedia,
           onFetch: _fetchPending,
           editing: _isEditing,

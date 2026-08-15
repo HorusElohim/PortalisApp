@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/app/app_controllers.dart';
 import 'package:portalis/features/collections/domain/collection.dart';
-import 'package:portalis/features/collections/domain/import_state.dart';
-import 'package:portalis/features/media/domain/item.dart';
 import 'package:portalis/nexus/domain/app_state.dart';
 import 'package:portalis/features/settings/domain/engine.dart';
 import 'package:portalis/main.dart';
@@ -18,7 +16,6 @@ export 'package:flutter_test/flutter_test.dart';
 export 'package:portalis/app/app_controllers.dart';
 export 'package:portalis/design/design.dart';
 export 'package:portalis/features/collections/domain/collection.dart';
-export 'package:portalis/features/collections/domain/import_state.dart';
 export 'package:portalis/features/collections/domain/paste.dart';
 export 'package:portalis/features/collections/presentation/detail.dart';
 export 'package:portalis/features/collections/presentation/add_sources.dart';
@@ -39,40 +36,86 @@ export 'package:portalis/design/theme.dart';
 const phoneSize = Size(390, 844);
 const desktopSize = Size(1280, 800);
 
+/// A collection as the engine would report it.
+///
+/// Builds the backend's own values and wraps them, because that is all
+/// [Collection] is now — tests that construct a shape the engine cannot
+/// produce are tests of something that cannot happen.
 Collection buildCollection({
-  String id = 'c1',
+  int id = 1,
   String name = 'Iceland trip',
-  CollectionKind kind = CollectionKind.shared,
+  String nature = 'Native',
+  String status = 'Available',
   double downloadMbps = 0,
   double uploadMbps = 0,
-  String state = 'seeding',
   int livePeers = 0,
   List<String> torrentPeers = const [],
-  int pendingMedia = 0,
-  List<Collaborator> collaborators = const [],
-  List<MediaItem> media = const [],
+  List<AppEntry> entries = const [],
+  List<AppContact> contacts = const [],
+  Uint32List? members,
   int totalBytes = 0,
   int downloadedBytes = 0,
   int? etaSecs,
-  CollectionImport? ingestion,
-}) =>
-    Collection(
+}) {
+  // A partial collection has a transfer even when no rate was named: the
+  // engine reports one for anything it is carrying, and its progress is where
+  // a fraction comes from.
+  final moving = downloadMbps > 0 ||
+      uploadMbps > 0 ||
+      livePeers > 0 ||
+      downloadedBytes > 0 ||
+      status == 'Downloading';
+  return Collection(
+    buildNexusCollection(
       id: id,
       name: name,
-      kind: kind,
-      collaborators: collaborators,
-      media: media,
-      progress: totalBytes == 0 ? 0 : downloadedBytes / totalBytes,
+      nature: nature,
+      status: status,
+      members: members,
+      entries: entries.length,
       totalBytes: totalBytes,
-      downloadedBytes: downloadedBytes,
-      downloadMbps: downloadMbps,
-      uploadMbps: uploadMbps,
-      livePeers: livePeers,
-      torrentPeers: torrentPeers,
-      pendingMedia: pendingMedia,
-      etaSecs: etaSecs,
-      state: state,
-      ingestion: ingestion,
+      onDiskBytes: downloadedBytes,
+      transfer: moving
+          ? AppTransfer(
+              progress: totalBytes == 0 ? 0 : downloadedBytes / totalBytes,
+              downBytesPerSecond: (downloadMbps * 125000).round(),
+              upBytesPerSecond: (uploadMbps * 125000).round(),
+              peers: livePeers,
+              etaSecs: etaSecs,
+            )
+          : null,
+    ),
+    detail: entries.isEmpty && torrentPeers.isEmpty
+        ? null
+        : AppDetail(
+            id: id,
+            entries: entries,
+            pieces: Uint8List(0),
+            samples: Uint8List(0),
+            peers: torrentPeers,
+          ),
+    contacts: contacts,
+  );
+}
+
+/// One file of a collection, as the engine reports it.
+AppEntry buildEntry({
+  int id = 1,
+  String label = 'clip.mp4',
+  int bytes = 0,
+  int downloadedBytes = 0,
+  bool selected = true,
+  bool available = true,
+  String? path,
+}) =>
+    AppEntry(
+      id: id,
+      label: label,
+      bytes: BigInt.from(bytes),
+      selected: selected,
+      available: available,
+      downloadedBytes: BigInt.from(downloadedBytes),
+      path: path,
     );
 
 AppCollection buildNexusCollection({
@@ -83,6 +126,7 @@ AppCollection buildNexusCollection({
   String status = 'Available',
   int entries = 0,
   int totalBytes = 0,
+  int onDiskBytes = 0,
   Uint32List? members,
   AppTransfer? transfer,
 }) =>
@@ -96,7 +140,7 @@ AppCollection buildNexusCollection({
       members: members ?? Uint32List(0),
       entries: entries,
       totalBytes: BigInt.from(totalBytes),
-      onDiskBytes: BigInt.zero,
+      onDiskBytes: BigInt.from(onDiskBytes),
       uploadedBytes: BigInt.zero,
       transfer: transfer,
       pending: null,

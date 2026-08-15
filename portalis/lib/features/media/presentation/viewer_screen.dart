@@ -41,12 +41,19 @@ class _MediaViewerScreenState extends State<MediaViewerScreen> {
 
   Collection get _collection => widget.source.resolve(widget.collection);
 
+  /// The live version of what was opened.
+  ///
+  /// Matched by the engine's own entry handle where there is one. It used to
+  /// match on the torrent hash as well, which the engine never fills in for a
+  /// collection entry — so the comparison was against an empty string, and a
+  /// viewer that failed it silently kept showing the snapshot it opened with.
   MediaItem get _media {
+    final wanted = widget.media.entryId;
     for (final media in _collection.media) {
-      if (media.infoHash == widget.media.infoHash &&
-          media.label == widget.media.label) {
-        return media;
-      }
+      final matches = wanted == null
+          ? media.label == widget.media.label
+          : media.entryId == wanted;
+      if (matches) return media;
     }
     return widget.media;
   }

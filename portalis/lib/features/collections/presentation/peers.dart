@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../design/design.dart';
 import '../../../design/peer_chip.dart';
 import '../../../design/theme.dart';
+import '../../../nexus/domain/app_state.dart';
 import '../domain/collection.dart';
 import '../domain/peer_observation.dart';
 import 'peer_color.dart';
@@ -82,12 +83,17 @@ class CollectionPeers extends StatelessWidget {
 class _NamedPeer extends StatelessWidget {
   const _NamedPeer({required this.collaborator});
 
-  final Collaborator collaborator;
+  final AppContact collaborator;
 
   @override
   Widget build(BuildContext context) => PeerChip(
-        label: collaborator.name,
-        leading: Avatar(initials: collaborator.initials, size: 20),
+        label: collaborator.displayName,
+        leading: Avatar(
+          initials: collaborator.displayName.isEmpty
+              ? '?'
+              : collaborator.displayName[0].toUpperCase(),
+          size: 20,
+        ),
       );
 }
 

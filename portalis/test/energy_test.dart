@@ -1,64 +1,58 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:portalis/features/collections/domain/collection.dart';
+import 'test_support.dart';
 import 'package:portalis/features/collections/presentation/peer_color.dart';
-import 'package:portalis/features/media/domain/item.dart';
-import 'package:portalis/design/theme.dart';
 
+/// Sharing means somebody is actually being served, which is why it needs a
+/// peer as well as a state — see `Collection.isSharing`.
 Collection _c({
-  String state = 'seeding',
+  String status = 'Available',
   double down = 0,
   double up = 0,
-  List<MediaItem> media = const [
-    MediaItem(label: 'a.jpg', infoHash: 'aa'),
-  ],
+  int livePeers = 0,
+  List<AppEntry>? entries,
 }) =>
-    Collection(
-      id: 'c1',
+    buildCollection(
       name: 'Trip',
-      kind: CollectionKind.shared,
-      collaborators: const [],
-      media: media,
-      state: state,
+      status: status,
       downloadMbps: down,
       uploadMbps: up,
+      livePeers: livePeers,
+      entries: entries ?? [buildEntry()],
     );
 
 void main() {
   group('is it actually being shared', () {
     test('seeding with content is sharing', () {
-      expect(_c(state: 'seeding').isSharing, isTrue);
+      expect(_c(status: 'Available').isSharing, isTrue);
     });
 
     test('an empty collection is not sharing, whatever its state says', () {
       // Nothing to serve means nothing is being served — telling someone
       // their photos are available when no torrent is live is the exact
       // ambiguity this replaces.
-      expect(_c(state: 'seeding', media: const []).isSharing, isFalse);
+      expect(_c(status: 'Available', entries: const []).isSharing, isFalse);
     });
 
     test('downloading or pending is not sharing', () {
-      expect(_c(state: 'downloading').isSharing, isFalse);
-      expect(_c(state: 'pending').isSharing, isFalse);
-      expect(_c(state: 'empty').isSharing, isFalse);
+      expect(_c(status: 'Downloading').isSharing, isFalse);
+      expect(_c(status: 'Preparing').isSharing, isFalse);
     });
   });
 
   group('glow is earned, never decorative', () {
     test('an idle, unshared collection has none', () {
-      expect(_c(state: 'pending').glow, GlowLevel.none);
-      expect(_c(state: 'empty', media: const []).glow, GlowLevel.none);
+      expect(_c(status: 'Preparing').glow, GlowLevel.none);
+      expect(_c(status: 'Available', entries: const []).glow, GlowLevel.none);
     });
 
     test('shared and standing by glows calmly', () {
-      expect(_c(state: 'seeding').glow, GlowLevel.calm);
+      expect(_c(status: 'Available').glow, GlowLevel.calm);
     });
 
     test('transferring glows brighter the faster it goes', () {
-      expect(_c(state: 'downloading', down: 1).glow, GlowLevel.active);
-      expect(_c(state: 'downloading', down: 12).glow, GlowLevel.vivid);
+      expect(_c(status: 'Downloading', down: 1).glow, GlowLevel.active);
+      expect(_c(status: 'Downloading', down: 12).glow, GlowLevel.vivid);
       // Upload counts as much as download — sending is just as alive.
-      expect(_c(state: 'seeding', up: 9).glow, GlowLevel.vivid);
+      expect(_c(status: 'Available', up: 9).glow, GlowLevel.vivid);
     });
   });
 
@@ -136,14 +130,14 @@ void main() {
 
   group('live intensity', () {
     test('a settled collection contributes nothing', () {
-      expect(_c(state: 'seeding').liveIntensity, 0);
+      expect(_c(status: 'Available').liveIntensity, 0);
     });
 
     test('rises with the combined rate', () {
-      expect(_c(state: 'downloading', down: 1).liveIntensity,
-          lessThan(_c(state: 'downloading', down: 6).liveIntensity));
+      expect(_c(status: 'Downloading', down: 1).liveIntensity,
+          lessThan(_c(status: 'Downloading', down: 6).liveIntensity));
       // Both directions count, the same way glow counts them.
-      expect(_c(state: 'seeding', up: 4, down: 4).liveIntensity, 1.0);
+      expect(_c(status: 'Available', up: 4, down: 4).liveIntensity, 1.0);
     });
   });
 }
