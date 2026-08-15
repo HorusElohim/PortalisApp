@@ -28,8 +28,8 @@ services:
 
   nexus:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: ../..
+      dockerfile: backend/docker/Dockerfile
     environment:
       PORTALIS_NEXUS_LISTEN_ADDR: 0.0.0.0:8080
       # Keep this stable: its public Node ID authenticates the server and
@@ -39,8 +39,16 @@ services:
       # restart, which is right for a local run and wrong here.
       PORTALIS_NEXUS_MONGODB_URI: mongodb://mongo:27017/?directConnection=true
       RUST_LOG: portalis_nexus_server=info,tower_http=info
+      # Text rather than JSON: a person reads `docker compose logs`, and the
+      # container's stdout is a pipe, which would otherwise choose JSON.
+      PORTALIS_NEXUS_LOG: text
     ports:
-      - "8080:8080"
+      # QUIC is UDP. Publishing only TCP left the health endpoint reachable
+      # and the service itself unreachable — a container that reports healthy
+      # and cannot be dialled is worse than one that fails to start.
+      - "8080:8080/udp"
+      # The health and orchestration endpoints, which are TCP on the same port.
+      - "8080:8080/tcp"
     depends_on:
       mongo:
         condition: service_healthy

@@ -1,59 +1,77 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Runs a Nexus service for testing an app against.
+# Runs a Nexus service for testing an app against: the server and the MongoDB
+# replica set it stores identities in, both under Docker Compose.
 #
-# Embedded storage, so there is no MongoDB to install, and the node secret is
-# kept beside the data — the service keeps the same identity across restarts,
-# which is what makes the values printed below worth pasting into an app once
-# rather than every time.
+#   tool/nexus_server.sh          # bring it up and follow its log
+#   tool/nexus_server.sh down     # stop it, keeping the data
+#   tool/nexus_server.sh reset    # stop it and forget everything
 #
-#   tool/nexus_server.sh              # ./.nexus-dev, 127.0.0.1:4433
-#   tool/nexus_server.sh 0.0.0.0:4433 # reachable from a phone on the LAN
-#   PORTALIS_NEXUS_DATA_DIR=/tmp/x tool/nexus_server.sh
+# The node secret is generated once and kept in .nexus-dev/node_secret, so the
+# service keeps the same Node ID across restarts — which is what makes it worth
+# pasting into an app once rather than every time. The compose file requires
+# the secret rather than defaulting it, because a service that mints a fresh
+# identity on each start is one every device has to be told about again.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BACKEND_DIR="$ROOT_DIR/rust/backend"
+COMPOSE_DIR="$ROOT_DIR/rust/backend/docker"
+STATE_DIR="$ROOT_DIR/.nexus-dev"
+SECRET_FILE="$STATE_DIR/node_secret"
+LISTEN_PORT="${PORTALIS_NEXUS_PORT:-8080}"
 
-LISTEN="${1:-127.0.0.1:4433}"
-DATA_DIR="${PORTALIS_NEXUS_DATA_DIR:-$ROOT_DIR/.nexus-dev}"
+if ! docker compose version >/dev/null 2>&1; then
+  echo "[ERROR] docker compose not found on PATH" >&2
+  exit 1
+fi
 
-mkdir -p "$DATA_DIR"
-cd "$BACKEND_DIR"
+mkdir -p "$STATE_DIR"
+if [ ! -f "$SECRET_FILE" ]; then
+  # 32 bytes, hex. The service's own identity, not a person's.
+  openssl rand -hex 32 > "$SECRET_FILE"
+  echo "==> Generated a service identity in $SECRET_FILE"
+fi
+PORTALIS_NEXUS_NODE_SECRET="$(cat "$SECRET_FILE")"
+export PORTALIS_NEXUS_NODE_SECRET
 
-echo "==> Building the service"
-cargo build -p portalis-nexus-server
+cd "$COMPOSE_DIR"
 
-BINARY="$BACKEND_DIR/target/debug/portalis-nexus-server"
+case "${1:-up}" in
+  down)
+    docker compose down
+    exit 0
+    ;;
+  reset)
+    docker compose down --volumes
+    rm -f "$SECRET_FILE"
+    echo "==> Stopped, and forgot both the stored identities and this service's own."
+    exit 0
+    ;;
+esac
 
-# Text logs, asked for explicitly: the service picks a format from whether its
-# output is a terminal, and here it is a file, which would otherwise mean JSON.
-#
-# The identity is read from the ready line rather than by starting the service
-# twice — one process, and the two values a person needs printed plainly above
-# its own log.
-LOG="$(mktemp -t nexus-server)"
-PORTALIS_NEXUS_DATA_DIR="$DATA_DIR" \
-PORTALIS_NEXUS_LISTEN_ADDR="$LISTEN" \
-PORTALIS_NEXUS_LOG=text \
-  "$BINARY" > "$LOG" 2>&1 &
-SERVER_PID=$!
-trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -f "$LOG"' EXIT INT TERM
+echo "==> Building and starting Nexus and MongoDB"
+docker compose up --build --detach
 
-for _ in $(seq 1 100); do
-  if grep -q 'Portalis Nexus is ready' "$LOG" 2>/dev/null; then break; fi
-  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-    echo "[ERROR] the service exited before it was ready:" >&2
-    cat "$LOG" >&2
+# Ready is when the service says so, not when the container starts: it waits
+# for Mongo to become primary first, and dialling before then fails in a way
+# that looks like a wrong address.
+echo "==> Waiting for the service"
+NODE_ID=""
+for _ in $(seq 1 180); do
+  NODE_ID="$(docker compose logs nexus 2>/dev/null \
+    | grep -oE 'node_id=[a-f0-9]{64}' | tail -1 | cut -d= -f2 || true)"
+  [ -n "$NODE_ID" ] && break
+  if [ -z "$(docker compose ps --quiet nexus)" ]; then
+    echo "[ERROR] the service container is gone:" >&2
+    docker compose logs nexus >&2
     exit 1
   fi
-  sleep 0.1
+  sleep 1
 done
 
-NODE_ID="$(grep -oE 'node_id=[a-f0-9]{64}' "$LOG" | head -1 | cut -d= -f2)"
 if [ -z "$NODE_ID" ]; then
   echo "[ERROR] the service never reported a node id:" >&2
-  cat "$LOG" >&2
+  docker compose logs nexus >&2
   exit 1
 fi
 
@@ -62,28 +80,29 @@ cat <<EOF
   Portalis Nexus is listening.
 
     Node ID          $NODE_ID
-    Direct address   $LISTEN
-    Storage          embedded, $DATA_DIR
+    Direct address   127.0.0.1:$LISTEN_PORT
+    Storage          MongoDB, in the compose volume
 
-  Paste both into the app: Settings → Network & engine → Nexus service.
-  The identity is kept in $DATA_DIR, so it survives a restart.
+  Paste both into the app: Settings → Nexus service. The address is already
+  the default there, so it is one paste of the Node ID.
+
+  The identity is kept in $SECRET_FILE and survives a restart.
 
   Verify from here instead:
 
     cd rust/backend && PORTALIS_NEXUS_NODE_ID=$NODE_ID \\
-      PORTALIS_NEXUS_ADDR=$LISTEN \\
+      PORTALIS_NEXUS_ADDR=127.0.0.1:$LISTEN_PORT \\
       cargo test -p portalis-nexus-client --test connection \\
       reaches_a_separately_launched_server -- --ignored
 
-  Devices arriving and leaving are logged. For every request as well:
+  Devices arriving and leaving are logged. For every request as well, set
+  RUST_LOG=info,portalis_nexus_server=debug in docker/compose.yaml.
 
-    RUST_LOG=info,portalis_nexus_server=debug tool/nexus_server.sh
+  tool/nexus_server.sh down    stops it, keeping the data
+  tool/nexus_server.sh reset   stops it and forgets everything
 
-  Ctrl-C to stop.
+  Ctrl-C stops following the log; the service keeps running.
 
 EOF
 
-# Follow the service's own log from here, so a failure after startup is
-# visible rather than buried in a temporary file.
-tail -f "$LOG" &
-wait "$SERVER_PID"
+docker compose logs --follow nexus
