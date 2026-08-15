@@ -80,6 +80,16 @@ pub struct StoredCollection {
     /// renders it on every snapshot, and walking a media directory to answer
     /// that is a filesystem scan per frame.
     pub on_disk_bytes: u64,
+    /// Still being assembled, and not to be acted on yet.
+    ///
+    /// A person choosing files has not yet said to share them. Publishing at
+    /// the moment of choosing means hashing and seeding something they may
+    /// still rename, add to, or abandon — and abandoning it would then mean
+    /// unpublishing something strangers may already hold. Held as a flag on
+    /// the collection rather than as a separate kind of record, because a
+    /// draft is the same thing before its first revision: the publisher simply
+    /// leaves it alone until it is confirmed.
+    pub draft: bool,
 }
 
 impl StoredCollection {
@@ -104,6 +114,7 @@ impl StoredCollection {
         bytes.push(u8::from(self.paused));
         bytes.extend_from_slice(&self.on_disk_bytes.to_be_bytes());
         write_string(&mut bytes, self.substrate_handle.as_deref().unwrap_or(""));
+        bytes.push(u8::from(self.draft));
         bytes
     }
 
@@ -143,6 +154,14 @@ impl StoredCollection {
         } else {
             Some(reader.string()?).filter(|handle| !handle.is_empty())
         };
+        // Schema 7 ended there. Everything written before drafts existed was
+        // published the moment it was created, so a row without the flag is
+        // exactly what `false` means — never a draft left in limbo.
+        let draft = if reader.bytes.is_empty() {
+            false
+        } else {
+            reader.byte()? != 0
+        };
         reader.finish()?;
         Ok(Self {
             name,
@@ -153,6 +172,7 @@ impl StoredCollection {
             paused,
             on_disk_bytes,
             substrate_handle,
+            draft,
         })
     }
 }
@@ -460,6 +480,7 @@ mod tests {
             paused: false,
             on_disk_bytes: 0,
             substrate_handle: None,
+            draft: false,
         }
     }
 
@@ -482,8 +503,10 @@ mod tests {
             "what was written is what comes back"
         );
 
-        // The same row as schema 5 wrote it: everything up to the sources.
-        let older = &encoded[..encoded.len() - 9 - (4 + "a1b2c3".len())];
+        // The same row as schema 5 wrote it: everything up to the sources,
+        // so without the pause flag, the byte count, the handle, or the draft
+        // flag that each later schema appended.
+        let older = &encoded[..encoded.len() - 1 - 9 - (4 + "a1b2c3".len())];
         let decoded = StoredCollection::decode(older).expect("an older row still decodes");
         assert!(!decoded.paused);
         assert_eq!(decoded.on_disk_bytes, 0);
@@ -532,7 +555,9 @@ mod tests {
         const SOURCE_COUNT: usize = 4;
         const LOCAL_FACTS: usize = 1 + 8;
         const ABSENT_HANDLE: usize = 4;
-        let schema_four = &current[..current.len() - SOURCE_COUNT - LOCAL_FACTS - ABSENT_HANDLE];
+        const DRAFT_FLAG: usize = 1;
+        let schema_four = &current
+            [..current.len() - SOURCE_COUNT - LOCAL_FACTS - ABSENT_HANDLE - DRAFT_FLAG];
         assert_eq!(
             StoredCollection::decode(schema_four)
                 .expect("older rows decode without invented sources")
@@ -546,8 +571,12 @@ mod tests {
         let encoded = collection().encode();
 
         assert_eq!(StoredCollection::decode(&[]), Err(Malformed));
+        // Two bytes, not one. Every schema appends, so the final byte is
+        // always some older schema's absent field — dropping exactly it is a
+        // valid older row rather than a damaged one, and asserting otherwise
+        // would mean no field could ever be added again.
         assert_eq!(
-            StoredCollection::decode(&encoded[..encoded.len() - 1]),
+            StoredCollection::decode(&encoded[..encoded.len() - 2]),
             Err(Malformed)
         );
 

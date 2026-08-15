@@ -263,7 +263,12 @@ impl LocalCollections {
                 .current_revision(&key)?
                 .map_or(0, |(number, _)| number);
             let torrent_import = store.torrent_import(&key)?.is_some();
-            let status = if stored.paused {
+            // Draft outranks everything: it says nothing has happened yet
+            // and nothing will until the person says so, which no other
+            // status can claim.
+            let status = if stored.draft {
+                Status::Draft
+            } else if stored.paused {
                 Status::Paused
             } else if torrent_import || (!local_sources.is_empty() && revision == 0) {
                 Status::Preparing
@@ -616,6 +621,9 @@ impl Nexus {
             Command::SetPaused { collection, paused } => {
                 self.set_paused(*collection, *paused).map(|()| None)
             }
+            Command::PublishDraft { collection } => {
+                self.publish_draft(*collection).map(|()| None)
+            }
             Command::DeleteFiles { collection } => self.delete_files(*collection).map(|()| None),
             Command::ImportTorrent { source } => self.import_torrent(source).map(Some),
             Command::DownloadSelection {
@@ -626,6 +634,52 @@ impl Nexus {
                 .map(|()| None),
             _ => Ok(None),
         }
+    }
+
+    /// Clears the draft flag, so the publisher may act on it.
+    ///
+    /// Idempotent: confirming something already shared is not an error, it is
+    /// a second tap on a button whose first tap worked.
+    fn publish_draft(&self, collection: Handle) -> Result<(), CommandError> {
+        let key = self.collection_key(collection)?;
+        let stored = self
+            .store
+            .collection(&key)
+            .map_err(persistence)?
+            .ok_or_else(|| missing_collection(collection))?;
+        if !stored.draft {
+            return Ok(());
+        }
+        self.store
+            .put_collection(
+                &key,
+                &StoredCollection {
+                    draft: false,
+                    ..stored
+                },
+            )
+            .map_err(persistence)?;
+        self.republish(collection, &key);
+        Ok(())
+    }
+
+    /// Wakes whichever worker owns this collection's next step.
+    ///
+    /// A collection with native sources is published; a torrent import is the
+    /// torrent worker's business. One place decides which, so a caller that
+    /// has just changed a collection does not have to know what kind it is.
+    fn republish(&self, collection: Handle, key: &[u8]) {
+        let is_import = self
+            .store
+            .torrent_import(key)
+            .is_ok_and(|source| source.is_some());
+        // A full channel already holds the one wake either worker needs.
+        let _ = if is_import {
+            self.torrents.try_send(())
+        } else {
+            self.publisher.try_send(())
+        };
+        self.refresh_detail(collection);
     }
 
     fn create_collection(&self, name: &str, files: &[LocalFile]) -> Result<Handle, CommandError> {
@@ -640,6 +694,9 @@ impl Nexus {
             paused: false,
             on_disk_bytes: 0,
             substrate_handle: None,
+            // Chosen, not yet shared. Publishing waits for the person to say
+            // so, which is what makes abandoning one cost nothing.
+            draft: true,
         };
         self.store
             .put_collection(id.as_bytes(), &stored)
@@ -657,11 +714,8 @@ impl Nexus {
             nature: Nature::Native,
             role: Role::Owner,
             revision: 0,
-            status: if sources.is_empty() {
-                Status::Available
-            } else {
-                Status::Preparing
-            },
+            // Created, not shared. The publisher is waiting on the person.
+            status: Status::Draft,
             members: Vec::new(),
             entries: u32::try_from(sources.len()).unwrap_or(u32::MAX),
             total_bytes: sources.iter().map(|source| source.bytes).sum(),
@@ -697,6 +751,9 @@ impl Nexus {
             paused: false,
             on_disk_bytes: 0,
             substrate_handle: None,
+            // An import is a draft for the same reason: its file list is not
+            // known yet, so there is nothing the person could have confirmed.
+            draft: true,
         };
         self.store
             .put_collection(id.as_bytes(), &stored)
@@ -720,7 +777,9 @@ impl Nexus {
             nature: Nature::Torrent,
             role: Role::Owner,
             revision: 0,
-            status: Status::Preparing,
+            // Nothing is known about it yet, so there is nothing to confirm.
+            // Choosing files is what promotes it out of draft.
+            status: Status::Draft,
             members: Vec::new(),
             // Nothing is known about the contents until the worker has
             // resolved the source. Zero here is honest rather than a guess:
@@ -919,6 +978,10 @@ impl Nexus {
         self.store
             .put_torrent_import_entries(&key, &entries)
             .map_err(persistence)?;
+        // Choosing the files *is* confirming a torrent draft: nothing else is
+        // left to decide, and a separate confirm step would be a button that
+        // only ever repeats what the tap before it already said.
+        self.publish_draft(collection)?;
         self.refresh_detail(collection);
         // The worker is what tells the engine; this only recorded the choice.
         // It starts the download the first time and revises a running one
@@ -1035,7 +1098,11 @@ async fn publish_pending_collections(
             Ok(collections) => collections
                 .into_iter()
                 .filter(|(key, collection)| {
-                    !collection.sources.is_empty()
+                    // A draft is deliberately skipped: its files are chosen
+                    // but not offered, and hashing them would start seeding
+                    // something the person has not said to share.
+                    !collection.draft
+                        && !collection.sources.is_empty()
                         && store
                             .current_revision(key)
                             .is_ok_and(|revision| revision.is_none())
@@ -1495,6 +1562,59 @@ mod tests {
         (handle, media)
     }
 
+    /// A draft is private to this device. Nothing is hashed, nothing is
+    /// offered, and abandoning it leaves no trace anywhere — which is the
+    /// whole reason choosing files does not publish them.
+    #[tokio::test]
+    async fn a_draft_is_not_published_until_it_is_confirmed() {
+        let _state = crate::paths::redirect_to_temp();
+        let scratch = Scratch::new("draft-waits");
+        let source = scratch.0.join("clip.mp4");
+        std::fs::write(&source, b"clip").expect("writes source");
+        let substrate = Arc::new(crate::substrate::Recorded::publishing(
+            "22".repeat(20),
+            b"descriptor".to_vec(),
+        ));
+        let nexus = open_with_substrate(&scratch, substrate.clone());
+
+        let accepted = nexus
+            .command(&Command::CreateCollection {
+                name: "Holiday".to_owned(),
+                files: vec![LocalFile {
+                    name: "clip.mp4".to_owned(),
+                    path: source,
+                    bytes: 4,
+                }],
+            })
+            .expect("accepts the files");
+        let collection = accepted.collection.expect("names the collection");
+
+        // Long enough that the publisher would have run if it were going to.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(
+            substrate.published.lock().unwrap().is_empty(),
+            "a draft is never handed to the substrate"
+        );
+        assert_eq!(nexus.state().collections[0].status, Status::Draft);
+
+        nexus
+            .command(&Command::PublishDraft { collection })
+            .expect("confirms");
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while substrate.published.lock().unwrap().is_empty() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("publishes once confirmed");
+
+        // Confirming twice is a second tap on a button, not an error.
+        nexus
+            .command(&Command::PublishDraft { collection })
+            .expect("stays accepting");
+        nexus.close().await;
+    }
+
     /// Pausing is a person's decision, so it has to outlast the process that
     /// took it. A pause a crash undoes would have this device quietly resume a
     /// transfer somebody stopped.
@@ -1509,6 +1629,11 @@ mod tests {
             })
             .expect("creates locally");
         let collection = nexus.state().collections[0].id;
+        // Shared first: pausing something never offered to anyone would be
+        // stopping a transfer that was never going to start.
+        nexus
+            .command(&Command::PublishDraft { collection })
+            .expect("shares it");
 
         nexus
             .command(&Command::SetPaused {
@@ -1885,7 +2010,9 @@ mod tests {
         let handle = accepted.collection.expect("names the collection");
         let state = nexus.state();
         assert_eq!(state.collections[0].nature, Nature::Native);
-        assert_eq!(state.collections[0].status, Status::Preparing);
+        // Chosen, not yet shared: the sources are durable before anything is
+        // hashed, which is what makes abandoning one free.
+        assert_eq!(state.collections[0].status, Status::Draft);
         assert_eq!(state.collections[0].entries, 2);
         assert_eq!(state.collections[0].total_bytes, 19);
         let detail = nexus
@@ -1949,6 +2076,18 @@ mod tests {
                 }],
             })
             .expect("accepts source");
+        // Creating one no longer publishes it: a draft is chosen, not shared,
+        // and nothing hashes until the person says so.
+        assert_eq!(
+            states.borrow().collections[0].status,
+            Status::Draft,
+            "a new collection waits to be confirmed"
+        );
+        nexus
+            .command(&Command::PublishDraft {
+                collection: states.borrow().collections[0].id,
+            })
+            .expect("confirms the draft");
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
                 if states
@@ -2145,13 +2284,17 @@ mod tests {
             .expect("records the import");
         let imported = nexus.state().collections[0].clone();
         assert_eq!(imported.name, "Torrent import");
-        assert_eq!(imported.status, Status::Preparing);
+        // An import is a draft until its files are chosen — there is nothing
+        // to confirm yet, because nobody knows what is in it.
+        assert_eq!(imported.status, Status::Draft);
         assert_eq!(imported.entries, 0, "metadata has not resolved yet");
         nexus.close().await;
 
         let reopened = open(&scratch);
         assert_eq!(reopened.state().collections.len(), 1);
-        assert_eq!(reopened.state().collections[0].status, Status::Preparing);
+        // Still a draft after a restart: an unconfirmed import survives as
+        // what it was, rather than quietly promoting itself.
+        assert_eq!(reopened.state().collections[0].status, Status::Draft);
         reopened.close().await;
     }
 
@@ -2188,9 +2331,9 @@ mod tests {
         let handle = accepted.collection.expect("names its collection");
 
         // Immediately: a row exists, and it does not pretend to know what is
-        // inside.
+        // inside. A draft, because nothing has been chosen from it yet.
         let imported = nexus.state().collections[0].clone();
-        assert_eq!(imported.status, Status::Preparing);
+        assert_eq!(imported.status, Status::Draft);
         assert_eq!(imported.entries, 0, "nothing is known yet");
 
         let mut watching = nexus.watch_detail(Some(handle));

@@ -96,6 +96,8 @@ pub enum Status {
     /// outranks what the numbers are doing — a paused collection that is still
     /// draining a buffer is paused, not downloading.
     Paused,
+    /// Chosen but not yet shared: private to this device, and free to abandon.
+    Draft,
     /// A descriptor arrived; the transfer has not started.
     Preparing,
     Downloading,
@@ -282,6 +284,15 @@ pub enum Command {
     SetPaused {
         collection: Handle,
         paused: bool,
+    },
+    /// Says a draft is finished, and may now be shared.
+    ///
+    /// The moment a collection stops being private to this device. Everything
+    /// before it — choosing files, naming, adding, removing — costs nothing to
+    /// undo, because nothing has been hashed or offered to anyone. There is no
+    /// matching "unpublish": once a descriptor exists, somebody may hold it.
+    PublishDraft {
+        collection: Handle,
     },
     /// Removes the downloaded bytes and keeps the collection.
     ///

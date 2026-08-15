@@ -387,6 +387,9 @@ impl AppCommand {
                     .paused
                     .ok_or_else(|| "paused is required for setPaused".to_owned())?,
             }),
+            "publishDraft" => Ok(Command::PublishDraft {
+                collection: handle(self.collection, "collection")?,
+            }),
             "deleteFiles" => Ok(Command::DeleteFiles {
                 collection: handle(self.collection, "collection")?,
             }),

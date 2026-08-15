@@ -329,6 +329,7 @@ mod tests {
                     paused: false,
                     on_disk_bytes: 0,
                     substrate_handle: None,
+                    draft: false,
                 },
             )
             .expect("writes");
@@ -490,6 +491,7 @@ mod tests {
                     paused: false,
                     on_disk_bytes: 0,
                     substrate_handle: None,
+                    draft: false,
                 },
             )
             .expect("writes");
