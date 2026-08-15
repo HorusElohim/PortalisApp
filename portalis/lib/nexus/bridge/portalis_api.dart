@@ -93,6 +93,16 @@ class AppCollection {
   final BigInt totalBytes;
   final BigInt onDiskBytes;
   final BigInt uploadedBytes;
+
+  /// When bytes first moved, and when it finished. Unix nanoseconds.
+  ///
+  /// The core wrote each down as it happened. The interface used to work
+  /// "completed in" out for itself by measuring the transfer history, which
+  /// measures the ring rather than the transfer — after a delete and a
+  /// re-add that read as one six-minute download instead of two of half a
+  /// minute. A recorded moment cannot be re-measured into something else.
+  final BigInt? startedAt;
+  final BigInt? completedAt;
   final AppTransfer? transfer;
   final AppPending? pending;
 
@@ -108,6 +118,8 @@ class AppCollection {
     required this.totalBytes,
     required this.onDiskBytes,
     required this.uploadedBytes,
+    this.startedAt,
+    this.completedAt,
     this.transfer,
     this.pending,
   });
@@ -125,6 +137,8 @@ class AppCollection {
       totalBytes.hashCode ^
       onDiskBytes.hashCode ^
       uploadedBytes.hashCode ^
+      startedAt.hashCode ^
+      completedAt.hashCode ^
       transfer.hashCode ^
       pending.hashCode;
 
@@ -144,6 +158,8 @@ class AppCollection {
           totalBytes == other.totalBytes &&
           onDiskBytes == other.onDiskBytes &&
           uploadedBytes == other.uploadedBytes &&
+          startedAt == other.startedAt &&
+          completedAt == other.completedAt &&
           transfer == other.transfer &&
           pending == other.pending;
 }

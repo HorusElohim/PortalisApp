@@ -80,6 +80,18 @@ pub struct StoredCollection {
     /// renders it on every snapshot, and walking a media directory to answer
     /// that is a filesystem scan per frame.
     pub on_disk_bytes: u64,
+    /// When bytes first moved for this collection, and when it finished.
+    ///
+    /// Recorded rather than derived. The interface used to answer "completed
+    /// in" by measuring the span of the transfer history, which is the span of
+    /// whatever readings happened to survive the ring — after a delete and a
+    /// re-add that read as one download lasting six minutes when it had been
+    /// two downloads of thirty seconds. A time the engine wrote down when it
+    /// happened cannot be re-measured into something else.
+    ///
+    /// Unix nanoseconds, and `None` until the moment each describes arrives.
+    pub started_at: Option<u64>,
+    pub completed_at: Option<u64>,
     /// Still being assembled, and not to be acted on yet.
     ///
     /// A person choosing files has not yet said to share them. Publishing at
@@ -115,6 +127,10 @@ impl StoredCollection {
         bytes.extend_from_slice(&self.on_disk_bytes.to_be_bytes());
         write_string(&mut bytes, self.substrate_handle.as_deref().unwrap_or(""));
         bytes.push(u8::from(self.draft));
+        // Zero stands for absent: a moment nothing has reached yet, and the
+        // Unix epoch is not a time any of these can honestly have.
+        bytes.extend_from_slice(&self.started_at.unwrap_or(0).to_be_bytes());
+        bytes.extend_from_slice(&self.completed_at.unwrap_or(0).to_be_bytes());
         bytes
     }
 
@@ -162,6 +178,16 @@ impl StoredCollection {
         } else {
             reader.byte()? != 0
         };
+        // Schema 8 ended after the draft flag. Rows written before these
+        // existed have no moments to report, which is what `None` says.
+        let (started_at, completed_at) = if reader.bytes.is_empty() {
+            (None, None)
+        } else {
+            (
+                Some(reader.u64()?).filter(|at| *at != 0),
+                Some(reader.u64()?).filter(|at| *at != 0),
+            )
+        };
         reader.finish()?;
         Ok(Self {
             name,
@@ -173,6 +199,8 @@ impl StoredCollection {
             on_disk_bytes,
             substrate_handle,
             draft,
+            started_at,
+            completed_at,
         })
     }
 }
@@ -481,6 +509,8 @@ mod tests {
             on_disk_bytes: 0,
             substrate_handle: None,
             draft: false,
+            started_at: None,
+            completed_at: None,
         }
     }
 
@@ -503,10 +533,10 @@ mod tests {
             "what was written is what comes back"
         );
 
-        // The same row as schema 5 wrote it: everything up to the sources,
-        // so without the pause flag, the byte count, the handle, or the draft
-        // flag that each later schema appended.
-        let older = &encoded[..encoded.len() - 1 - 9 - (4 + "a1b2c3".len())];
+        // The same row as schema 5 wrote it: everything up to the sources, so
+        // without the pause flag, the byte count, the handle, the draft flag
+        // or the two moments that each later schema appended.
+        let older = &encoded[..encoded.len() - 16 - 1 - 9 - (4 + "a1b2c3".len())];
         let decoded = StoredCollection::decode(older).expect("an older row still decodes");
         assert!(!decoded.paused);
         assert_eq!(decoded.on_disk_bytes, 0);
@@ -556,8 +586,9 @@ mod tests {
         const LOCAL_FACTS: usize = 1 + 8;
         const ABSENT_HANDLE: usize = 4;
         const DRAFT_FLAG: usize = 1;
-        let schema_four =
-            &current[..current.len() - SOURCE_COUNT - LOCAL_FACTS - ABSENT_HANDLE - DRAFT_FLAG];
+        const MOMENTS: usize = 8 + 8;
+        let schema_four = &current
+            [..current.len() - SOURCE_COUNT - LOCAL_FACTS - ABSENT_HANDLE - DRAFT_FLAG - MOMENTS];
         assert_eq!(
             StoredCollection::decode(schema_four)
                 .expect("older rows decode without invented sources")

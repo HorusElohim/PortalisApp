@@ -107,8 +107,9 @@ class CollectionOverview extends StatelessWidget {
             downloadMbps: collection.downloadMbps,
             uploadMbps: collection.uploadMbps,
             history: transferHistory,
-            startedAt: history?.startedAt,
-            completedAt: history?.completedAt,
+            // The core's own moments, not the span of surviving readings.
+            startedAt: collection.startedAt ?? history?.startedAt,
+            completedAt: collection.completedAt,
             livePeers: collection.livePeers,
             etaLabel: collection.etaLabel,
             color: collection.hue,

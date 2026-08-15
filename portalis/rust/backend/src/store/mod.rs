@@ -713,6 +713,8 @@ mod tests {
             on_disk_bytes: 0,
             substrate_handle: None,
             draft: false,
+            started_at: None,
+            completed_at: None,
         }
     }
 

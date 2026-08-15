@@ -91,6 +91,10 @@ pub fn collection(handles: &mut Handles, facts: &CollectionFacts) -> CollectionS
 
     CollectionState {
         id,
+        // This builder answers from a manifest, which records what a
+        // collection is rather than when this device fetched it.
+        started_at: None,
+        completed_at: None,
         name: facts.name.clone(),
         nature: crate::projection::state::Nature::Native,
         role: match facts.role {

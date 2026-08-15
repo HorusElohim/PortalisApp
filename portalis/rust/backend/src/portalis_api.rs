@@ -57,6 +57,15 @@ pub struct AppCollection {
     pub total_bytes: u64,
     pub on_disk_bytes: u64,
     pub uploaded_bytes: u64,
+    /// When bytes first moved, and when it finished. Unix nanoseconds.
+    ///
+    /// The core wrote each down as it happened. The interface used to work
+    /// "completed in" out for itself by measuring the transfer history, which
+    /// measures the ring rather than the transfer — after a delete and a
+    /// re-add that read as one six-minute download instead of two of half a
+    /// minute. A recorded moment cannot be re-measured into something else.
+    pub started_at: Option<u64>,
+    pub completed_at: Option<u64>,
     pub transfer: Option<AppTransfer>,
     pub pending: Option<AppPending>,
 }
@@ -475,6 +484,8 @@ fn snapshot(state: &PortalisState) -> AppSnapshot {
                 total_bytes: collection.total_bytes,
                 on_disk_bytes: collection.on_disk_bytes,
                 uploaded_bytes: collection.uploaded_bytes,
+                started_at: collection.started_at,
+                completed_at: collection.completed_at,
                 transfer: collection.transfer.map(|transfer| AppTransfer {
                     progress: transfer.progress,
                     down_bytes_per_second: transfer.down_bytes_per_second,

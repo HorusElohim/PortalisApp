@@ -226,6 +226,12 @@ pub struct CollectionState {
     /// restart starts it again, and claiming otherwise would need a store
     /// row nothing writes.
     pub uploaded_bytes: u64,
+    /// When bytes first moved, and when it finished. Unix nanoseconds.
+    ///
+    /// Recorded by the core when each happened, not measured afterwards from
+    /// whatever history survived — see `StoredCollection::started_at`.
+    pub started_at: Option<u64>,
+    pub completed_at: Option<u64>,
     /// Progress tier: present only while something is moving.
     pub transfer: Option<Transfer>,
     pub pending: Option<Pending>,

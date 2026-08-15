@@ -209,6 +209,8 @@ mod tests {
 
     fn collection(transfer: Option<Transfer>) -> CollectionState {
         CollectionState {
+            started_at: None,
+            completed_at: None,
             id: COLLECTION,
             name: "Iceland".to_owned(),
             nature: crate::projection::state::Nature::Native,

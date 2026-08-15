@@ -97,6 +97,29 @@ class Collection {
           mediaItemFor(entry),
       ];
 
+  /// When bytes first moved, and when the engine reported it finished.
+  ///
+  /// The core's own record of each moment, not a measurement of whatever
+  /// transfer history survived — that measured the ring rather than the
+  /// transfer, and read a delete-and-re-add as one six-minute download when
+  /// it had been two of half a minute.
+  DateTime? get startedAt => _moment(source.startedAt);
+  DateTime? get completedAt => _moment(source.completedAt);
+
+  /// How long it took, once both moments exist.
+  Duration? get completedIn {
+    final from = startedAt;
+    final to = completedAt;
+    return from == null || to == null ? null : to.difference(from);
+  }
+
+  static DateTime? _moment(BigInt? unixNanoseconds) =>
+      unixNanoseconds == null
+          ? null
+          : DateTime.fromMicrosecondsSinceEpoch(
+              (unixNanoseconds ~/ BigInt.from(1000)).toInt(),
+            );
+
   /// Entries wanted but not yet here.
   int get pendingMedia => detail == null
       ? 0

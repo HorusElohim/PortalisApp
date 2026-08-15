@@ -172,6 +172,8 @@ fn write_everything(file: &std::path::Path) {
                 on_disk_bytes: 0,
                 substrate_handle: None,
                 draft: false,
+                started_at: None,
+                completed_at: None,
             },
         )
         .expect("writes");
@@ -188,6 +190,8 @@ fn write_everything(file: &std::path::Path) {
                 on_disk_bytes: 0,
                 substrate_handle: None,
                 draft: false,
+                started_at: None,
+                completed_at: None,
             },
         )
         .expect("writes");

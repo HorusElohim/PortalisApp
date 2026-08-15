@@ -956,6 +956,8 @@ impl SseDecode for crate::portalis_api::AppCollection {
         let mut var_totalBytes = <u64>::sse_decode(deserializer);
         let mut var_onDiskBytes = <u64>::sse_decode(deserializer);
         let mut var_uploadedBytes = <u64>::sse_decode(deserializer);
+        let mut var_startedAt = <Option<u64>>::sse_decode(deserializer);
+        let mut var_completedAt = <Option<u64>>::sse_decode(deserializer);
         let mut var_transfer = <Option<crate::portalis_api::AppTransfer>>::sse_decode(deserializer);
         let mut var_pending = <Option<crate::portalis_api::AppPending>>::sse_decode(deserializer);
         return crate::portalis_api::AppCollection {
@@ -970,6 +972,8 @@ impl SseDecode for crate::portalis_api::AppCollection {
             total_bytes: var_totalBytes,
             on_disk_bytes: var_onDiskBytes,
             uploaded_bytes: var_uploadedBytes,
+            started_at: var_startedAt,
+            completed_at: var_completedAt,
             transfer: var_transfer,
             pending: var_pending,
         };
@@ -1730,6 +1734,8 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppCollection {
             self.total_bytes.into_into_dart().into_dart(),
             self.on_disk_bytes.into_into_dart().into_dart(),
             self.uploaded_bytes.into_into_dart().into_dart(),
+            self.started_at.into_into_dart().into_dart(),
+            self.completed_at.into_into_dart().into_dart(),
             self.transfer.into_into_dart().into_dart(),
             self.pending.into_into_dart().into_dart(),
         ]
@@ -2222,6 +2228,8 @@ impl SseEncode for crate::portalis_api::AppCollection {
         <u64>::sse_encode(self.total_bytes, serializer);
         <u64>::sse_encode(self.on_disk_bytes, serializer);
         <u64>::sse_encode(self.uploaded_bytes, serializer);
+        <Option<u64>>::sse_encode(self.started_at, serializer);
+        <Option<u64>>::sse_encode(self.completed_at, serializer);
         <Option<crate::portalis_api::AppTransfer>>::sse_encode(self.transfer, serializer);
         <Option<crate::portalis_api::AppPending>>::sse_encode(self.pending, serializer);
     }

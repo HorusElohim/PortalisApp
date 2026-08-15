@@ -17,7 +17,7 @@ use redb::TableDefinition;
 /// [`super::StoreError::FromTheFuture`]) rather than being read with the wrong
 /// assumptions — silently misreading a user's own data is worse than declining
 /// to start.
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 
 /// Where the schema version itself lives.
 pub const META: TableDefinition<&str, u64> = TableDefinition::new("meta");

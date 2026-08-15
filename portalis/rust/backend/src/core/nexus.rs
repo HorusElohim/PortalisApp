@@ -293,6 +293,8 @@ impl LocalCollections {
                 )
             };
             projected.push(CollectionState {
+                started_at: stored.started_at,
+                completed_at: stored.completed_at,
                 id: handle,
                 name: stored.name,
                 nature: if torrent_import {
@@ -659,6 +661,8 @@ impl Nexus {
                 &key,
                 &StoredCollection {
                     draft: false,
+                    started_at: None,
+                    completed_at: None,
                     // Confirmed, and waiting to be started. Finishing the
                     // assembly of something is not the same as saying "go
                     // now" — a person who has just chosen twenty files may
@@ -746,6 +750,8 @@ impl Nexus {
             // Chosen, not yet shared. Publishing waits for the person to say
             // so, which is what makes abandoning one cost nothing.
             draft: true,
+            started_at: None,
+            completed_at: None,
         };
         self.store
             .put_collection(id.as_bytes(), &stored)
@@ -758,6 +764,8 @@ impl Nexus {
             .assign(id.as_bytes().to_vec());
         let mut state = self.state();
         state.collections.push(CollectionState {
+            started_at: None,
+            completed_at: None,
             id: handle,
             name: stored.name,
             nature: Nature::Native,
@@ -803,6 +811,8 @@ impl Nexus {
             // An import is a draft for the same reason: its file list is not
             // known yet, so there is nothing the person could have confirmed.
             draft: true,
+            started_at: None,
+            completed_at: None,
         };
         self.store
             .put_collection(id.as_bytes(), &stored)
@@ -821,6 +831,8 @@ impl Nexus {
             .assign(id.as_bytes().to_vec());
         let mut state = self.state();
         state.collections.push(CollectionState {
+            started_at: None,
+            completed_at: None,
             id: handle,
             name: stored.name,
             nature: Nature::Torrent,
@@ -1567,6 +1579,8 @@ mod tests {
 
     fn collection(name: &str) -> CollectionState {
         CollectionState {
+            started_at: None,
+            completed_at: None,
             id: Handle(1),
             name: name.to_owned(),
             nature: Nature::Native,

@@ -781,8 +781,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppCollection dco_decode_app_collection(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 13)
-      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
+    if (arr.length != 15)
+      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
     return AppCollection(
       id: dco_decode_u_32(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -795,8 +795,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       totalBytes: dco_decode_u_64(arr[8]),
       onDiskBytes: dco_decode_u_64(arr[9]),
       uploadedBytes: dco_decode_u_64(arr[10]),
-      transfer: dco_decode_opt_box_autoadd_app_transfer(arr[11]),
-      pending: dco_decode_opt_box_autoadd_app_pending(arr[12]),
+      startedAt: dco_decode_opt_box_autoadd_u_64(arr[11]),
+      completedAt: dco_decode_opt_box_autoadd_u_64(arr[12]),
+      transfer: dco_decode_opt_box_autoadd_app_transfer(arr[13]),
+      pending: dco_decode_opt_box_autoadd_app_pending(arr[14]),
     );
   }
 
@@ -1358,6 +1360,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_totalBytes = sse_decode_u_64(deserializer);
     var var_onDiskBytes = sse_decode_u_64(deserializer);
     var var_uploadedBytes = sse_decode_u_64(deserializer);
+    var var_startedAt = sse_decode_opt_box_autoadd_u_64(deserializer);
+    var var_completedAt = sse_decode_opt_box_autoadd_u_64(deserializer);
     var var_transfer = sse_decode_opt_box_autoadd_app_transfer(deserializer);
     var var_pending = sse_decode_opt_box_autoadd_app_pending(deserializer);
     return AppCollection(
@@ -1372,6 +1376,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         totalBytes: var_totalBytes,
         onDiskBytes: var_onDiskBytes,
         uploadedBytes: var_uploadedBytes,
+        startedAt: var_startedAt,
+        completedAt: var_completedAt,
         transfer: var_transfer,
         pending: var_pending);
   }
@@ -2086,6 +2092,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_64(self.totalBytes, serializer);
     sse_encode_u_64(self.onDiskBytes, serializer);
     sse_encode_u_64(self.uploadedBytes, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.startedAt, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.completedAt, serializer);
     sse_encode_opt_box_autoadd_app_transfer(self.transfer, serializer);
     sse_encode_opt_box_autoadd_app_pending(self.pending, serializer);
   }

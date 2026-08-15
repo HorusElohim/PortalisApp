@@ -251,6 +251,7 @@ class _TransferGraphState {
     required this.points,
     required this.start,
     required this.end,
+    required this.completedAt,
     required this.peakDownload,
     required this.peakUpload,
     required this.minPositiveRate,
@@ -307,6 +308,7 @@ class _TransferGraphState {
       points: points,
       start: start,
       end: end,
+      completedAt: completedAt,
       peakDownload: peakDownload,
       peakUpload: peakUpload,
       minPositiveRate: minPositiveRate,
@@ -319,13 +321,25 @@ class _TransferGraphState {
   final List<TransferPoint> points;
   final DateTime start;
   final DateTime end;
+
+  /// When the core recorded this as finished, where it has.
+  final DateTime? completedAt;
   final double peakDownload;
   final double peakUpload;
   final double minPositiveRate;
 
   double get maxRate => math.max(peakDownload, peakUpload).toDouble();
   bool get hasUpload => peakUpload > 0 || uploadMbps > 0;
-  String get spanLabel => _durationLabel(end.difference(start));
+  /// How long it took, as the core recorded it.
+  ///
+  /// [end] is stretched to cover the last reading so the axis holds every
+  /// point it draws. That makes it the right edge of a chart and the wrong
+  /// answer for a duration: a collection that kept reporting after it finished
+  /// would read as having taken longer than it did. When the core says when it
+  /// completed, that is the answer.
+  String get spanLabel => _durationLabel(
+        (completedAt ?? end).difference(start),
+      );
 }
 
 String _durationLabel(Duration duration) {

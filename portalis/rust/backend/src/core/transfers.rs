@@ -19,7 +19,7 @@ use std::time::Duration;
 use tokio::sync::watch;
 
 use crate::projection::state::{Handle, PortalisState, Status, Transfer};
-use crate::store::records::StoredSample;
+use crate::store::records::{StoredCollection, StoredSample};
 use crate::store::Store;
 use crate::substrate::Substrate;
 use crate::torrent::TorrentInfo;
@@ -126,6 +126,7 @@ pub(crate) async fn follow_transfers(
             // recording the placeholder zero put a false restart in the middle
             // of the chart every time the app reopened.
             if info.knows_progress() {
+                mark_moments(&store, &key, info);
                 let sample = record(&store, &key, info, written.get(&key));
                 written.insert(key.clone(), sample);
             }
@@ -169,6 +170,42 @@ fn carried_collections(
                 .map(|handle| (key, handle, stored.paused))
         })
         .collect())
+}
+
+/// Records when this collection began moving and when it finished.
+///
+/// Written once each, the moment the engine reports it, and never revised.
+/// The interface used to answer "completed in" by measuring the span of the
+/// surviving transfer history — which is a measurement of the ring, not of the
+/// transfer, and read a delete-and-re-add as one download lasting six minutes
+/// when it had been two of half a minute.
+///
+/// A failure is logged and dropped: losing the moment is not a reason to stop
+/// reporting the transfer it belongs to.
+fn mark_moments(store: &Store, key: &[u8], info: &TorrentInfo) {
+    let Ok(Some(stored)) = store.collection(key) else {
+        return;
+    };
+    // Bytes are what starts a transfer, not the decision to allow one — a
+    // collection queued behind a dead swarm has not started.
+    let starting = stored.started_at.is_none() && info.progress_bytes > 0;
+    let finishing = stored.completed_at.is_none() && info.finished;
+    if !starting && !finishing {
+        return;
+    }
+    let now = unix_time_ns();
+    let updated = StoredCollection {
+        started_at: stored.started_at.or((starting).then_some(now)),
+        // A collection that was already complete when this device first saw it
+        // still needs a start, or its duration is unanswerable rather than
+        // zero. Both land on the same tick, which reads as "instant" — true
+        // enough for something that was never fetched.
+        completed_at: stored.completed_at.or((finishing).then_some(now)),
+        ..stored
+    };
+    if let Err(error) = store.put_collection(key, &updated) {
+        crate::log::clog!("nexus", "could not record a transfer moment: {error}");
+    }
 }
 
 /// Writes one reading to the ring, trimming it back to its bound.
@@ -362,6 +399,91 @@ mod tests {
         let mut live = info(40, 100, false);
         live.state = "live".to_owned();
         assert!(live.knows_progress());
+    }
+
+    /// Written when they happen, and never again. A duration measured
+    /// afterwards from surviving history measures the ring rather than the
+    /// transfer — which is how a delete and a re-add read as one six-minute
+    /// download instead of two of half a minute.
+    #[test]
+    fn the_moments_are_recorded_once_and_not_revised() {
+        let dir = std::env::temp_dir().join(format!(
+            "portalis-moments-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let store = Store::open(dir.join("portalis.redb")).expect("opens");
+        store
+            .put_collection(b"a", &collection_row())
+            .expect("writes");
+
+        // Nothing has moved: neither moment has arrived.
+        mark_moments(&store, b"a", &info(0, 100, false));
+        let row = store.collection(b"a").expect("reads").expect("exists");
+        assert_eq!(row.started_at, None);
+        assert_eq!(row.completed_at, None);
+
+        // The first byte starts it.
+        mark_moments(&store, b"a", &info(10, 100, false));
+        let started = store
+            .collection(b"a")
+            .expect("reads")
+            .expect("exists")
+            .started_at
+            .expect("a start");
+
+        // Later readings do not move a start that already happened.
+        mark_moments(&store, b"a", &info(50, 100, false));
+        assert_eq!(
+            store
+                .collection(b"a")
+                .expect("reads")
+                .expect("exists")
+                .started_at,
+            Some(started),
+            "a start is when it started, not when it was last seen running"
+        );
+
+        // The engine saying so is what completes it.
+        mark_moments(&store, b"a", &info(100, 100, true));
+        let completed = store
+            .collection(b"a")
+            .expect("reads")
+            .expect("exists")
+            .completed_at
+            .expect("an end");
+        assert!(completed >= started);
+
+        // And still seeding afterwards does not re-complete it.
+        mark_moments(&store, b"a", &info(100, 100, true));
+        assert_eq!(
+            store
+                .collection(b"a")
+                .expect("reads")
+                .expect("exists")
+                .completed_at,
+            Some(completed),
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn collection_row() -> StoredCollection {
+        StoredCollection {
+            name: "Iceland".to_owned(),
+            role: crate::store::records::Role::Owner,
+            content_key: [0; 32],
+            media_path: String::new(),
+            sources: Vec::new(),
+            paused: false,
+            on_disk_bytes: 0,
+            substrate_handle: Some("abc".to_owned()),
+            draft: false,
+            started_at: None,
+            completed_at: None,
+        }
     }
 
     /// One hundred percent is a claim about the engine, not about arithmetic.
