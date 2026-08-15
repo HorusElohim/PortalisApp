@@ -1074,12 +1074,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  double dco_decode_f_64(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as double;
-  }
-
-  @protected
   List<String> dco_decode_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_String).toList();
@@ -1251,8 +1245,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TorrentInfo dco_decode_torrent_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 14)
-      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
     return TorrentInfo(
       id: dco_decode_usize(arr[0]),
       infoHash: dco_decode_String(arr[1]),
@@ -1261,13 +1255,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       progressBytes: dco_decode_u_64(arr[4]),
       totalBytes: dco_decode_u_64(arr[5]),
       uploadedBytes: dco_decode_u_64(arr[6]),
-      downloadMbps: dco_decode_f_64(arr[7]),
-      uploadMbps: dco_decode_f_64(arr[8]),
-      finished: dco_decode_bool(arr[9]),
-      error: dco_decode_opt_String(arr[10]),
-      files: dco_decode_list_torrent_file(arr[11]),
-      livePeers: dco_decode_u_32(arr[12]),
-      livePeerAddrs: dco_decode_list_String(arr[13]),
+      finished: dco_decode_bool(arr[7]),
+      error: dco_decode_opt_String(arr[8]),
+      files: dco_decode_list_torrent_file(arr[9]),
+      livePeers: dco_decode_u_32(arr[10]),
+      livePeerAddrs: dco_decode_list_String(arr[11]),
     );
   }
 
@@ -1684,12 +1676,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  double sse_decode_f_64(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getFloat64();
-  }
-
-  @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1966,8 +1952,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_progressBytes = sse_decode_u_64(deserializer);
     var var_totalBytes = sse_decode_u_64(deserializer);
     var var_uploadedBytes = sse_decode_u_64(deserializer);
-    var var_downloadMbps = sse_decode_f_64(deserializer);
-    var var_uploadMbps = sse_decode_f_64(deserializer);
     var var_finished = sse_decode_bool(deserializer);
     var var_error = sse_decode_opt_String(deserializer);
     var var_files = sse_decode_list_torrent_file(deserializer);
@@ -1981,8 +1965,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         progressBytes: var_progressBytes,
         totalBytes: var_totalBytes,
         uploadedBytes: var_uploadedBytes,
-        downloadMbps: var_downloadMbps,
-        uploadMbps: var_uploadMbps,
         finished: var_finished,
         error: var_error,
         files: var_files,
@@ -2320,12 +2302,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_f_64(double self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putFloat64(self);
-  }
-
-  @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
@@ -2558,8 +2534,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_64(self.progressBytes, serializer);
     sse_encode_u_64(self.totalBytes, serializer);
     sse_encode_u_64(self.uploadedBytes, serializer);
-    sse_encode_f_64(self.downloadMbps, serializer);
-    sse_encode_f_64(self.uploadMbps, serializer);
     sse_encode_bool(self.finished, serializer);
     sse_encode_opt_String(self.error, serializer);
     sse_encode_list_torrent_file(self.files, serializer);

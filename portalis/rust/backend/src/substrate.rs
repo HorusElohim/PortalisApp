@@ -281,8 +281,6 @@ fn held_torrent(info_hash: &str) -> TorrentInfo {
         progress_bytes: 1,
         total_bytes: 1,
         uploaded_bytes: 0,
-        download_mbps: 0.0,
-        upload_mbps: 0.0,
         finished: true,
         error: None,
         live_peers: 0,

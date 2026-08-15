@@ -1247,13 +1247,6 @@ impl SseDecode for f32 {
     }
 }
 
-impl SseDecode for f64 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_f64::<NativeEndian>().unwrap()
-    }
-}
-
 impl SseDecode for Vec<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1551,8 +1544,6 @@ impl SseDecode for crate::torrent::TorrentInfo {
         let mut var_progressBytes = <u64>::sse_decode(deserializer);
         let mut var_totalBytes = <u64>::sse_decode(deserializer);
         let mut var_uploadedBytes = <u64>::sse_decode(deserializer);
-        let mut var_downloadMbps = <f64>::sse_decode(deserializer);
-        let mut var_uploadMbps = <f64>::sse_decode(deserializer);
         let mut var_finished = <bool>::sse_decode(deserializer);
         let mut var_error = <Option<String>>::sse_decode(deserializer);
         let mut var_files = <Vec<crate::torrent::TorrentFile>>::sse_decode(deserializer);
@@ -1566,8 +1557,6 @@ impl SseDecode for crate::torrent::TorrentInfo {
             progress_bytes: var_progressBytes,
             total_bytes: var_totalBytes,
             uploaded_bytes: var_uploadedBytes,
-            download_mbps: var_downloadMbps,
-            upload_mbps: var_uploadMbps,
             finished: var_finished,
             error: var_error,
             files: var_files,
@@ -2150,8 +2139,6 @@ impl flutter_rust_bridge::IntoDart for crate::torrent::TorrentInfo {
             self.progress_bytes.into_into_dart().into_dart(),
             self.total_bytes.into_into_dart().into_dart(),
             self.uploaded_bytes.into_into_dart().into_dart(),
-            self.download_mbps.into_into_dart().into_dart(),
-            self.upload_mbps.into_into_dart().into_dart(),
             self.finished.into_into_dart().into_dart(),
             self.error.into_into_dart().into_dart(),
             self.files.into_into_dart().into_dart(),
@@ -2399,13 +2386,6 @@ impl SseEncode for f32 {
     }
 }
 
-impl SseEncode for f64 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_f64::<NativeEndian>(self).unwrap();
-    }
-}
-
 impl SseEncode for Vec<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -2644,8 +2624,6 @@ impl SseEncode for crate::torrent::TorrentInfo {
         <u64>::sse_encode(self.progress_bytes, serializer);
         <u64>::sse_encode(self.total_bytes, serializer);
         <u64>::sse_encode(self.uploaded_bytes, serializer);
-        <f64>::sse_encode(self.download_mbps, serializer);
-        <f64>::sse_encode(self.upload_mbps, serializer);
         <bool>::sse_encode(self.finished, serializer);
         <Option<String>>::sse_encode(self.error, serializer);
         <Vec<crate::torrent::TorrentFile>>::sse_encode(self.files, serializer);

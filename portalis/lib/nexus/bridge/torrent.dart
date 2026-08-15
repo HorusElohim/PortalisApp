@@ -169,8 +169,6 @@ class TorrentInfo {
   final BigInt progressBytes;
   final BigInt totalBytes;
   final BigInt uploadedBytes;
-  final double downloadMbps;
-  final double uploadMbps;
   final bool finished;
   final String? error;
   final List<TorrentFile> files;
@@ -192,8 +190,6 @@ class TorrentInfo {
     required this.progressBytes,
     required this.totalBytes,
     required this.uploadedBytes,
-    required this.downloadMbps,
-    required this.uploadMbps,
     required this.finished,
     this.error,
     required this.files,
@@ -222,8 +218,6 @@ class TorrentInfo {
       progressBytes.hashCode ^
       totalBytes.hashCode ^
       uploadedBytes.hashCode ^
-      downloadMbps.hashCode ^
-      uploadMbps.hashCode ^
       finished.hashCode ^
       error.hashCode ^
       files.hashCode ^
@@ -242,8 +236,6 @@ class TorrentInfo {
           progressBytes == other.progressBytes &&
           totalBytes == other.totalBytes &&
           uploadedBytes == other.uploadedBytes &&
-          downloadMbps == other.downloadMbps &&
-          uploadMbps == other.uploadMbps &&
           finished == other.finished &&
           error == other.error &&
           files == other.files &&

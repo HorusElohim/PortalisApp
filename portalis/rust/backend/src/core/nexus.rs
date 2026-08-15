@@ -1927,8 +1927,6 @@ mod tests {
             progress_bytes: 50,
             total_bytes: 100,
             uploaded_bytes: 0,
-            download_mbps: 0.0,
-            upload_mbps: 0.0,
             finished: false,
             error: None,
             files: vec![crate::torrent::TorrentFile {

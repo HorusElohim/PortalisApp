@@ -24,8 +24,6 @@ pub struct TorrentInfo {
     pub progress_bytes: u64,
     pub total_bytes: u64,
     pub uploaded_bytes: u64,
-    pub download_mbps: f64,
-    pub upload_mbps: f64,
     pub finished: bool,
     pub error: Option<String>,
     pub files: Vec<TorrentFile>,
@@ -1408,17 +1406,15 @@ mod native {
         // Paused/Live, so until then this reports nothing rather than a
         // number that lies in the optimistic direction.
         let initializing = state == "Initializing";
-        let (download_mbps, upload_mbps, live_peers) = stats
+        // Deliberately no rate. librqbit reports a smoothed average, which
+        // goes on claiming throughput for seconds after the last byte lands —
+        // a rate is not a property of a torrent at all, but of two
+        // observations of its counters over time. The one thing that observes
+        // over time derives it: see `core::transfers::measured_rates`.
+        let live_peers = stats
             .live
             .as_ref()
-            .map(|live| {
-                (
-                    live.download_speed.mbps,
-                    live.upload_speed.mbps,
-                    live.snapshot.peer_stats.live as u32,
-                )
-            })
-            .unwrap_or((0.0, 0.0, 0));
+            .map_or(0, |live| live.snapshot.peer_stats.live as u32);
         let files = files_for(api, id, &stats, initializing);
         // `PeerStatsFilter`/`PeerStatsSnapshot` are private-in-public on
         // `Api::api_peer_stats` (librqbit 8.1.1) — reachable through type
@@ -1464,8 +1460,6 @@ mod native {
             },
             total_bytes: stats.total_bytes,
             uploaded_bytes: stats.uploaded_bytes,
-            download_mbps,
-            upload_mbps,
             finished: stats.finished,
             error: stats.error.clone(),
             files,

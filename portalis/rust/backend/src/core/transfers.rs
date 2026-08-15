@@ -77,9 +77,10 @@ pub(crate) async fn follow_transfers(
 ) {
     let mut tick = tokio::time::interval(POLL_INTERVAL);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    // The last reading written for each collection, so an unchanged one can be
-    // recognised without reading back what was just stored.
-    let mut written: HashMap<Vec<u8>, StoredSample> = HashMap::new();
+    // The last reading written for each collection, and when — so an
+    // unchanged one can be recognised without reading back what was just
+    // stored, and so a rate can be measured against real elapsed time.
+    let mut written: HashMap<Vec<u8>, LastReading> = HashMap::new();
     loop {
         tokio::select! {
             () = shutdown.requested() => return,
@@ -125,10 +126,25 @@ pub(crate) async fn follow_transfers(
             // A torrent still checking itself has no progress to report, and
             // recording the placeholder zero put a false restart in the middle
             // of the chart every time the app reopened.
+            let rates = measured_rates(info, written.get(&key));
             if info.knows_progress() {
                 mark_moments(&store, &key, info);
-                let sample = record(&store, &key, info, written.get(&key));
-                written.insert(key.clone(), sample);
+                let now = unix_time_ns();
+                let sample = record(
+                    &store,
+                    &key,
+                    info,
+                    rates,
+                    written.get(&key).map(|previous| &previous.sample),
+                );
+                written.insert(
+                    key.clone(),
+                    LastReading {
+                        sample,
+                        at: now,
+                        uploaded: info.uploaded_bytes,
+                    },
+                );
             }
             current.insert(key.clone(), (*info).clone());
 
@@ -137,7 +153,7 @@ pub(crate) async fn follow_transfers(
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .handle(&key);
             if let Some(projected) = projected {
-                publish(&states, projected, info, paused);
+                publish(&states, projected, info, rates, paused);
             }
         }
         // A collection that stopped being carried must not keep its last
@@ -223,13 +239,14 @@ fn record(
     store: &Store,
     key: &[u8],
     info: &TorrentInfo,
+    rates: Rates,
     last: Option<&StoredSample>,
 ) -> StoredSample {
     let sample = StoredSample {
         done: info.progress_bytes,
         total: info.total_bytes,
-        down_bytes_per_second: per_second(info.download_mbps),
-        up_bytes_per_second: per_second(info.upload_mbps),
+        down_bytes_per_second: rates.down,
+        up_bytes_per_second: rates.up,
         peers: u16::try_from(info.live_peers).unwrap_or(u16::MAX),
     };
     if last == Some(&sample) {
@@ -250,9 +267,10 @@ fn publish(
     states: &watch::Sender<PortalisState>,
     handle: Handle,
     info: &TorrentInfo,
+    rates: Rates,
     paused: bool,
 ) {
-    let transfer = transfer_of(info);
+    let transfer = transfer_of(info, rates);
     let status = status_of(info, paused);
     states.send_if_modified(|state| {
         let Some(collection) = state
@@ -286,8 +304,8 @@ fn publish(
 /// byte of is still moving while somebody is pulling it, and that is exactly
 /// when an owner wants to see the numbers — hiding the tier the moment a
 /// download completes is what makes seeding look like nothing happening.
-fn transfer_of(info: &TorrentInfo) -> Option<Transfer> {
-    let idle = info.finished && info.live_peers == 0 && info.upload_mbps <= 0.0;
+fn transfer_of(info: &TorrentInfo, rates: Rates) -> Option<Transfer> {
+    let idle = info.finished && info.live_peers == 0 && rates.up == 0;
     if idle {
         return None;
     }
@@ -299,7 +317,7 @@ fn transfer_of(info: &TorrentInfo) -> Option<Transfer> {
             info.progress_bytes as f32 / info.total_bytes as f32
         }
     };
-    let down = per_second(info.download_mbps);
+    let down = rates.down;
     // The engine decides when it is done, not the ratio. Bytes can be all
     // present while pieces are still being verified, and a torrent resumed
     // over existing files counts what is on disk before it knows whether any
@@ -314,7 +332,7 @@ fn transfer_of(info: &TorrentInfo) -> Option<Transfer> {
     Some(Transfer {
         progress: complete.clamp(0.0, 1.0),
         down_bytes_per_second: down,
-        up_bytes_per_second: per_second(info.upload_mbps),
+        up_bytes_per_second: rates.up,
         peers: u16::try_from(info.live_peers).unwrap_or(u16::MAX),
         // Honest about not knowing: no rate means no estimate rather than an
         // infinite one.
@@ -343,16 +361,69 @@ fn status_of(info: &TorrentInfo, paused: bool) -> Status {
     })
 }
 
-/// Megabits per second, as the bytes per second everything else speaks.
-fn per_second(mbps: f64) -> u32 {
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "a display rate, clamped below"
-    )]
-    {
-        (mbps * 125_000.0).max(0.0).min(f64::from(u32::MAX)) as u32
+/// What actually moved since the last reading, per second.
+///
+/// Measured from the byte counters rather than taken from the engine's own
+/// figure, which is a smoothed average: after the last byte of a one-second
+/// download it went on reporting five megabytes a second, then three, then
+/// two, decaying to nothing over six seconds. Every one of those readings
+/// said bytes were moving while `progress_bytes` did not change once — a
+/// chart of a transfer that was already over, and a rate beside it claiming
+/// throughput that no longer existed.
+///
+/// Bytes are the one number that cannot be smoothed into saying something
+/// untrue. When nothing arrives, this is exactly zero.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Rates {
+    pub down: u32,
+    pub up: u32,
+}
+
+/// What was last written for one collection, and the counters it was written
+/// against — a rate is a difference, so it needs both ends.
+#[derive(Clone)]
+struct LastReading {
+    sample: StoredSample,
+    at: u64,
+    uploaded: u64,
+}
+
+#[cfg(test)]
+impl LastReading {
+    /// The same reading, as though it had counted `done` bytes.
+    fn starting_from(&self, done: u64) -> Self {
+        let mut copy = self.clone();
+        copy.sample.done = done;
+        copy
     }
+}
+
+fn measured_rates(info: &TorrentInfo, last: Option<&LastReading>) -> Rates {
+    // Nothing to measure against yet. Claiming the engine's average here
+    // would put a spike at the start of every chart that no bytes justify.
+    let Some(previous) = last else {
+        return Rates::default();
+    };
+    let elapsed = unix_time_ns().saturating_sub(previous.at);
+    if elapsed == 0 {
+        return Rates::default();
+    }
+    Rates {
+        down: rate(
+            info.progress_bytes.saturating_sub(previous.sample.done),
+            elapsed,
+        ),
+        up: rate(
+            info.uploaded_bytes.saturating_sub(previous.uploaded),
+            elapsed,
+        ),
+    }
+}
+
+/// Bytes over nanoseconds, as whole bytes per second.
+fn rate(bytes: u64, elapsed_ns: u64) -> u32 {
+    let per_second = bytes.saturating_mul(1_000_000_000) / elapsed_ns;
+    u32::try_from(per_second).unwrap_or(u32::MAX)
 }
 
 fn unix_time_ns() -> u64 {
@@ -376,8 +447,6 @@ mod tests {
             progress_bytes: progress,
             total_bytes: total,
             uploaded_bytes: 0,
-            download_mbps: 8.0,
-            upload_mbps: 0.0,
             finished,
             error: None,
             files: Vec::new(),
@@ -399,6 +468,43 @@ mod tests {
         let mut live = info(40, 100, false);
         live.state = "live".to_owned();
         assert!(live.knows_progress());
+    }
+
+    /// The engine's own figure is a smoothed average. After the last byte of a
+    /// one-second download it went on reporting five megabytes a second, then
+    /// three, then two, decaying to nothing over six more seconds — six
+    /// readings claiming throughput while the byte counter did not move once.
+    /// Bytes cannot be smoothed into saying something untrue.
+    #[test]
+    fn a_rate_is_what_moved_not_what_the_engine_averaged() {
+        let arrived = info(56_070_710, 56_070_710, true);
+
+        let a_second_ago = LastReading {
+            sample: StoredSample {
+                done: 56_070_710,
+                total: 56_070_710,
+                down_bytes_per_second: 5_686_154,
+                up_bytes_per_second: 0,
+                peers: 3,
+            },
+            at: unix_time_ns().saturating_sub(1_000_000_000),
+            uploaded: 0,
+        };
+
+        assert_eq!(
+            measured_rates(&arrived, Some(&a_second_ago)),
+            Rates::default(),
+            "nothing arrived, so nothing was moving"
+        );
+
+        // And what did arrive is measured against the time it took.
+        let moving = info(2_000_000, 56_070_710, false);
+        let measured = measured_rates(&moving, Some(&a_second_ago.starting_from(0)));
+        assert!(
+            (1_900_000..=2_100_000).contains(&measured.down),
+            "about two megabytes in about a second, got {}",
+            measured.down
+        );
     }
 
     /// Written when they happen, and never again. A duration measured
@@ -495,9 +601,8 @@ mod tests {
     /// Downloading is the interface contradicting itself.
     #[test]
     fn progress_does_not_reach_the_end_before_the_engine_says_so() {
-        let mut every_byte = info(100, 100, false);
-        every_byte.download_mbps = 1.0;
-        let transfer = transfer_of(&every_byte).expect("still moving");
+        let every_byte = info(100, 100, false);
+        let transfer = transfer_of(&every_byte, Rates::default()).expect("still moving");
         assert!(
             transfer.progress < 1.0,
             "unfinished cannot report complete, got {}",
@@ -508,7 +613,9 @@ mod tests {
         let mut done = info(100, 100, true);
         done.live_peers = 1;
         assert_eq!(
-            transfer_of(&done).expect("still serving").progress,
+            transfer_of(&done, Rates::default())
+                .expect("still serving")
+                .progress,
             1.0,
             "finished is finished"
         );
@@ -531,35 +638,26 @@ mod tests {
         let store = Store::open(dir.join("portalis.redb")).expect("opens");
 
         let moving = info(10, 100, false);
-        let first = record(&store, b"a", &moving, None);
+        let first = record(&store, b"a", &moving, Rates { down: 1, up: 0 }, None);
         assert_eq!(store.samples(b"a").expect("reads").len(), 1);
 
         // The same reading again says nothing the first one did not.
-        let second = record(&store, b"a", &moving, Some(&first));
+        let second = record(
+            &store,
+            b"a",
+            &moving,
+            Rates { down: 1, up: 0 },
+            Some(&first),
+        );
         assert_eq!(store.samples(b"a").expect("reads").len(), 1);
 
         // A reading that differs is written, so the chart still shows the
         // transfer finishing rather than stopping mid-flight.
-        let mut done = info(100, 100, true);
-        done.download_mbps = 0.0;
-        record(&store, b"a", &done, Some(&second));
+        let done = info(100, 100, true);
+        record(&store, b"a", &done, Rates::default(), Some(&second));
         assert_eq!(store.samples(b"a").expect("reads").len(), 2);
 
         let _ = std::fs::remove_dir_all(dir);
-    }
-
-    /// Megabits are what the substrate reports and bytes are what everything
-    /// else speaks, so the conversion happens once, here.
-    #[test]
-    fn a_rate_crosses_from_megabits_to_bytes_without_overflowing() {
-        assert_eq!(per_second(8.0), 1_000_000);
-        assert_eq!(per_second(0.0), 0);
-        assert_eq!(per_second(-1.0), 0, "a negative rate is no rate");
-        assert_eq!(
-            per_second(f64::MAX),
-            u32::MAX,
-            "clamped rather than wrapped"
-        );
     }
 
     /// Finished and idle is nothing to report; finished and still being pulled
@@ -568,20 +666,27 @@ mod tests {
     fn a_finished_transfer_reports_nothing_only_once_it_is_also_idle() {
         let mut done = info(100, 100, true);
         done.live_peers = 0;
-        done.upload_mbps = 0.0;
-        assert_eq!(transfer_of(&done), None);
+        assert_eq!(transfer_of(&done, Rates::default()), None);
 
+        // Serving somebody: measured upload, so it is genuinely not idle.
         let seeding = TorrentInfo {
             live_peers: 2,
-            upload_mbps: 4.0,
             ..done.clone()
         };
-        let seeding = transfer_of(&seeding).expect("still moving");
+        let uploading = Rates {
+            down: 0,
+            up: 500_000,
+        };
+        let seeding = transfer_of(&seeding, uploading).expect("still moving");
         assert!((seeding.progress - 1.0).abs() < f32::EPSILON);
-        assert_eq!(seeding.up_bytes_per_second, per_second(4.0));
+        assert_eq!(seeding.up_bytes_per_second, 500_000);
         assert_eq!(seeding.eta_secs, None, "nothing left to arrive");
 
-        let moving = transfer_of(&info(50, 100, false)).expect("still moving");
+        let downloading = Rates {
+            down: 1_000_000,
+            up: 0,
+        };
+        let moving = transfer_of(&info(50, 100, false), downloading).expect("still moving");
         assert!((moving.progress - 0.5).abs() < f32::EPSILON);
         assert_eq!(moving.peers, 3);
         assert_eq!(moving.eta_secs, Some(50 / 1_000_000));
@@ -591,7 +696,7 @@ mod tests {
     /// it would be a progress bar full of NaN.
     #[test]
     fn a_transfer_with_no_known_total_reports_no_progress_rather_than_nan() {
-        let unknown = transfer_of(&info(0, 0, false)).expect("carried");
+        let unknown = transfer_of(&info(0, 0, false), Rates::default()).expect("carried");
 
         assert!((unknown.progress - 0.0).abs() < f32::EPSILON);
         assert_eq!(unknown.eta_secs, None, "nothing to estimate from");
