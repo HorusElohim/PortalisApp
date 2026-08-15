@@ -56,14 +56,14 @@ extension DetailPieces on AppDetail {
 class Reading {
   const Reading({
     required this.at,
-    required this.downloadMbps,
-    required this.uploadMbps,
+    required this.downBytesPerSecond,
+    required this.upBytesPerSecond,
     required this.progress,
   });
 
   final DateTime at;
-  final double downloadMbps;
-  final double uploadMbps;
+  final int downBytesPerSecond;
+  final int upBytesPerSecond;
   final double progress;
 }
 
@@ -81,8 +81,8 @@ List<Reading> decodeReadings(Uint8List packed) {
     final row = ByteData.sublistView(packed, offset, offset + rowBytes);
     rows.add(Reading(
       at: DateTime.fromMicrosecondsSinceEpoch(row.getUint64(0) ~/ 1000),
-      downloadMbps: _megabits(row.getUint32(8)),
-      uploadMbps: _megabits(row.getUint32(12)),
+      downBytesPerSecond: row.getUint32(8),
+      upBytesPerSecond: row.getUint32(12),
       progress: row.getUint16(16) / 1000,
     ));
   }
@@ -132,10 +132,8 @@ class EngineActivity {
 
   bool get isMoving => transfers > 0;
 
-  /// Megabits per second, the unit the glow and the rate labels speak.
-  double get downMbps => downBytesPerSecond * 8 / 1000000;
-  double get upMbps => upBytesPerSecond * 8 / 1000000;
-  double get rateMbps => downMbps + upMbps;
+  /// Everything moving right now, in the unit the engine counts.
+  int get totalBytesPerSecond => downBytesPerSecond + upBytesPerSecond;
 }
 
 /// One command envelope, in the shape a caller wants to write.
@@ -204,5 +202,3 @@ class EngineCommand {
         active: active,
       );
 }
-
-double _megabits(int bytesPerSecond) => bytesPerSecond * 8 / 1000000;

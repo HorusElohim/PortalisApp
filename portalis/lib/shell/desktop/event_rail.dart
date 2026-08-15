@@ -30,17 +30,17 @@ class DesktopEventRail extends StatelessWidget {
                 plural(activity.transfers, 'active transfer').toUpperCase(),
                 style: monoLabel(size: 10, color: AppColors.signal),
               ),
-              if (activity.downMbps > 0) ...[
+              if (activity.downBytesPerSecond > 0) ...[
                 const SizedBox(width: 12),
                 Text(
-                  '↓ ${formatRate(activity.downMbps)}',
+                  '↓ ${formatRate(activity.downBytesPerSecond)}',
                   style: monoLabel(size: 10),
                 ),
               ],
-              if (activity.upMbps > 0) ...[
+              if (activity.upBytesPerSecond > 0) ...[
                 const SizedBox(width: 12),
                 Text(
-                  '↑ ${formatRate(activity.upMbps)}',
+                  '↑ ${formatRate(activity.upBytesPerSecond)}',
                   style: monoLabel(size: 10),
                 ),
               ],

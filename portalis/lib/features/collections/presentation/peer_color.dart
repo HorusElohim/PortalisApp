@@ -25,8 +25,12 @@ extension CollectionPresentation on Collection {
   }
 
   GlowLevel get glow {
-    if (downloadMbps > 0 || uploadMbps > 0) {
-      return (downloadMbps + uploadMbps) > 4
+    if (downBytesPerSecond > 0 || upBytesPerSecond > 0) {
+      // Half a megabyte a second reads as working hard. The old threshold was
+      // four megabits, which is the same speed said in the unit the engine
+      // does not count in.
+      const vividAt = 500000;
+      return (downBytesPerSecond + upBytesPerSecond) > vividAt
           ? GlowLevel.vivid
           : GlowLevel.active;
     }
@@ -34,7 +38,7 @@ extension CollectionPresentation on Collection {
     return isSharing ? GlowLevel.calm : GlowLevel.none;
   }
 
-  double get liveIntensity => Glow.intensityForRate(downloadMbps + uploadMbps);
+  double get liveIntensity => Glow.intensityForRate(downBytesPerSecond + upBytesPerSecond);
 
   Color get hue => AppColors.hueAt(id.hashCode.abs());
 

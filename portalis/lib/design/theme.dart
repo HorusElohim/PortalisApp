@@ -423,10 +423,14 @@ class Glow {
   /// Lives here rather than on a widget because both the background wash and
   /// every card's gradient read from it — one curve, so the whole app
   /// brightens together.
-  static double intensityForRate(double mbps) {
-    if (mbps <= 0) return 0;
-    const saturateAt = 8.0;
-    return (mbps / saturateAt).clamp(0.15, 1.0);
+  /// Bytes per second in, brightness out. One megabyte a second reads as
+  /// working hard — the old curve took megabits and saturated at eight of
+  /// them, which is one megabyte, so this is the same threshold said in the
+  /// unit the engine actually counts.
+  static double intensityForRate(int bytesPerSecond) {
+    if (bytesPerSecond <= 0) return 0;
+    const saturateAt = 1000000;
+    return (bytesPerSecond / saturateAt).clamp(0.15, 1.0);
   }
 
   Border get border => Border.all(

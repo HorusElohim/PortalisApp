@@ -8,13 +8,13 @@ import 'package:portalis/design/theme.dart';
 class TransferPoint {
   const TransferPoint({
     required this.at,
-    required this.downloadMbps,
-    required this.uploadMbps,
+    required this.downBytesPerSecond,
+    required this.upBytesPerSecond,
   });
 
   final DateTime at;
-  final double downloadMbps;
-  final double uploadMbps;
+  final int downBytesPerSecond;
+  final int upBytesPerSecond;
 }
 
 /// A real download/upload history sampled by the collections controller.
@@ -22,8 +22,8 @@ class TransferGraph extends StatelessWidget {
   TransferGraph({
     super.key,
     required this.progress,
-    required this.downloadMbps,
-    required this.uploadMbps,
+    required this.downBytesPerSecond,
+    required this.upBytesPerSecond,
     this.history = const [],
     this.startedAt,
     this.completedAt,
@@ -32,8 +32,8 @@ class TransferGraph extends StatelessWidget {
   }) : color = color ?? AppColors.signal;
 
   final double progress;
-  final double downloadMbps;
-  final double uploadMbps;
+  final int downBytesPerSecond;
+  final int upBytesPerSecond;
   final List<TransferPoint> history;
   final DateTime? startedAt;
   final DateTime? completedAt;
@@ -44,8 +44,8 @@ class TransferGraph extends StatelessWidget {
   Widget build(BuildContext context) {
     final graph = _TransferGraphState.from(
       progress: progress,
-      downloadMbps: downloadMbps,
-      uploadMbps: uploadMbps,
+      downBytesPerSecond: downBytesPerSecond,
+      upBytesPerSecond: upBytesPerSecond,
       history: history,
       startedAt: startedAt,
       completedAt: completedAt,
@@ -158,8 +158,8 @@ class TransferGraphHeader extends StatelessWidget {
   TransferGraphHeader({
     super.key,
     required this.progress,
-    required this.downloadMbps,
-    required this.uploadMbps,
+    required this.downBytesPerSecond,
+    required this.upBytesPerSecond,
     this.history = const [],
     this.startedAt,
     this.completedAt,
@@ -167,8 +167,8 @@ class TransferGraphHeader extends StatelessWidget {
   }) : color = color ?? AppColors.signal;
 
   final double progress;
-  final double downloadMbps;
-  final double uploadMbps;
+  final int downBytesPerSecond;
+  final int upBytesPerSecond;
   final List<TransferPoint> history;
   final DateTime? startedAt;
   final DateTime? completedAt;
@@ -178,8 +178,8 @@ class TransferGraphHeader extends StatelessWidget {
   Widget build(BuildContext context) => _TransferGraphHeading(
         graph: _TransferGraphState.from(
           progress: progress,
-          downloadMbps: downloadMbps,
-          uploadMbps: uploadMbps,
+          downBytesPerSecond: downBytesPerSecond,
+          upBytesPerSecond: upBytesPerSecond,
           history: history,
           startedAt: startedAt,
           completedAt: completedAt,
@@ -227,14 +227,14 @@ class _TransferGraphHeading extends StatelessWidget {
                 label: 'DOWNLOAD',
                 value: graph.complete
                     ? 'peak ${formatRate(graph.peakDownload)}'
-                    : 'now ${formatRate(graph.downloadMbps)} · peak ${formatRate(graph.peakDownload)}',
+                    : 'now ${formatRate(graph.downBytesPerSecond)} · peak ${formatRate(graph.peakDownload)}',
               ),
               if (graph.hasUpload)
                 _SeriesSummary(
                   color: AppColors.signalSoft,
                   label: 'UPLOAD',
-                  value: graph.uploadMbps > 0
-                      ? 'now ${formatRate(graph.uploadMbps)} · peak ${formatRate(graph.peakUpload)}'
+                  value: graph.upBytesPerSecond > 0
+                      ? 'now ${formatRate(graph.upBytesPerSecond)} · peak ${formatRate(graph.peakUpload)}'
                       : 'peak ${formatRate(graph.peakUpload)}',
                 ),
             ],
@@ -246,8 +246,8 @@ class _TransferGraphHeading extends StatelessWidget {
 class _TransferGraphState {
   const _TransferGraphState({
     required this.complete,
-    required this.downloadMbps,
-    required this.uploadMbps,
+    required this.downBytesPerSecond,
+    required this.upBytesPerSecond,
     required this.points,
     required this.start,
     required this.end,
@@ -259,8 +259,8 @@ class _TransferGraphState {
 
   factory _TransferGraphState.from({
     required double progress,
-    required double downloadMbps,
-    required double uploadMbps,
+    required int downBytesPerSecond,
+    required int upBytesPerSecond,
     required List<TransferPoint> history,
     DateTime? startedAt,
     DateTime? completedAt,
@@ -272,8 +272,8 @@ class _TransferGraphState {
     final complete = progress >= 1.0;
     final current = TransferPoint(
       at: now,
-      downloadMbps: downloadMbps,
-      uploadMbps: uploadMbps,
+      downBytesPerSecond: downBytesPerSecond,
+      upBytesPerSecond: upBytesPerSecond,
     );
     final points = history.isEmpty
         ? [current]
@@ -285,26 +285,26 @@ class _TransferGraphState {
     final requestedEnd = completedAt ?? lastSampleAt;
     final end =
         requestedEnd.isBefore(lastSampleAt) ? lastSampleAt : requestedEnd;
-    final peakDownload = points.fold<double>(
+    final peakDownload = points.fold<int>(
       0,
-      (peak, point) => math.max(peak, point.downloadMbps),
+      (peak, point) => math.max(peak, point.downBytesPerSecond),
     );
-    final peakUpload = points.fold<double>(
+    final peakUpload = points.fold<int>(
       0,
-      (peak, point) => math.max(peak, point.uploadMbps),
+      (peak, point) => math.max(peak, point.upBytesPerSecond),
     );
-    final positiveRates = [
+    final positiveRates = <int>[
       for (final point in points) ...[
-        if (point.downloadMbps > 0) point.downloadMbps,
-        if (point.uploadMbps > 0) point.uploadMbps,
+        if (point.downBytesPerSecond > 0) point.downBytesPerSecond,
+        if (point.upBytesPerSecond > 0) point.upBytesPerSecond,
       ],
     ];
     final minPositiveRate =
-        positiveRates.isEmpty ? 0.0 : positiveRates.reduce(math.min).toDouble();
+        positiveRates.isEmpty ? 0 : positiveRates.reduce(math.min);
     return _TransferGraphState(
       complete: complete,
-      downloadMbps: downloadMbps,
-      uploadMbps: uploadMbps,
+      downBytesPerSecond: downBytesPerSecond,
+      upBytesPerSecond: upBytesPerSecond,
       points: points,
       start: start,
       end: end,
@@ -316,20 +316,20 @@ class _TransferGraphState {
   }
 
   final bool complete;
-  final double downloadMbps;
-  final double uploadMbps;
+  final int downBytesPerSecond;
+  final int upBytesPerSecond;
   final List<TransferPoint> points;
   final DateTime start;
   final DateTime end;
 
   /// When the core recorded this as finished, where it has.
   final DateTime? completedAt;
-  final double peakDownload;
-  final double peakUpload;
-  final double minPositiveRate;
+  final int peakDownload;
+  final int peakUpload;
+  final int minPositiveRate;
 
-  double get maxRate => math.max(peakDownload, peakUpload).toDouble();
-  bool get hasUpload => peakUpload > 0 || uploadMbps > 0;
+  int get maxRate => math.max(peakDownload, peakUpload);
+  bool get hasUpload => peakUpload > 0 || upBytesPerSecond > 0;
   /// How long it took, as the core recorded it.
   ///
   /// [end] is stretched to cover the last reading so the axis holds every
@@ -455,8 +455,8 @@ class _RateAxis extends StatelessWidget {
     required this.minPositiveRate,
   });
 
-  final double maxRate;
-  final double minPositiveRate;
+  final int maxRate;
+  final int minPositiveRate;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -478,7 +478,7 @@ class _RateAxis extends StatelessWidget {
             style: monoLabel(size: 8, color: AppColors.textGhost),
           ),
           Text(
-            '0 MB/s',
+            formatRate(0),
             style: monoLabel(size: 8, color: AppColors.textGhost),
           ),
         ],
@@ -498,8 +498,8 @@ class _TransferGraphPainter extends CustomPainter {
   final List<TransferPoint> history;
   final DateTime startedAt;
   final DateTime endedAt;
-  final double maxRate;
-  final double minPositiveRate;
+  final int maxRate;
+  final int minPositiveRate;
   final Color color;
 
   @override
@@ -516,7 +516,7 @@ class _TransferGraphPainter extends CustomPainter {
     final duration = endedAt.difference(startedAt).inMicroseconds;
     final span = duration <= 0 ? 1 : duration;
 
-    if (history.any((point) => point.downloadMbps > 0)) {
+    if (history.any((point) => point.downBytesPerSecond > 0)) {
       _drawSeries(
         canvas,
         size,
@@ -527,11 +527,11 @@ class _TransferGraphPainter extends CustomPainter {
         top,
         bottom,
         color,
-        (point) => point.downloadMbps,
+        (point) => point.downBytesPerSecond,
         fill: true,
       );
     }
-    if (history.any((point) => point.uploadMbps > 0)) {
+    if (history.any((point) => point.upBytesPerSecond > 0)) {
       _drawSeries(
         canvas,
         size,
@@ -542,7 +542,7 @@ class _TransferGraphPainter extends CustomPainter {
         top,
         bottom,
         AppColors.signalSoft,
-        (point) => point.uploadMbps,
+        (point) => point.upBytesPerSecond,
       );
     }
   }
@@ -551,13 +551,13 @@ class _TransferGraphPainter extends CustomPainter {
     Canvas canvas,
     Size size,
     List<TransferPoint> points,
-    double scale,
+    int scale,
     int span,
     DateTime start,
     double top,
     double bottom,
     Color color,
-    double Function(TransferPoint point) rate, {
+    int Function(TransferPoint point) rate, {
     bool fill = false,
   }) {
     final path = Path();
@@ -643,9 +643,9 @@ class _TransferGraphPainter extends CustomPainter {
 }
 
 double _logarithmicRate(
-  double rate, {
-  required double maxRate,
-  required double minPositiveRate,
+  int rate, {
+  required int maxRate,
+  required int minPositiveRate,
 }) {
   if (rate <= 0 || maxRate <= 0 || minPositiveRate <= 0) return 0;
   final denominator = math.log(1 + maxRate / minPositiveRate);
@@ -657,12 +657,13 @@ double _logarithmicRate(
       .toDouble();
 }
 
-double _inverseLogarithmicRate(
+int _inverseLogarithmicRate(
   double normalized, {
-  required double maxRate,
-  required double minPositiveRate,
+  required int maxRate,
+  required int minPositiveRate,
 }) {
   if (maxRate <= 0 || minPositiveRate <= 0) return 0;
   final logarithmicMax = math.log(1 + maxRate / minPositiveRate);
-  return minPositiveRate * (math.exp(logarithmicMax * normalized) - 1);
+  return (minPositiveRate * (math.exp(logarithmicMax * normalized) - 1))
+      .round();
 }

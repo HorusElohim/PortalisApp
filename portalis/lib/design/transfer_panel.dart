@@ -14,8 +14,8 @@ class TransferPanel extends StatelessWidget {
     required this.progress,
     required this.downloadedBytes,
     required this.totalBytes,
-    this.downloadMbps = 0,
-    this.uploadMbps = 0,
+    this.downBytesPerSecond = 0,
+    this.upBytesPerSecond = 0,
     this.livePeers = 0,
     this.etaLabel,
     this.history = const [],
@@ -31,8 +31,8 @@ class TransferPanel extends StatelessWidget {
   final double progress;
   final int downloadedBytes;
   final int totalBytes;
-  final double downloadMbps;
-  final double uploadMbps;
+  final int downBytesPerSecond;
+  final int upBytesPerSecond;
   final int livePeers;
   final String? etaLabel;
   final List<TransferPoint> history;
@@ -46,7 +46,7 @@ class TransferPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final moving = downloadMbps > 0 || uploadMbps > 0;
+    final moving = downBytesPerSecond > 0 || upBytesPerSecond > 0;
     final hasTotal = totalBytes > 0;
     final metrics = <Widget>[
       if (livePeers > 0)
@@ -59,8 +59,8 @@ class TransferPanel extends StatelessWidget {
     ];
     final graphHeader = TransferGraphHeader(
       progress: progress,
-      downloadMbps: downloadMbps,
-      uploadMbps: uploadMbps,
+      downBytesPerSecond: downBytesPerSecond,
+      upBytesPerSecond: upBytesPerSecond,
       history: history,
       startedAt: startedAt,
       completedAt: completedAt,
@@ -102,8 +102,8 @@ class TransferPanel extends StatelessWidget {
             const SizedBox(height: 14),
             TransferGraph(
               progress: progress,
-              downloadMbps: downloadMbps,
-              uploadMbps: uploadMbps,
+              downBytesPerSecond: downBytesPerSecond,
+              upBytesPerSecond: upBytesPerSecond,
               history: history,
               startedAt: startedAt,
               completedAt: completedAt,

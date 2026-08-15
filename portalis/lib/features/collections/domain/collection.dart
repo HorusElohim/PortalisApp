@@ -64,7 +64,8 @@ class Collection {
   bool get isSharing => isComplete && entryCount > 0;
 
   bool get isComplete => state == 'Available';
-  bool get isMoving => isDownloading || downloadMbps > 0 || uploadMbps > 0;
+  bool get isMoving =>
+      isDownloading || downBytesPerSecond > 0 || upBytesPerSecond > 0;
 
   int get totalBytes => source.totalBytes.toInt();
   int get downloadedBytes => source.onDiskBytes.toInt();
@@ -77,8 +78,11 @@ class Collection {
   double get progress =>
       source.transfer?.progress ?? lastReading?.progress ?? 0;
 
-  double get downloadMbps => _megabits(source.transfer?.downBytesPerSecond ?? 0);
-  double get uploadMbps => _megabits(source.transfer?.upBytesPerSecond ?? 0);
+  /// Bytes per second, as the engine counts them. Never megabits: converting
+  /// to them and then labelling the result "MB/s" showed every rate in the
+  /// app at eight times its real value.
+  int get downBytesPerSecond => source.transfer?.downBytesPerSecond ?? 0;
+  int get upBytesPerSecond => source.transfer?.upBytesPerSecond ?? 0;
   int get livePeers => source.transfer?.peers ?? torrentPeers.length;
   int? get etaSecs => source.transfer?.etaSecs;
 
@@ -161,5 +165,3 @@ MediaItem mediaItemFor(AppEntry entry) {
     fetched: entry.available || done > 0,
   );
 }
-
-double _megabits(int bytesPerSecond) => bytesPerSecond * 8 / 1000000;

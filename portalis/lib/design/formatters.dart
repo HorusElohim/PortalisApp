@@ -31,8 +31,25 @@ String formatBytesPrecise(int bytes) {
   return '$bytes B';
 }
 
-/// A throughput figure the engine reports, in MB/s.
-String formatRate(double mbps) => '${mbps.toStringAsFixed(1)} MB/s';
+/// A throughput figure, in the same multiples as a size.
+///
+/// Bytes per second, because that is what the engine counts and what a file
+/// is measured in — a rate beside a size should be comparable to it without
+/// arithmetic. This used to take megabits and label them "MB/s", so every
+/// rate in the app read eight times what it was: a 5.7 MB/s download showed
+/// as 45.5 MB/s.
+String formatRate(int bytesPerSecond) {
+  if (bytesPerSecond >= _gb) {
+    return '${(bytesPerSecond / _gb).toStringAsFixed(2)} GB/s';
+  }
+  if (bytesPerSecond >= _mb) {
+    return '${(bytesPerSecond / _mb).toStringAsFixed(1)} MB/s';
+  }
+  if (bytesPerSecond >= _kb) {
+    return '${(bytesPerSecond / _kb).toStringAsFixed(0)} KB/s';
+  }
+  return '$bytesPerSecond B/s';
+}
 
 /// Displays an incomplete transfer below 100% until it is actually complete.
 /// Rounding made a nearly-finished transfer look done while its ETA and file
@@ -45,13 +62,10 @@ String formatProgressPercent(double progress) {
 
 /// A configured bytes-per-second cap. `null` or `0` means no cap — and says
 /// so, rather than rendering as "0 B/s".
-String formatLimit(int? bytesPerSecond) {
-  if (bytesPerSecond == null || bytesPerSecond == 0) return 'Unlimited';
-  if (bytesPerSecond < _mb) {
-    return '${(bytesPerSecond / _kb).toStringAsFixed(0)} KB/s';
-  }
-  return '${(bytesPerSecond / _mb).toStringAsFixed(1)} MB/s';
-}
+String formatLimit(int? bytesPerSecond) =>
+    bytesPerSecond == null || bytesPerSecond == 0
+        ? 'Unlimited'
+        : formatRate(bytesPerSecond);
 
 /// `3 peers` / `1 peer`. English pluralisation only — there is no
 /// localisation layer in this app yet, and pretending otherwise would be

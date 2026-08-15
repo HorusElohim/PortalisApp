@@ -46,8 +46,8 @@ Collection buildCollection({
   String name = 'Iceland trip',
   String nature = 'Native',
   String status = 'Available',
-  double downloadMbps = 0,
-  double uploadMbps = 0,
+  int downBytesPerSecond = 0,
+  int upBytesPerSecond = 0,
   int livePeers = 0,
   List<String> torrentPeers = const [],
   List<AppEntry> entries = const [],
@@ -60,8 +60,8 @@ Collection buildCollection({
   // A partial collection has a transfer even when no rate was named: the
   // engine reports one for anything it is carrying, and its progress is where
   // a fraction comes from.
-  final moving = downloadMbps > 0 ||
-      uploadMbps > 0 ||
+  final moving = downBytesPerSecond > 0 ||
+      upBytesPerSecond > 0 ||
       livePeers > 0 ||
       downloadedBytes > 0 ||
       status == 'Downloading';
@@ -78,8 +78,8 @@ Collection buildCollection({
       transfer: moving
           ? AppTransfer(
               progress: totalBytes == 0 ? 0 : downloadedBytes / totalBytes,
-              downBytesPerSecond: (downloadMbps * 125000).round(),
-              upBytesPerSecond: (uploadMbps * 125000).round(),
+              downBytesPerSecond: downBytesPerSecond,
+              upBytesPerSecond: upBytesPerSecond,
               peers: livePeers,
               etaSecs: etaSecs,
             )

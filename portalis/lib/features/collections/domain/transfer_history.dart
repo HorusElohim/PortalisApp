@@ -29,8 +29,8 @@ class TransferHistory {
 
   bool record({
     required DateTime at,
-    required double downloadMbps,
-    required double uploadMbps,
+    required int downBytesPerSecond,
+    required int upBytesPerSecond,
     required double progress,
   }) {
     final previous = _samples.isEmpty ? null : _samples.last;
@@ -40,8 +40,8 @@ class TransferHistory {
     _samples.add(
       TransferSample(
         at: at,
-        downloadMbps: downloadMbps,
-        uploadMbps: uploadMbps,
+        downBytesPerSecond: downBytesPerSecond,
+        upBytesPerSecond: upBytesPerSecond,
         progress: progress,
       ),
     );
@@ -55,13 +55,13 @@ class TransferHistory {
 class TransferSample {
   const TransferSample({
     required this.at,
-    required this.downloadMbps,
-    required this.uploadMbps,
+    required this.downBytesPerSecond,
+    required this.upBytesPerSecond,
     required this.progress,
   });
 
   final DateTime at;
-  final double downloadMbps;
-  final double uploadMbps;
+  final int downBytesPerSecond;
+  final int upBytesPerSecond;
   final double progress;
 }

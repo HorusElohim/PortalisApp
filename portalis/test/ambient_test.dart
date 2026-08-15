@@ -24,15 +24,15 @@ void main() {
 
     test('any real movement is visible, and it saturates', () {
       // A trickle still registers...
-      expect(Glow.intensityForRate(0.01), greaterThanOrEqualTo(0.15));
+      expect(Glow.intensityForRate(1000), greaterThanOrEqualTo(0.15));
       // ...and a firehose doesn't keep getting brighter forever.
-      expect(Glow.intensityForRate(500), 1.0);
-      expect(Glow.intensityForRate(8), 1.0);
+      expect(Glow.intensityForRate(500000000), 1.0);
+      expect(Glow.intensityForRate(1000000), 1.0);
     });
 
     test('is monotonic between the floor and the ceiling', () {
-      expect(Glow.intensityForRate(2),
-          lessThan(Glow.intensityForRate(6)));
+      expect(Glow.intensityForRate(250000),
+          lessThan(Glow.intensityForRate(750000)));
     });
   });
 

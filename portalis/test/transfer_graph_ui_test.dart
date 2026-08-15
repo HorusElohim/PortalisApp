@@ -13,25 +13,25 @@ void main() {
             width: 900,
             child: TransferGraph(
               progress: 1,
-              downloadMbps: 0,
-              uploadMbps: 0,
+              downBytesPerSecond: 0,
+              upBytesPerSecond: 0,
               startedAt: start,
               completedAt: start.add(const Duration(seconds: 7)),
               history: [
                 TransferPoint(
                   at: start,
-                  downloadMbps: 1,
-                  uploadMbps: 0,
+                  downBytesPerSecond: 1000000,
+                  upBytesPerSecond: 0,
                 ),
                 TransferPoint(
                   at: start.add(const Duration(seconds: 4)),
-                  downloadMbps: 5,
-                  uploadMbps: 0.5,
+                  downBytesPerSecond: 5000000,
+                  upBytesPerSecond: 62500,
                 ),
                 TransferPoint(
                   at: start.add(const Duration(seconds: 7)),
-                  downloadMbps: 2,
-                  uploadMbps: 0,
+                  downBytesPerSecond: 2000000,
+                  upBytesPerSecond: 0,
                 ),
               ],
             ),
@@ -44,8 +44,8 @@ void main() {
     expect(find.text('COMPLETED IN 7s'), findsOneWidget);
     expect(find.text('peak 5.0 MB/s'), findsOneWidget);
     expect(find.text('5.0 MB/s'), findsOneWidget); // top of the y-axis
-    expect(find.text('0 MB/s'), findsOneWidget);
-    expect(find.textContaining('now 0.0 MB/s'), findsNothing);
+    expect(find.text('0 B/s'), findsOneWidget);
+    expect(find.textContaining('now 0 B/s'), findsNothing);
     expect(find.text('END'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -59,19 +59,19 @@ void main() {
         home: Scaffold(
           body: TransferGraph(
             progress: 1,
-            downloadMbps: 0,
-            uploadMbps: 0,
+            downBytesPerSecond: 0,
+            upBytesPerSecond: 0,
             startedAt: start,
             history: [
               TransferPoint(
                 at: start,
-                downloadMbps: 1,
-                uploadMbps: 0,
+                downBytesPerSecond: 1000000,
+                upBytesPerSecond: 0,
               ),
               TransferPoint(
                 at: end,
-                downloadMbps: 0,
-                uploadMbps: 0,
+                downBytesPerSecond: 0,
+                upBytesPerSecond: 0,
               ),
             ],
           ),
@@ -95,19 +95,19 @@ void main() {
             width: 900,
             child: TransferGraph(
               progress: 0.6,
-              downloadMbps: 2.5,
-              uploadMbps: 0.4,
+              downBytesPerSecond: 2500000,
+              upBytesPerSecond: 400000,
               startedAt: start,
               history: [
                 TransferPoint(
                   at: start,
-                  downloadMbps: 1,
-                  uploadMbps: 0,
+                  downBytesPerSecond: 1000000,
+                  upBytesPerSecond: 0,
                 ),
                 TransferPoint(
                   at: start.add(const Duration(seconds: 4)),
-                  downloadMbps: 4,
-                  uploadMbps: 0.2,
+                  downBytesPerSecond: 4000000,
+                  upBytesPerSecond: 400000,
                 ),
               ],
             ),
@@ -119,7 +119,7 @@ void main() {
     expect(find.text('TRANSFER SPEED'), findsOneWidget);
     expect(find.textContaining('LIVE ·'), findsOneWidget);
     expect(find.text('now 2.5 MB/s · peak 4.0 MB/s'), findsOneWidget);
-    expect(find.text('now 0.4 MB/s · peak 0.4 MB/s'), findsOneWidget);
+    expect(find.text('now 400 KB/s · peak 400 KB/s'), findsOneWidget);
     expect(find.text('LATEST'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -136,8 +136,8 @@ void main() {
               progress: 0.5,
               downloadedBytes: 500,
               totalBytes: 1000,
-              downloadMbps: 100,
-              uploadMbps: 0.01,
+              downBytesPerSecond: 100000000,
+              upBytesPerSecond: 10000,
               startedAt: start,
             ),
           ),
@@ -149,9 +149,10 @@ void main() {
     expect(find.text('UPLOAD'), findsOneWidget);
     expect(find.text('START'), findsOneWidget);
     expect(find.text('LATEST'), findsOneWidget);
-    // With a 0.01–100 MB/s range, the logarithmic midpoint is about 1 MB/s;
-    // a linear graph would label this grid line 50 MB/s and flatten upload.
-    expect(find.text('1.0 MB/s'), findsOneWidget);
+    // With a 10 KB/s–100 MB/s range, the logarithmic midpoint is about
+    // 990 KB/s. A linear graph would label this grid line 50 MB/s and flatten
+    // the upload into the floor.
+    expect(find.text('990 KB/s'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -164,7 +165,7 @@ void main() {
             progress: 1,
             downloadedBytes: 1000,
             totalBytes: 1000,
-            uploadMbps: 0.2,
+            upBytesPerSecond: 25000,
           ),
         ),
       ),
@@ -204,14 +205,14 @@ void main() {
             width: 340,
             child: TransferGraph(
               progress: 0.5,
-              downloadMbps: 12.5,
-              uploadMbps: 1.2,
+              downBytesPerSecond: 1562500,
+              upBytesPerSecond: 150000,
               startedAt: start,
               history: [
                 TransferPoint(
                   at: start,
-                  downloadMbps: 8,
-                  uploadMbps: 0.5,
+                  downBytesPerSecond: 8000000,
+                  upBytesPerSecond: 62500,
                 ),
               ],
             ),

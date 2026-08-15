@@ -368,8 +368,8 @@ void main() {
     final activity = controller.activity;
     expect(activity.transfers, 1, reason: 'the idle collection is not counted');
     expect(activity.peers, 3);
-    expect(activity.downMbps, 1.0);
-    expect(activity.upMbps, 2.0);
+    expect(activity.downBytesPerSecond, 125000);
+    expect(activity.upBytesPerSecond, 250000);
   });
 
   /// Opening means one thing on every layout. The wide window used to grow

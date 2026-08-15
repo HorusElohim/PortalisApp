@@ -234,7 +234,7 @@ class HomeLibrary extends StatelessWidget {
       (total, transfer) => total + transfer.upBytesPerSecond,
     );
     return '${plural(transfers.length, 'active transfer')} · '
-        '↓ ${formatRate(down / 1000000)} · ↑ ${formatRate(up / 1000000)}';
+        '↓ ${formatRate(down)} · ↑ ${formatRate(up)}';
   }
 }
 

@@ -30,7 +30,7 @@ class _RootShellState extends AdaptiveShellState<RootShell> {
   Widget buildWideLayout(BuildContext context) => DesktopShellLayout(
         pane: pane,
         onPane: selectPane,
-        liveRate: AppControllers.engine.activity.rateMbps,
+        liveRate: AppControllers.engine.activity.totalBytesPerSecond,
         home: Home(embedded: true, onOpen: openCollection),
         content: _desktopContent(),
       );

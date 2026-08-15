@@ -20,7 +20,7 @@ class DesktopShellLayout extends StatelessWidget {
   final ValueChanged<DesktopPane> onPane;
   final Widget home;
   final Widget content;
-  final double liveRate;
+  final int liveRate;
 
   @override
   Widget build(BuildContext context) => Scaffold(

@@ -331,8 +331,8 @@ class TransferFacts extends StatelessWidget {
     required this.progress,
     required this.downloadedBytes,
     required this.totalBytes,
-    this.downloadMbps = 0,
-    this.uploadMbps = 0,
+    this.downBytesPerSecond = 0,
+    this.upBytesPerSecond = 0,
     this.livePeers = 0,
     this.etaLabel,
     Color? color,
@@ -342,8 +342,8 @@ class TransferFacts extends StatelessWidget {
   final double progress;
   final int downloadedBytes;
   final int totalBytes;
-  final double downloadMbps;
-  final double uploadMbps;
+  final int downBytesPerSecond;
+  final int upBytesPerSecond;
   final int livePeers;
 
   /// Already-formatted, e.g. `2h 14m left` — see `Collection.etaLabel`.
@@ -358,7 +358,7 @@ class TransferFacts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final moving = downloadMbps > 0 || uploadMbps > 0;
+    final moving = downBytesPerSecond > 0 || upBytesPerSecond > 0;
 
     final size = totalBytes > 0
         ? '${formatBytes(downloadedBytes)} of ${formatBytes(totalBytes)}'
@@ -369,8 +369,8 @@ class TransferFacts extends StatelessWidget {
     // connected, since "who is this coming from" is worth knowing even at a
     // standstill.
     final activity = <String>[
-      if (downloadMbps > 0) '↓ ${formatRate(downloadMbps)}',
-      if (uploadMbps > 0) '↑ ${formatRate(uploadMbps)}',
+      if (downBytesPerSecond > 0) '↓ ${formatRate(downBytesPerSecond)}',
+      if (upBytesPerSecond > 0) '↑ ${formatRate(upBytesPerSecond)}',
       if (livePeers > 0) plural(livePeers, 'peer'),
       if (etaLabel != null) etaLabel!,
     ];

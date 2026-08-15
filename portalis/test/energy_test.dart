@@ -5,16 +5,16 @@ import 'package:portalis/features/collections/presentation/peer_color.dart';
 /// peer as well as a state — see `Collection.isSharing`.
 Collection _c({
   String status = 'Available',
-  double down = 0,
-  double up = 0,
+  int down = 0,
+  int up = 0,
   int livePeers = 0,
   List<AppEntry>? entries,
 }) =>
     buildCollection(
       name: 'Trip',
       status: status,
-      downloadMbps: down,
-      uploadMbps: up,
+      downBytesPerSecond: down,
+      upBytesPerSecond: up,
       livePeers: livePeers,
       entries: entries ?? [buildEntry()],
     );
@@ -49,10 +49,10 @@ void main() {
     });
 
     test('transferring glows brighter the faster it goes', () {
-      expect(_c(status: 'Downloading', down: 1).glow, GlowLevel.active);
-      expect(_c(status: 'Downloading', down: 12).glow, GlowLevel.vivid);
+      expect(_c(status: 'Downloading', down: 125000).glow, GlowLevel.active);
+      expect(_c(status: 'Downloading', down: 1500000).glow, GlowLevel.vivid);
       // Upload counts as much as download — sending is just as alive.
-      expect(_c(status: 'Available', up: 9).glow, GlowLevel.vivid);
+      expect(_c(status: 'Available', up: 1125000).glow, GlowLevel.vivid);
     });
   });
 
@@ -134,10 +134,10 @@ void main() {
     });
 
     test('rises with the combined rate', () {
-      expect(_c(status: 'Downloading', down: 1).liveIntensity,
-          lessThan(_c(status: 'Downloading', down: 6).liveIntensity));
+      expect(_c(status: 'Downloading', down: 200000).liveIntensity,
+          lessThan(_c(status: 'Downloading', down: 750000).liveIntensity));
       // Both directions count, the same way glow counts them.
-      expect(_c(status: 'Available', up: 4, down: 4).liveIntensity, 1.0);
+      expect(_c(status: 'Available', up: 500000, down: 500000).liveIntensity, 1.0);
     });
   });
 }

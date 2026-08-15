@@ -47,8 +47,8 @@ class CollectionOverview extends StatelessWidget {
       for (final sample in history?.samples ?? const <TransferSample>[])
         TransferPoint(
           at: sample.at,
-          downloadMbps: sample.downloadMbps,
-          uploadMbps: sample.uploadMbps,
+          downBytesPerSecond: sample.downBytesPerSecond,
+          upBytesPerSecond: sample.upBytesPerSecond,
         ),
     ];
     final commandBusy = busy;
@@ -66,8 +66,8 @@ class CollectionOverview extends StatelessWidget {
       ],
     );
     final hasTransfer = collection.totalBytes > 0 ||
-        collection.downloadMbps > 0 ||
-        collection.uploadMbps > 0 ||
+        collection.downBytesPerSecond > 0 ||
+        collection.upBytesPerSecond > 0 ||
         transferHistory.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -104,8 +104,8 @@ class CollectionOverview extends StatelessWidget {
             progress: collection.progress,
             downloadedBytes: collection.downloadedBytes,
             totalBytes: collection.totalBytes,
-            downloadMbps: collection.downloadMbps,
-            uploadMbps: collection.uploadMbps,
+            downBytesPerSecond: collection.downBytesPerSecond,
+            upBytesPerSecond: collection.upBytesPerSecond,
             history: transferHistory,
             // The core's own moments, not the span of surviving readings.
             startedAt: collection.startedAt ?? history?.startedAt,

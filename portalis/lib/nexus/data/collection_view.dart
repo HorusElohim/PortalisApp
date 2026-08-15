@@ -32,8 +32,8 @@ TransferHistory? transferHistory(List<Reading> readings) {
       for (final reading in readings)
         TransferSample(
           at: reading.at,
-          downloadMbps: reading.downloadMbps,
-          uploadMbps: reading.uploadMbps,
+          downBytesPerSecond: reading.downBytesPerSecond,
+          upBytesPerSecond: reading.upBytesPerSecond,
           progress: reading.progress,
         ),
     ],

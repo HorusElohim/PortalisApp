@@ -205,7 +205,7 @@ void main() {
         ],
         totalBytes: 1000,
         downloadedBytes: 400,
-        downloadMbps: 2,
+        downBytesPerSecond: 2,
         livePeers: 3,
       );
       final source = _FixedSource(collection);
@@ -245,7 +245,7 @@ void main() {
         torrentPeers: const ['203.0.113.5:6881'],
         totalBytes: 1000,
         downloadedBytes: 900,
-        downloadMbps: 2,
+        downBytesPerSecond: 2,
         livePeers: 3,
       );
       source.notifyListeners();
