@@ -68,28 +68,61 @@ impl NexusEndpointConfig {
     }
 }
 
-/// Loads the saved Nexus endpoint, or an unconfigured value on first run.
+/// The service this build talks to when nobody has chosen one.
+///
+/// A Node ID is a public key, so shipping it is pinning rather than a secret
+/// left lying about: the app then trusts exactly one service identity and
+/// cannot be talked out of it. Asking a person to paste one is the weaker
+/// arrangement — somebody who can be told to paste a Node ID can be told to
+/// paste an impostor's.
+///
+/// The identity is pinned and the address is not, because the address is the
+/// part that changes. Discovery resolves the Node ID to wherever the service
+/// is now, so a build does not go stale when a service moves.
+const DEFAULT_NODE_ID: Option<&str> = option_env!("PORTALIS_NEXUS_DEFAULT_NODE_ID");
+
+/// Where to look first for the default service, when discovery should not be
+/// relied on to find it — a container that cannot answer mDNS, mostly.
+const DEFAULT_ADDRESS: Option<&str> = option_env!("PORTALIS_NEXUS_DEFAULT_ADDR");
+
+impl NexusEndpointConfig {
+    /// The service to use when nothing has been saved.
+    #[must_use]
+    fn default_service() -> Self {
+        Self {
+            node_id: normalise(DEFAULT_NODE_ID.map(str::to_owned)),
+            direct_address: normalise(DEFAULT_ADDRESS.map(str::to_owned)),
+        }
+    }
+
+    /// Whether this is the service the build ships with rather than a choice.
+    ///
+    /// Worth showing: "Portalis service" and "the one you typed in" deserve
+    /// different words, and a person who has overridden the default should be
+    /// able to see that they did.
+    #[must_use]
+    pub fn is_default_service(&self) -> bool {
+        present(&self.node_id) == present(&Self::default_service().node_id)
+    }
+}
+
+/// The Nexus service this build talks to.
+///
+/// There is nothing to load. The service is the same one for everybody and is
+/// compiled in, so this is a constant read through the same validation as any
+/// other endpoint rather than a setting with a history.
+///
+/// It used to be stored, which meant an address written once outlived every
+/// later change to what the default was — a device kept dialling a port
+/// nothing had listened on for months, and the only way out was a screen
+/// telling people to edit something they should never have been shown.
 ///
 /// # Errors
 ///
-/// Returns an error when the saved configuration cannot be read or is invalid.
+/// Returns an error when the compiled-in service is not a valid endpoint,
+/// which is a build mistake rather than anything a person did.
 pub fn nexus_endpoint_config() -> anyhow::Result<NexusEndpointConfig> {
-    let config: NexusEndpointConfig = vault().read()?.unwrap_or_default();
-    config.normalized()
-}
-
-/// Validates and persists the Nexus endpoint used by future app connections.
-///
-/// # Errors
-///
-/// Returns an error when the identity and route are incomplete or malformed,
-/// or the configuration cannot be written.
-pub fn set_nexus_endpoint_config(config: NexusEndpointConfig) -> anyhow::Result<()> {
-    vault().write(&config.normalized()?)
-}
-
-fn vault() -> crate::vault::Vault {
-    crate::vault::Vault::named("nexus.json")
+    NexusEndpointConfig::default_service().normalized()
 }
 
 fn present(value: &Option<String>) -> Option<&str> {
@@ -182,16 +215,48 @@ mod tests {
         }
     }
 
+    /// The service is whatever this build was compiled with, on every run.
+    ///
+    /// Asserted against the build's own constant, so it holds both for a
+    /// release that pins a service and for a checkout with none.
     #[test]
-    fn a_configuration_survives_a_reload() {
+    fn the_service_is_the_one_this_build_ships_with() {
         let _temporary_state = crate::paths::redirect_to_temp();
-        let expected = NexusEndpointConfig {
-            node_id: Some(node_id()),
-            direct_address: Some("127.0.0.1:7443".to_owned()),
-        };
 
-        set_nexus_endpoint_config(expected.clone()).unwrap();
+        let service = nexus_endpoint_config().expect("a compiled-in service is valid");
 
-        assert_eq!(nexus_endpoint_config().unwrap(), expected);
+        assert_eq!(service, NexusEndpointConfig::default_service());
+        assert!(service.is_default_service());
+        assert_eq!(
+            service.node_id.is_some(),
+            DEFAULT_NODE_ID.is_some_and(|id| !id.trim().is_empty()),
+            "a build with a service reaches one, and a build without does not"
+        );
+    }
+
+    /// Nothing a person did can leave the app dialling somewhere stale.
+    ///
+    /// This is the whole point of dropping the stored copy: an address saved
+    /// once used to outlive every later change to the default, and the only
+    /// way out was a settings screen that should not have existed.
+    #[test]
+    fn no_earlier_state_can_override_it() {
+        let _temporary_state = crate::paths::redirect_to_temp();
+        // A leftover file from a version that stored one, pointing at a port
+        // nothing has listened on for a long time.
+        crate::vault::Vault::named("nexus.json")
+            .write(&NexusEndpointConfig {
+                node_id: Some(node_id()),
+                direct_address: Some("127.0.0.1:4433".to_owned()),
+            })
+            .expect("a stale file is written");
+
+        let service = nexus_endpoint_config().expect("readable");
+
+        assert_eq!(
+            service,
+            NexusEndpointConfig::default_service(),
+            "a stored endpoint is not consulted at all"
+        );
     }
 }

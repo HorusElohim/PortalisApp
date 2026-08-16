@@ -65,7 +65,7 @@ void main() {
   });
 
   group('settings', () {
-    testWidgets('the Nexus service is configurable from the first screen',
+    testWidgets('the Nexus service is reported but not configurable',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 2400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -76,17 +76,17 @@ void main() {
 
       expect(find.text('NEXUS SERVICE'), findsOneWidget);
       expect(find.text('Connection'), findsOneWidget);
-      expect(
-        find.text('Not configured'),
-        findsOneWidget,
-        reason: 'nothing set up says so, rather than "ready to connect"',
-      );
 
-      // Opening it offers the local service, so running one on this machine
-      // is a single paste of its Node ID.
+      // The service is the same one for everybody and is compiled in, so
+      // there is nothing here to set — and nothing to leave pointing at an
+      // address that stopped being right.
+      expect(find.text('Direct address'), findsNothing);
+      expect(find.text('Forget Nexus service'), findsNothing);
+
+      // Tapping the row opens nothing, because it reports rather than edits.
       await tester.tap(find.text('Connection'));
       await tester.pumpAndSettle();
-      expect(find.text(defaultDirectAddress), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
       expect(tester.takeException(), isNull);
     });
 

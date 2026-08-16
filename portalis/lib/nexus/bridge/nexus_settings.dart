@@ -6,37 +6,44 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `endpoint_addr`, `normalise`, `normalized`, `present`, `vault`
+// These functions are ignored because they are not marked as `pub`: `default_service`, `endpoint_addr`, `normalise`, `normalized`, `present`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
 
-/// Loads the saved Nexus endpoint, or an unconfigured value on first run.
+/// The Nexus service this build talks to.
+///
+/// There is nothing to load. The service is the same one for everybody and is
+/// compiled in, so this is a constant read through the same validation as any
+/// other endpoint rather than a setting with a history.
+///
+/// It used to be stored, which meant an address written once outlived every
+/// later change to what the default was — a device kept dialling a port
+/// nothing had listened on for months, and the only way out was a screen
+/// telling people to edit something they should never have been shown.
 ///
 /// # Errors
 ///
-/// Returns an error when the saved configuration cannot be read or is invalid.
+/// Returns an error when the compiled-in service is not a valid endpoint,
+/// which is a build mistake rather than anything a person did.
 Future<NexusEndpointConfig> nexusEndpointConfig() =>
     RustLib.instance.api.crateNexusSettingsNexusEndpointConfig();
 
-/// Validates and persists the Nexus endpoint used by future app connections.
-///
-/// # Errors
-///
-/// Returns an error when the identity and route are incomplete or malformed,
-/// or the configuration cannot be written.
-Future<void> setNexusEndpointConfig({required NexusEndpointConfig config}) =>
-    RustLib.instance.api
-        .crateNexusSettingsSetNexusEndpointConfig(config: config);
-
 /// A trusted Nexus service the app may connect to.
 ///
-/// Both values are absent until the person configures Nexus. Once configured,
-/// both are required: a Node ID without a route cannot be dialled, and a route
-/// without a Node ID would discard QUIC's authenticated identity.
+/// The Node ID is the identity and is required; the direct address is an
+/// optional hint. Discovery resolves a Node ID to an address on its own — over
+/// mDNS on the same network, or a signed record on n0's name server anywhere
+/// else — so an address is worth setting only to skip that lookup, or to reach
+/// a service that publishes neither.
+///
+/// An address without a Node ID stays refused. A route to an unnamed service
+/// discards the identity QUIC authenticates, which is the only thing making
+/// the service the one the person meant.
 class NexusEndpointConfig {
   /// The public QUIC Node ID logged by the Nexus service.
   final String? nodeId;
 
-  /// An IP address and UDP port where that service can currently be reached.
+  /// An IP address and UDP port where that service can currently be reached,
+  /// when discovery should not be relied on to find it.
   final String? directAddress;
 
   const NexusEndpointConfig({
@@ -46,6 +53,16 @@ class NexusEndpointConfig {
 
   static Future<NexusEndpointConfig> default_() =>
       RustLib.instance.api.crateNexusSettingsNexusEndpointConfigDefault();
+
+  /// Whether this is the service the build ships with rather than a choice.
+  ///
+  /// Worth showing: "Portalis service" and "the one you typed in" deserve
+  /// different words, and a person who has overridden the default should be
+  /// able to see that they did.
+  Future<bool> isDefaultService() => RustLib.instance.api
+          .crateNexusSettingsNexusEndpointConfigIsDefaultService(
+        that: this,
+      );
 
   @override
   int get hashCode => nodeId.hashCode ^ directAddress.hashCode;

@@ -4,14 +4,17 @@ import '../../../design/design.dart';
 import '../../../design/theme.dart';
 import '../../../nexus/domain/endpoint_config.dart';
 
-/// The configuration state of the authenticated Nexus service.
+/// Whether this device is reaching the Nexus service.
+///
+/// Reporting only. The service is not a choice a person makes: it is fixed for
+/// everyone and compiled into the build, so there is nothing here to set. What
+/// remains worth showing is whether it is being reached, because that changes
+/// on its own and explains why sharing is or is not working.
 class ServiceSection extends StatelessWidget {
   const ServiceSection({
     super.key,
     required this.config,
     required this.connectivity,
-    required this.onConfigure,
-    required this.onClear,
   });
 
   final EndpointConfig config;
@@ -20,47 +23,50 @@ class ServiceSection extends StatelessWidget {
   /// A configuration is not a connection, and this row used to show one as
   /// though it were the other.
   final String connectivity;
-  final VoidCallback onConfigure;
-  final VoidCallback onClear;
 
   /// What the engine says, as a person would put it.
   ///
-  /// Read from the engine rather than from whether a Node ID has been typed:
-  /// a service that is configured and unreachable is a different situation
-  /// from one that was never set up, and the difference is the whole reason
-  /// somebody opens this screen.
+  /// Read from the engine rather than from whether a service exists: one that
+  /// is present and unreachable is a different situation from one this build
+  /// never had, and the difference is the whole reason somebody looks.
   ({String label, Color color, String detail}) get _reach {
     if (connectivity.startsWith('Online')) {
+      // The engine reports the path it actually has, and it can change on a
+      // connection that never dropped. Claiming "direct" regardless would be
+      // the same class of untruth this row was built to stop telling.
+      final relayed = connectivity.contains('Relayed');
       return (
         label: 'Connected',
         color: AppColors.signal,
-        detail: 'Authenticated by its Node ID over a direct connection.',
+        detail: relayed
+            ? 'Authenticated by its Node ID, reached through a relay.'
+            : 'Authenticated by its Node ID over a direct connection.',
       );
     }
     if (connectivity.startsWith('Degraded')) {
       return (
         label: 'Not reachable',
         color: AppColors.danger,
-        detail: 'Configured, but nothing answered. Portalis keeps trying.',
+        detail: 'Nothing answered. Portalis keeps trying.',
       );
     }
     if (connectivity.startsWith('Connecting')) {
       return (
         label: 'Connecting…',
         color: AppColors.ember,
-        detail: 'Dialling the configured service.',
+        detail: 'Reaching the Portalis service.',
       );
     }
     return config.isConfigured
         ? (
             label: 'Not connected',
             color: AppColors.textFaint,
-            detail: 'Configured, and not reaching it yet.',
+            detail: 'Not reaching the service yet.',
           )
         : (
-            label: 'Not configured',
+            label: 'Unavailable',
             color: AppColors.textFaint,
-            detail: 'Add a server Node ID to enable online sharing.',
+            detail: 'This build ships with no service, so sharing is local only.',
           );
   }
 
@@ -73,27 +79,7 @@ class ServiceSection extends StatelessWidget {
             value: _reach.label,
             valueColor: _reach.color,
             subtitle: _reach.detail,
-            onTap: onConfigure,
           ),
-          if (config.isConfigured) ...[
-            ValueRow(
-              label: 'Direct address',
-              // A configured service need not have one: the Node ID is the
-              // identity, and the engine can find where it lives.
-              value: config.directAddress ?? 'Found automatically',
-              subtitle: config.directAddress == null
-                  ? 'Located by Node ID, over this network or a signed record.'
-                  : 'A route only; changing it does not change the server identity.',
-              onTap: onConfigure,
-            ),
-            ValueRow(
-              label: 'Forget Nexus service',
-              value: 'Remove',
-              subtitle:
-                  'This does not change the server or your local identity.',
-              onTap: onClear,
-            ),
-          ],
         ],
       );
 }

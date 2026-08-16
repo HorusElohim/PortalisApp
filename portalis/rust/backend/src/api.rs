@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -722282663;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1473280595;
 
 // Section: executor
 
@@ -423,6 +423,42 @@ fn wire__crate__nexus_settings__nexus_endpoint_config_default_impl(
         },
     )
 }
+fn wire__crate__nexus_settings__nexus_endpoint_config_is_default_service_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "nexus_endpoint_config_is_default_service",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that =
+                <crate::nexus_settings::NexusEndpointConfig>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(
+                        crate::nexus_settings::NexusEndpointConfig::is_default_service(&api_that),
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__torrent__output_dir_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -554,43 +590,6 @@ fn wire__crate__settings__set_engine_settings_impl(
                         Ok(output_ok)
                     })()
                     .await,
-                )
-            }
-        },
-    )
-}
-fn wire__crate__nexus_settings__set_nexus_endpoint_config_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "set_nexus_endpoint_config",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_config =
-                <crate::nexus_settings::NexusEndpointConfig>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || {
-                        let output_ok =
-                            crate::nexus_settings::set_nexus_endpoint_config(api_config)?;
-                        Ok(output_ok)
-                    })(),
                 )
             }
         },
@@ -1691,16 +1690,16 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        12 => wire__crate__torrent__output_dir_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__portalis_api__send_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__portalis_api__set_active_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__settings__set_engine_settings_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__nexus_settings__set_nexus_endpoint_config_impl(
+        12 => wire__crate__nexus_settings__nexus_endpoint_config_is_default_service_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
+        13 => wire__crate__torrent__output_dir_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__portalis_api__send_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__portalis_api__set_active_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__settings__set_engine_settings_impl(port, ptr, rust_vec_len, data_len),
         17 => wire__crate__device__set_nickname_impl(port, ptr, rust_vec_len, data_len),
         18 => wire__crate__portalis_api__start_impl(port, ptr, rust_vec_len, data_len),
         19 => wire__crate__portalis_api__stop_impl(port, ptr, rust_vec_len, data_len),

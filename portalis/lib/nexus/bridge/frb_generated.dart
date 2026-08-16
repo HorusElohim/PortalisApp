@@ -73,7 +73,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -722282663;
+  int get rustContentHash => 1473280595;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -110,6 +110,9 @@ abstract class RustLibApi extends BaseApi {
 
   Future<NexusEndpointConfig> crateNexusSettingsNexusEndpointConfigDefault();
 
+  Future<bool> crateNexusSettingsNexusEndpointConfigIsDefaultService(
+      {required NexusEndpointConfig that});
+
   Future<String> crateTorrentOutputDir();
 
   Future<AppAccepted> cratePortalisApiSend({required AppCommand command});
@@ -118,9 +121,6 @@ abstract class RustLibApi extends BaseApi {
 
   Future<bool> crateSettingsSetEngineSettings(
       {required EngineSettings settings});
-
-  Future<void> crateNexusSettingsSetNexusEndpointConfig(
-      {required NexusEndpointConfig config});
 
   Future<DeviceIdentityInfo> crateDeviceSetNickname({required String nickname});
 
@@ -418,12 +418,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<bool> crateNexusSettingsNexusEndpointConfigIsDefaultService(
+      {required NexusEndpointConfig that}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_box_autoadd_nexus_endpoint_config(that, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 12, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: null,
+      ),
+      constMeta:
+          kCrateNexusSettingsNexusEndpointConfigIsDefaultServiceConstMeta,
+      argValues: [that],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta
+      get kCrateNexusSettingsNexusEndpointConfigIsDefaultServiceConstMeta =>
+          const TaskConstMeta(
+            debugName: "nexus_endpoint_config_is_default_service",
+            argNames: ["that"],
+          );
+
+  @override
   Future<String> crateTorrentOutputDir() {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 12, port: port_);
+            funcId: 13, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -447,7 +475,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_app_command(command, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 13, port: port_);
+            funcId: 14, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_app_accepted,
@@ -471,7 +499,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_bool(active, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 14, port: port_);
+            funcId: 15, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -496,7 +524,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_engine_settings(settings, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 15, port: port_);
+            funcId: 16, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -512,32 +540,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(
         debugName: "set_engine_settings",
         argNames: ["settings"],
-      );
-
-  @override
-  Future<void> crateNexusSettingsSetNexusEndpointConfig(
-      {required NexusEndpointConfig config}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_box_autoadd_nexus_endpoint_config(config, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 16, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_AnyhowException,
-      ),
-      constMeta: kCrateNexusSettingsSetNexusEndpointConfigConstMeta,
-      argValues: [config],
-      apiImpl: this,
-    ));
-  }
-
-  TaskConstMeta get kCrateNexusSettingsSetNexusEndpointConfigConstMeta =>
-      const TaskConstMeta(
-        debugName: "set_nexus_endpoint_config",
-        argNames: ["config"],
       );
 
   @override

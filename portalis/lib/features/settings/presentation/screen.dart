@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../../../app/app_controllers.dart';
 import '../../../design/design.dart';
 import '../domain/engine.dart';
-import '../../../nexus/domain/endpoint_config.dart';
 import 'service_section.dart';
 import '../domain/listen_port_range.dart';
 import '../application/efficiency_benchmark.dart';
@@ -182,93 +181,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _configureNexus() async {
-    final current = _nexus.config;
-    final nodeId = TextEditingController(text: current.nodeId ?? '');
-    // Opened with the local default, so setting up a service somebody is
-    // running on this machine is one paste rather than two.
-    final directAddress = TextEditingController(
-      text: current.directAddress ?? defaultDirectAddress,
-    );
-    final next = await showDialog<EndpointConfig>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Nexus service'),
-        content: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Use the public Node ID logged by your Nexus server. Portalis finds the server from that alone — over this network, or through a signed record anywhere else. An address is optional, and only saves the lookup.',
-                style: AppText.secondary(color: AppColors.textDim),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nodeId,
-                autofocus: true,
-                style: monoLabel(
-                    size: 13, color: AppColors.text, letterSpacing: 0),
-                decoration: const InputDecoration(
-                  labelText: 'Server Node ID',
-                  hintText: 'Public QUIC Node ID',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: directAddress,
-                style: monoLabel(
-                    size: 13, color: AppColors.text, letterSpacing: 0),
-                decoration: const InputDecoration(
-                  labelText: 'Direct address (optional)',
-                  hintText: 'Leave empty to find the server by Node ID',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(
-              EndpointConfig(
-                nodeId: nodeId.text.trim(),
-                directAddress: directAddress.text.trim(),
-              ),
-            ),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    nodeId.dispose();
-    directAddress.dispose();
-    if (next == null) return;
-    try {
-      await _nexus.save(next);
-    } catch (error) {
-      if (mounted) {
-        showToast(context, 'Couldn\'t save Nexus service: $error',
-            severity: ToastSeverity.error);
-      }
-    }
-  }
-
-  Future<void> _clearNexus() async {
-    try {
-      await _nexus.save(const EndpointConfig());
-    } catch (error) {
-      if (mounted) {
-        showToast(context, 'Couldn\'t remove Nexus service: $error',
-            severity: ToastSeverity.error);
-      }
-    }
-  }
-
   /// Shared editor for the optional numeric/text fields. Returns the raw
   /// string, or null if cancelled; an empty result means "unset".
   Future<String?> _edit({
@@ -432,10 +344,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       ServiceSection(
         config: _nexus.config,
-        // What the engine reaches, not what has been typed into it.
+        // What the engine reaches. The service itself is not configurable —
+        // it is the same one for everybody, compiled into the build.
         connectivity: AppControllers.engine.state?.connectivity ?? '',
-        onConfigure: _configureNexus,
-        onClear: _clearNexus,
       ),
       SettingsSection(
         label: 'SPEED · APPLIES IMMEDIATELY',
