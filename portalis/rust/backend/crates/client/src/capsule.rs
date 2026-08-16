@@ -273,6 +273,36 @@ mod tests {
         );
     }
 
+    /// The cap exists so a collection nobody could send is refused at the
+    /// sealing end, rather than becoming a capsule no recipient can hold.
+    #[test]
+    fn a_torrent_larger_than_a_capsule_may_describe_is_refused() {
+        let oversized = Capsule {
+            name: "too much".to_owned(),
+            torrent: vec![0; MAX_CAPSULE_BYTES + 1],
+        };
+
+        assert_eq!(
+            oversized.seal(&crate::generate_content_key(), b"share", 1),
+            Err(CapsuleError::TooLarge)
+        );
+    }
+
+    /// The same cap on the reading end, and the reason it is checked before
+    /// the slice rather than after: a capsule claiming more than one may
+    /// describe is refused without the read being attempted.
+    #[test]
+    fn a_capsule_claiming_more_than_it_may_is_refused_before_it_is_read() {
+        let mut bytes = 0_u16.to_le_bytes().to_vec();
+        bytes.extend_from_slice(
+            &u32::try_from(MAX_CAPSULE_BYTES + 1)
+                .expect("the cap fits in the length field")
+                .to_le_bytes(),
+        );
+
+        assert_eq!(Capsule::decode(&bytes), Err(CapsuleError::TooLarge));
+    }
+
     #[test]
     fn a_name_longer_than_a_name_is_refused() {
         let oversized = Capsule {
