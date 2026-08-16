@@ -90,7 +90,18 @@ pub(crate) async fn follow_service(
         } else if session.is_none() {
             // Announced before dialling, because a dial can take a while and
             // silence during it reads as nothing happening.
-            publish(&states, Connectivity::Connecting);
+            //
+            // Only while there is still reason to expect it to work, though.
+            // Every attempt after a failure used to re-announce this, so a
+            // service that was not there at all spent most of each cycle
+            // claiming to be connecting — a dial takes longer to time out
+            // than the pause between tries. A person watching that sees
+            // something perpetually about to succeed, when what is true is
+            // that it failed and is being retried, which the failed state
+            // already says.
+            if failing_since == 0 {
+                publish(&states, Connectivity::Connecting);
+            }
             let established = tokio::select! {
                 () = shutdown.requested() => return,
                 opened = endpoint.establish() => opened,
@@ -348,6 +359,22 @@ mod tests {
         })
         .await
         .expect("an unreachable service is reported");
+
+        // And stays reported. Retrying is not news, and a status that flips
+        // back to "connecting" before every attempt describes a service that
+        // is not there as one that is nearly here.
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                watching.changed().await.expect("the worker is running");
+                assert_ne!(
+                    watching.borrow_and_update().connectivity,
+                    Connectivity::Connecting,
+                    "a retry after a failure must not read as a first attempt"
+                );
+            }
+        })
+        .await
+        .expect_err("the worker keeps retrying without saying anything new");
 
         let _ = stop.send(true);
         let _ = worker.await;
