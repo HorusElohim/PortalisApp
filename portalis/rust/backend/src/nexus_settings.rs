@@ -14,15 +14,22 @@ use serde::{Deserialize, Serialize};
 
 /// A trusted Nexus service the app may connect to.
 ///
-/// Both values are absent until the person configures Nexus. Once configured,
-/// both are required: a Node ID without a route cannot be dialled, and a route
-/// without a Node ID would discard QUIC's authenticated identity.
+/// The Node ID is the identity and is required; the direct address is an
+/// optional hint. Discovery resolves a Node ID to an address on its own — over
+/// mDNS on the same network, or a signed record on n0's name server anywhere
+/// else — so an address is worth setting only to skip that lookup, or to reach
+/// a service that publishes neither.
+///
+/// An address without a Node ID stays refused. A route to an unnamed service
+/// discards the identity QUIC authenticates, which is the only thing making
+/// the service the one the person meant.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NexusEndpointConfig {
     /// The public QUIC Node ID logged by the Nexus service.
     pub node_id: Option<String>,
-    /// An IP address and UDP port where that service can currently be reached.
+    /// An IP address and UDP port where that service can currently be reached,
+    /// when discovery should not be relied on to find it.
     pub direct_address: Option<String>,
 }
 
@@ -31,25 +38,26 @@ impl NexusEndpointConfig {
     ///
     /// # Errors
     ///
-    /// Returns an error when only one value is set, the Node ID is malformed,
-    /// or the direct address is not an IP socket address.
+    /// Returns an error when an address is set without a Node ID, the Node ID
+    /// is malformed, or the direct address is not an IP socket address.
     pub(crate) fn endpoint_addr(&self) -> anyhow::Result<Option<EndpointAddr>> {
-        let node_id = present(&self.node_id);
-        let direct_address = present(&self.direct_address);
-        match (node_id, direct_address) {
-            (None, None) => Ok(None),
-            (Some(node_id), Some(direct_address)) => {
-                let node_id =
-                    EndpointId::from_str(node_id).context("the Nexus Node ID is not valid")?;
-                let direct_address = direct_address
-                    .parse::<SocketAddr>()
-                    .context("the Nexus direct address must be an IP address and UDP port")?;
-                Ok(Some(
-                    EndpointAddr::new(node_id).with_direct_addresses([direct_address]),
-                ))
+        let Some(node_id) = present(&self.node_id) else {
+            if present(&self.direct_address).is_some() {
+                bail!("set the Nexus Node ID as well as the direct address, or clear both");
             }
-            _ => bail!("set both the Nexus Node ID and direct address, or clear both"),
-        }
+            return Ok(None);
+        };
+        let node_id = EndpointId::from_str(node_id).context("the Nexus Node ID is not valid")?;
+        let Some(direct_address) = present(&self.direct_address) else {
+            // No address: discovery is expected to find it by Node ID.
+            return Ok(Some(EndpointAddr::new(node_id)));
+        };
+        let direct_address = direct_address
+            .parse::<SocketAddr>()
+            .context("the Nexus direct address must be an IP address and UDP port")?;
+        Ok(Some(
+            EndpointAddr::new(node_id).with_direct_addresses([direct_address]),
+        ))
     }
 
     fn normalized(mut self) -> anyhow::Result<Self> {
@@ -132,12 +140,34 @@ mod tests {
         );
     }
 
+    /// A Node ID on its own is a complete configuration: discovery resolves
+    /// it to an address, which is the point of publishing one.
+    #[test]
+    fn a_node_id_alone_is_enough_to_be_configured() {
+        let config = NexusEndpointConfig {
+            node_id: Some(node_id()),
+            direct_address: None,
+        };
+
+        let endpoint = config
+            .endpoint_addr()
+            .expect("a Node ID is a configuration")
+            .expect("configured");
+
+        assert_eq!(endpoint.node_id.to_string(), node_id());
+        assert_eq!(
+            endpoint.direct_addresses().count(),
+            0,
+            "no address was given, so none should be invented"
+        );
+    }
+
     #[test]
     fn an_incomplete_or_malformed_configuration_is_refused() {
         for config in [
             NexusEndpointConfig {
-                node_id: Some(node_id()),
-                direct_address: None,
+                node_id: None,
+                direct_address: Some("127.0.0.1:7443".to_owned()),
             },
             NexusEndpointConfig {
                 node_id: Some("not-a-node".to_owned()),

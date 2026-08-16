@@ -13,7 +13,9 @@
 //!
 //! Run with `cargo run -p portalis-nexus-demo --bin 11-service`.
 
-use portalis_nexus_client::{KnownPeers, NEXUS_ALPN, NexusEndpoint, RelayMode, Request, Session};
+use portalis_nexus_client::{
+    Discovery, KnownPeers, NEXUS_ALPN, NexusEndpoint, RelayMode, Request, Session,
+};
 use portalis_nexus_demo::{Core, NOW, Person, a_collection_with, decode, encode, section};
 use portalis_nexus_protocol::derive_device_id;
 use portalis_nexus_storage::embedded::Embedded;
@@ -133,6 +135,9 @@ async fn bind(person: &Person) -> anyhow::Result<NexusEndpoint> {
         person.secret_bytes(),
         vec![NEXUS_ALPN.to_vec()],
         RelayMode::Disabled,
+        // Addresses are exchanged in this process, so there is nothing to
+        // discover and no reason to touch the network to find it.
+        Discovery::Disabled,
     )
     .await?)
 }

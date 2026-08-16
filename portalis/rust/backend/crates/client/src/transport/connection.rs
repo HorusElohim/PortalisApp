@@ -34,6 +34,13 @@ pub(crate) struct Shared {
 struct Live {
     outbound: mpsc::Sender<Vec<u8>>,
     hello: ServerHello,
+    /// Kept so the path can be asked for rather than remembered: a connection
+    /// that starts out relayed is often upgraded to direct moments later, and
+    /// a value copied at handshake time would still be claiming otherwise.
+    endpoint: crate::NexusEndpoint,
+    /// Absent only if the transport cannot say who answered, in which case
+    /// no path can honestly be claimed either.
+    remote: Option<iroh::NodeId>,
 }
 
 impl Shared {
@@ -61,6 +68,14 @@ impl Shared {
 
     pub(crate) fn hello(&self) -> Option<ServerHello> {
         self.live().as_ref().map(|live| live.hello.clone())
+    }
+
+    /// The path this connection currently has, asked of the transport.
+    pub(crate) fn path(&self) -> crate::ConnectionPath {
+        self.live()
+            .as_ref()
+            .and_then(|live| Some(live.endpoint.path_to(live.remote?)))
+            .unwrap_or(crate::ConnectionPath::Unavailable)
     }
 
     fn set_live(&self, live: Live) {
@@ -99,9 +114,12 @@ pub(crate) fn start_connection(
         server_identity = %shared.server_identity,
         "Nexus connection established"
     );
+    let remote = socket.connection.remote_node_id().ok();
     shared.set_live(Live {
         outbound: outbound.clone(),
         hello,
+        endpoint: socket.endpoint.clone(),
+        remote,
     });
 
     Tasks {

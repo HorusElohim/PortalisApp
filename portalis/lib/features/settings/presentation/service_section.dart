@@ -60,8 +60,7 @@ class ServiceSection extends StatelessWidget {
         : (
             label: 'Not configured',
             color: AppColors.textFaint,
-            detail:
-                'Add a server Node ID and direct address to enable online sharing.',
+            detail: 'Add a server Node ID to enable online sharing.',
           );
   }
 
@@ -79,9 +78,12 @@ class ServiceSection extends StatelessWidget {
           if (config.isConfigured) ...[
             ValueRow(
               label: 'Direct address',
-              value: config.directAddress!,
-              subtitle:
-                  'A route only; changing it does not change the server identity.',
+              // A configured service need not have one: the Node ID is the
+              // identity, and the engine can find where it lives.
+              value: config.directAddress ?? 'Found automatically',
+              subtitle: config.directAddress == null
+                  ? 'Located by Node ID, over this network or a signed record.'
+                  : 'A route only; changing it does not change the server identity.',
               onTap: onConfigure,
             ),
             ValueRow(

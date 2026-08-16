@@ -13,8 +13,8 @@
 //! Run with `cargo run -p portalis-nexus-demo --bin 08-two-peers`.
 
 use portalis_nexus_client::{
-    EndpointAddr, KnownPeers, NEXUS_ALPN, NexusEndpoint, PeerTrust, RelayMode, Request, Session,
-    SessionError,
+    Discovery, EndpointAddr, KnownPeers, NEXUS_ALPN, NexusEndpoint, PeerTrust, RelayMode, Request,
+    Session, SessionError,
 };
 use portalis_nexus_demo::{Core, NOW, Person, a_collection_with, decode, encode, section, short};
 
@@ -146,11 +146,15 @@ async fn refuse_the_stranger(
 
 async fn endpoint(person: &Person) -> anyhow::Result<NexusEndpoint> {
     // No relay: a relay is a service of sorts, and on one network there is
-    // nothing for one to do.
+    // nothing for one to do. No discovery either — this demo hands one peer's
+    // address to the other directly, so there is nothing left to look up, and
+    // a demo that reached for multicast or a name server would depend on the
+    // network it happens to be run on.
     Ok(NexusEndpoint::bind(
         person.secret_bytes(),
         vec![NEXUS_ALPN.to_vec()],
         RelayMode::Disabled,
+        Discovery::Disabled,
     )
     .await?)
 }

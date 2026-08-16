@@ -78,8 +78,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         std::net::SocketAddr::V4(address) => Endpoint::builder().bind_addr_v4(address),
         std::net::SocketAddr::V6(address) => Endpoint::builder().bind_addr_v6(address),
     }
-    .clear_discovery()
-    .relay_mode(RelayMode::Disabled)
+    // Published, so a person needs only the Node ID to reach this service:
+    // pkarr records on n0's name server for anywhere, mDNS for the same
+    // network. The records are signed by the node secret, so publishing them
+    // gives away where this service is but not the ability to impersonate it.
+    .discovery_n0()
+    .discovery_local_network()
+    // Relays are how a device behind a NAT reaches this service at all, and
+    // how a direct path gets negotiated once it can. Traffic that ends up
+    // relayed is still end-to-end encrypted; the relay carries bytes it
+    // cannot read.
+    .relay_mode(RelayMode::Default)
     .secret_key(node_secret)
     .alpns(vec![NEXUS_ALPN.to_vec()])
     .bind()

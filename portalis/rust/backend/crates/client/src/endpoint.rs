@@ -6,6 +6,7 @@
 
 use iroh::{
     Endpoint, NodeAddr, NodeId, RelayMode, SecretKey, Watcher as _,
+    discovery::dns::DnsDiscovery,
     endpoint::{BindError, ConnectError, Connection, ConnectionType, Incoming},
 };
 pub use portalis_nexus_protocol::NEXUS_ALPN;
@@ -26,6 +27,36 @@ pub enum ConnectionPath {
     Mixed,
 }
 
+/// How a device finds, and is found by, others it only knows by Node ID.
+///
+/// Explicit for the same reason `RelayMode` is: a test that reaches for
+/// multicast or a public name server stops measuring this code and starts
+/// measuring the network it happens to run on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Discovery {
+    /// Resolve nothing. A peer is reachable only at an address supplied by
+    /// the caller.
+    Disabled,
+    /// Find others by Node ID without announcing an address to the wider
+    /// internet.
+    ///
+    /// For an endpoint whose key is generated per connection: nobody can look
+    /// up an identity that exists for one dial, so publishing a record for it
+    /// would announce this device's addresses under a name no one will ever
+    /// ask for. mDNS still participates, because taking part in the local
+    /// swarm is how a device on this network is found at all.
+    Resolving,
+    /// Publish and resolve everywhere available: mDNS for the local network,
+    /// and pkarr records on n0's name server for everywhere else.
+    ///
+    /// Both, because they fail in opposite conditions — mDNS needs no
+    /// internet and cannot leave the subnet; pkarr needs the internet and
+    /// does not care where either device is.
+    ///
+    /// For anything a peer is meant to reach by Node ID alone.
+    Published,
+}
+
 /// One device endpoint for both server and peer application connections.
 #[derive(Debug, Clone)]
 pub struct NexusEndpoint {
@@ -35,8 +66,9 @@ pub struct NexusEndpoint {
 impl NexusEndpoint {
     /// Binds an endpoint using the device's existing Ed25519 secret.
     ///
-    /// `relay_mode` is explicit so production can use a Portalis relay while
-    /// local tests and deployments can disable relays entirely.
+    /// `relay_mode` and `discovery` are explicit so production can be found
+    /// from anywhere while local tests and deployments stay off the network
+    /// entirely.
     ///
     /// # Errors
     ///
@@ -46,15 +78,29 @@ impl NexusEndpoint {
         device_secret: [u8; 32],
         alpns: Vec<Vec<u8>>,
         relay_mode: RelayMode,
+        discovery: Discovery,
     ) -> Result<Self, BindError> {
-        let inner = Endpoint::builder()
-            .clear_discovery()
+        let builder = Endpoint::builder()
             .relay_mode(relay_mode)
             .secret_key(SecretKey::from_bytes(&device_secret))
-            .alpns(alpns)
-            .bind()
-            .await?;
-        Ok(Self { inner })
+            .alpns(alpns);
+        let builder = match discovery {
+            Discovery::Disabled => builder.clear_discovery(),
+            // Resolution without publication: the DNS half of `discovery_n0`
+            // without its pkarr publisher.
+            Discovery::Resolving => builder
+                .clear_discovery()
+                .add_discovery(DnsDiscovery::n0_dns())
+                .discovery_local_network(),
+            // `discovery_n0` publishes a pkarr record and resolves through
+            // n0's name server; `discovery_local_network` is mDNS. Neither
+            // replaces an address the caller already knows — both are tried
+            // alongside it, and whichever answers first is used.
+            Discovery::Published => builder.discovery_n0().discovery_local_network(),
+        };
+        Ok(Self {
+            inner: builder.bind().await?,
+        })
     }
 
     /// The public connection identity derived from the supplied device secret.
@@ -172,9 +218,14 @@ mod tests {
     #[tokio::test]
     async fn reuses_the_existing_device_identity() {
         let secret = [7_u8; 32];
-        let endpoint = NexusEndpoint::bind(secret, vec![NEXUS_ALPN.to_vec()], RelayMode::Disabled)
-            .await
-            .expect("bind endpoint");
+        let endpoint = NexusEndpoint::bind(
+            secret,
+            vec![NEXUS_ALPN.to_vec()],
+            RelayMode::Disabled,
+            Discovery::Disabled,
+        )
+        .await
+        .expect("bind endpoint");
 
         assert_eq!(
             endpoint.id().as_bytes(),
@@ -185,12 +236,22 @@ mod tests {
 
     #[tokio::test]
     async fn returns_raw_streams_over_a_direct_connection() {
-        let server = NexusEndpoint::bind([1; 32], vec![NEXUS_ALPN.to_vec()], RelayMode::Disabled)
-            .await
-            .expect("bind server");
-        let client = NexusEndpoint::bind([2; 32], Vec::new(), RelayMode::Disabled)
-            .await
-            .expect("bind client");
+        let server = NexusEndpoint::bind(
+            [1; 32],
+            vec![NEXUS_ALPN.to_vec()],
+            RelayMode::Disabled,
+            Discovery::Disabled,
+        )
+        .await
+        .expect("bind server");
+        let client = NexusEndpoint::bind(
+            [2; 32],
+            Vec::new(),
+            RelayMode::Disabled,
+            Discovery::Disabled,
+        )
+        .await
+        .expect("bind client");
 
         let mut address = EndpointAddr::new(server.id());
         let server_socket = server
@@ -239,10 +300,15 @@ mod tests {
         // something the endpoint absorbs rather than reports on.
         assert_eq!(
             client.path_to(
-                NexusEndpoint::bind([3; 32], Vec::new(), RelayMode::Disabled)
-                    .await
-                    .expect("bind a stranger")
-                    .id()
+                NexusEndpoint::bind(
+                    [3; 32],
+                    Vec::new(),
+                    RelayMode::Disabled,
+                    Discovery::Disabled
+                )
+                .await
+                .expect("bind a stranger")
+                .id()
             ),
             ConnectionPath::Unavailable
         );

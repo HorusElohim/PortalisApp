@@ -27,7 +27,7 @@ use crate::protocol::{
 use crate::signer::DeviceSigner;
 use crate::transport::connection::{Shared, start_connection, supervise};
 use crate::transport::handshake::{handshake, handshake_with_retry};
-use crate::{EndpointAddr, NexusEndpoint, RelayMode};
+use crate::{Discovery, EndpointAddr, NexusEndpoint, RelayMode};
 
 mod connection;
 mod error;
@@ -138,6 +138,17 @@ impl NexusClient {
     #[must_use]
     pub fn is_connected(&self) -> bool {
         self.shared.outbound().is_some()
+    }
+
+    /// The path this connection currently runs over.
+    ///
+    /// Asked of the transport on every call rather than recorded at connect
+    /// time: iroh routes through a relay while it negotiates a direct path
+    /// and switches once it has one, so this answer legitimately changes
+    /// during a connection that never dropped.
+    #[must_use]
+    pub fn path(&self) -> crate::ConnectionPath {
+        self.shared.path()
     }
 
     /// Returns how many requests are awaiting a response right now.
@@ -599,7 +610,11 @@ pub(super) async fn bind_endpoint() -> Result<NexusEndpoint, TransportError> {
     let mut secret = [0_u8; 32];
     secret[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
     secret[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
-    NexusEndpoint::bind(secret, Vec::new(), RelayMode::Default)
+    // Resolving rather than publishing: this key lasts one connection, so a
+    // record published under it could never be looked up. Resolution is the
+    // half that matters here — it is what lets a person configure a service
+    // by Node ID and reach it wherever it happens to be.
+    NexusEndpoint::bind(secret, Vec::new(), RelayMode::Default, Discovery::Resolving)
         .await
         .map_err(TransportError::from)
 }

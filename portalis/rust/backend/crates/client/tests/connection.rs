@@ -148,17 +148,26 @@ async fn rejects_a_server_speaking_an_unsupported_protocol_version() {
     server.abort();
 }
 
+/// A Node ID nobody publishes and that has no address cannot be reached.
+///
+/// It now fails by running out of time rather than immediately: the client
+/// resolves Node IDs through discovery, so an address-less endpoint is no
+/// longer unreachable by inspection — it is a lookup that has to come back
+/// empty first. Giving up is still the outcome, and the caller is still told.
 #[tokio::test]
-async fn rejects_an_endpoint_without_an_address() {
+async fn gives_up_on_an_endpoint_nothing_can_locate() {
     let error = NexusClient::connect(portalis_nexus_client::EndpointAddr::new(
         iroh::SecretKey::from_bytes(&[9; 32]).public(),
     ))
     .await
-    .expect_err("the endpoint cannot be reached without an address");
+    .expect_err("an endpoint nothing publishes cannot be reached");
 
     assert!(
-        matches!(error, TransportError::IrohConnect(_)),
-        "expected a QUIC error, got {error:?}"
+        matches!(
+            error,
+            TransportError::HandshakeTimeout(_) | TransportError::IrohConnect(_)
+        ),
+        "expected the attempt to be abandoned, got {error:?}"
     );
 }
 

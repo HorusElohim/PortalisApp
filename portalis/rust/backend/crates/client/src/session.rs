@@ -386,6 +386,7 @@ mod tests {
             SigningKey::from_bytes(&[seed; 32]).to_bytes(),
             vec![NEXUS_ALPN.to_vec()],
             iroh::RelayMode::Disabled,
+            crate::endpoint::Discovery::Disabled,
         )
         .await
         .expect("binds")

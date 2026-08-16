@@ -14,7 +14,14 @@ class EndpointConfig {
   const EndpointConfig({this.nodeId, this.directAddress});
 
   final String? nodeId;
+
+  /// Where to look first. Optional: the engine resolves a Node ID on its own
+  /// over mDNS on this network, or a signed record on a name server anywhere
+  /// else, so this is worth setting only to skip that or to reach a service
+  /// that publishes neither.
   final String? directAddress;
 
-  bool get isConfigured => nodeId != null && directAddress != null;
+  /// A Node ID is the whole configuration. It is the identity the connection
+  /// is authenticated against; an address is a hint that can be found.
+  bool get isConfigured => nodeId != null;
 }

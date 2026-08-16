@@ -26,33 +26,42 @@ use crate::projection::state::PortalisState;
 /// pace either way.
 pub const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
-/// What a service connection is, once it exists.
+/// How much is known about who is on the other end of a service connection.
 ///
-/// Direct because the app dials a direct address and the service disables
-/// relaying, so a connection that exists took the path the person configured.
-/// Known because they configured it: pasting a node id *is* comparing a
+/// Known because the person configured it: pasting a Node ID *is* comparing a
 /// fingerprint, and it is the only comparison this relationship has.
-const SERVICE_SECURITY: Security = Security {
-    path: Path::Direct,
-    peer: PeerTrust::Known,
-};
+const SERVICE_PEER: PeerTrust = PeerTrust::Known;
 
 /// What the app is able to reach right now.
 ///
 /// Separated from the dialling so the decision can be tested without a
 /// network: given what was configured and what happened when it was tried,
 /// this is what a person should be told.
+///
+/// `path` is passed in rather than assumed. It used to be the constant
+/// `Path::Direct`, on the reasoning that the app dialled a direct address and
+/// the service refused relays — true at the time, and a claim the code had no
+/// way to notice becoming false. Now that a service can be found by Node ID
+/// and reached through a relay, the only honest source for this is the
+/// transport.
 #[must_use]
-pub fn connectivity_for(configured: bool, reached: bool, since_unix_ns: u64) -> Connectivity {
+pub fn connectivity_for(
+    configured: bool,
+    reached: Option<Path>,
+    since_unix_ns: u64,
+) -> Connectivity {
     match (configured, reached) {
         // Nothing to reach is not a failure to reach it. A first run has no
         // service and is working exactly as intended.
         (false, _) => Connectivity::LocalOnly,
-        (true, true) => Connectivity::Online(SERVICE_SECURITY),
+        (true, Some(path)) => Connectivity::Online(Security {
+            path,
+            peer: SERVICE_PEER,
+        }),
         // Configured and unreachable. Degraded rather than LocalOnly: the
         // person expects a service, so saying "local only" would describe the
         // symptom as though it were the arrangement.
-        (true, false) => Connectivity::Degraded { since_unix_ns },
+        (true, None) => Connectivity::Degraded { since_unix_ns },
     }
 }
 
@@ -104,8 +113,11 @@ pub(crate) async fn follow_service(
             }
         }
 
-        let reached = session.is_some();
-        if reached {
+        // Asked every pass, not once at connect: a session that began relayed
+        // and has since found a direct path is a different thing to report,
+        // and nothing about it announces itself.
+        let reached = session.as_ref().map(|open| open.path());
+        if reached.is_some() {
             failing_since = 0;
         } else if configured && failing_since == 0 {
             failing_since = crate::core::transfers::unix_time_ns();
@@ -179,6 +191,9 @@ pub(crate) trait LiveSession: Send + Sync {
     /// Whether the socket is still open.
     fn is_live(&self) -> bool;
 
+    /// The path traffic is taking right now.
+    fn path(&self) -> Path;
+
     /// Round-trips a keep-alive, answering `false` when the service did not.
     async fn ping(&self) -> bool;
 }
@@ -238,6 +253,19 @@ impl LiveSession for Connected {
         self.0.is_connected()
     }
 
+    fn path(&self) -> Path {
+        // Only a confirmed direct path counts as direct. `Mixed` means part
+        // of the traffic is relayed, and `Unavailable` means nothing is
+        // confirmed yet — overstating either would tell a person their data
+        // is taking a route it may not be.
+        match self.0.path() {
+            portalis_nexus_client::ConnectionPath::Direct => Path::Direct,
+            portalis_nexus_client::ConnectionPath::Relay
+            | portalis_nexus_client::ConnectionPath::Mixed
+            | portalis_nexus_client::ConnectionPath::Unavailable => Path::Relayed,
+        }
+    }
+
     async fn ping(&self) -> bool {
         // The nonce only has to differ between one ping and the next; the
         // client matches the reply by message id, not by this.
@@ -256,16 +284,27 @@ mod tests {
     #[test]
     fn what_a_person_is_told_follows_from_what_was_tried() {
         assert_eq!(
-            connectivity_for(false, false, 0),
+            connectivity_for(false, None, 0),
             Connectivity::LocalOnly,
             "a first run has no service, which is not a failure to reach one"
         );
         assert_eq!(
-            connectivity_for(true, true, 0),
-            Connectivity::Online(SERVICE_SECURITY)
+            connectivity_for(true, Some(Path::Direct), 0),
+            Connectivity::Online(Security {
+                path: Path::Direct,
+                peer: SERVICE_PEER
+            })
         );
         assert_eq!(
-            connectivity_for(true, false, 42),
+            connectivity_for(true, Some(Path::Relayed), 0),
+            Connectivity::Online(Security {
+                path: Path::Relayed,
+                peer: SERVICE_PEER
+            }),
+            "a relayed service is reached, and saying so is the whole point"
+        );
+        assert_eq!(
+            connectivity_for(true, None, 42),
             Connectivity::Degraded { since_unix_ns: 42 },
             "configured and unreachable is a fault, not an arrangement"
         );
@@ -358,6 +397,9 @@ mod tests {
         /// stopped answering without the socket noticing.
         answers: std::sync::atomic::AtomicBool,
         pings: std::sync::atomic::AtomicUsize,
+        /// Relayed first, so a test can flip it and stand for iroh upgrading
+        /// a connection to a direct path partway through.
+        direct: std::sync::atomic::AtomicBool,
     }
 
     impl Fake {
@@ -365,6 +407,7 @@ mod tests {
             Arc::new(Self {
                 answers: std::sync::atomic::AtomicBool::new(true),
                 pings: std::sync::atomic::AtomicUsize::new(0),
+                direct: std::sync::atomic::AtomicBool::new(false),
             })
         }
     }
@@ -373,6 +416,13 @@ mod tests {
     impl LiveSession for Fake {
         fn is_live(&self) -> bool {
             true
+        }
+        fn path(&self) -> Path {
+            if self.direct.load(std::sync::atomic::Ordering::SeqCst) {
+                Path::Direct
+            } else {
+                Path::Relayed
+            }
         }
         async fn ping(&self) -> bool {
             self.pings.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -426,6 +476,65 @@ mod tests {
         })
         .await
         .expect("an identified device knows its handle");
+
+        let _ = stop.send(true);
+        let _ = worker.await;
+    }
+
+    /// iroh reaches a peer through a relay while it negotiates a direct path,
+    /// then switches without the connection dropping. The reported path has
+    /// to follow that, which is exactly what a value read once at connect
+    /// time could not do — and what the old `Path::Direct` constant asserted
+    /// regardless.
+    #[tokio::test]
+    async fn a_connection_upgraded_to_direct_stops_being_reported_as_relayed() {
+        let session = Fake::new();
+        let states = watch::Sender::new(empty_state());
+        let mut watching = states.subscribe();
+        let (stop, shutdown) = shutdown_pair();
+        let worker = tokio::spawn(follow_service(
+            states,
+            Arc::new(Reachable(Arc::clone(&session))),
+            shutdown,
+        ));
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if matches!(
+                    watching.borrow_and_update().connectivity,
+                    Connectivity::Online(Security {
+                        path: Path::Relayed,
+                        ..
+                    })
+                ) {
+                    return;
+                }
+                watching.changed().await.expect("the worker is running");
+            }
+        })
+        .await
+        .expect("a relayed session is reported as relayed");
+
+        session
+            .direct
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+
+        tokio::time::timeout(Duration::from_secs(20), async {
+            loop {
+                watching.changed().await.expect("the worker is running");
+                if matches!(
+                    watching.borrow_and_update().connectivity,
+                    Connectivity::Online(Security {
+                        path: Path::Direct,
+                        ..
+                    })
+                ) {
+                    return;
+                }
+            }
+        })
+        .await
+        .expect("the upgrade to a direct path is noticed");
 
         let _ = stop.send(true);
         let _ = worker.await;
@@ -520,21 +629,28 @@ mod live_tests {
     /// is that "connected" means a handshake completed, and nothing short of
     /// a real one can demonstrate that.
     ///
+    /// `PORTALIS_NEXUS_ADDR` is optional. Leaving it out is the stronger run:
+    /// it proves the service was found by Node ID alone, which is what a
+    /// person setting Portalis up actually has to do.
+    ///
     /// ```text
     /// tool/nexus_server.sh
-    /// PORTALIS_NEXUS_NODE_ID=… PORTALIS_NEXUS_ADDR=… \
+    /// PORTALIS_NEXUS_NODE_ID=… [PORTALIS_NEXUS_ADDR=…] \
     ///   cargo test --lib reaches_a_running_service -- --ignored
     /// ```
     #[tokio::test]
     #[ignore = "needs a service already listening; see tool/nexus_server.sh"]
     async fn reaches_a_running_service() {
         let node_id = std::env::var("PORTALIS_NEXUS_NODE_ID").expect("a node id to dial");
-        let address = std::env::var("PORTALIS_NEXUS_ADDR").expect("an address to dial");
         let endpoint =
-            portalis_nexus_client::EndpointAddr::new(node_id.parse().expect("a valid node id"))
-                .with_direct_addresses([address
-                    .parse::<std::net::SocketAddr>()
-                    .expect("a valid socket address")]);
+            portalis_nexus_client::EndpointAddr::new(node_id.parse().expect("a valid node id"));
+        let endpoint = match std::env::var("PORTALIS_NEXUS_ADDR") {
+            Ok(address) if !address.trim().is_empty() => endpoint.with_direct_addresses([address
+                .trim()
+                .parse::<std::net::SocketAddr>()
+                .expect("a valid socket address")]),
+            _ => endpoint,
+        };
 
         struct Listening(portalis_nexus_client::EndpointAddr);
 

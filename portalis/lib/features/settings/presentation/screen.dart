@@ -201,7 +201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Use the public Node ID logged by your Nexus server. The address is only a route; Portalis authenticates the Node ID before signing in.',
+                'Use the public Node ID logged by your Nexus server. Portalis finds the server from that alone — over this network, or through a signed record anywhere else. An address is optional, and only saves the lookup.',
                 style: AppText.secondary(color: AppColors.textDim),
               ),
               const SizedBox(height: 16),
@@ -221,8 +221,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: monoLabel(
                     size: 13, color: AppColors.text, letterSpacing: 0),
                 decoration: const InputDecoration(
-                  labelText: 'Direct address',
-                  hintText: '203.0.113.10:7443',
+                  labelText: 'Direct address (optional)',
+                  hintText: 'Leave empty to find the server by Node ID',
                 ),
               ),
             ],
