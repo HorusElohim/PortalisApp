@@ -49,6 +49,8 @@ jobs:
         with:
           workspaces: portalis/rust/backend
       - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Nexus backend checks
         run: ./tests/nexus.sh
