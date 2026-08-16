@@ -56,35 +56,55 @@ pub fn connectivity_for(configured: bool, reached: bool, since_unix_ns: u64) -> 
     }
 }
 
-/// Keeps the projection's connectivity equal to what a socket can do.
+/// Keeps the projection's connectivity equal to what a session can do.
 pub(crate) async fn follow_service(
     states: watch::Sender<PortalisState>,
     endpoint: Arc<dyn ConfiguredEndpoint>,
     mut shutdown: super::supervisor::Shutdown,
 ) {
-    let mut client: Option<portalis_nexus_client::NexusClient> = None;
+    let mut session: Option<Arc<dyn LiveSession>> = None;
     let mut failing_since = 0_u64;
 
     loop {
         let configured = endpoint.configured();
-        // A live client that has stopped being live is not a live client. Ask
-        // rather than remember: the socket knows and this does not.
-        if client.as_ref().is_some_and(|open| !open.is_connected()) {
-            client = None;
+        // A live session that has stopped being live is not a live session.
+        // Ask rather than remember: the socket knows and this does not.
+        if session.as_ref().is_some_and(|open| !open.is_live()) {
+            session = None;
         }
         if !configured {
-            client = None;
-        } else if client.is_none() {
+            session = None;
+            // A handle belongs to the service that issued it. Pointing the app
+            // somewhere else, or nowhere, does not leave this device still
+            // holding the name it was given.
+            publish_handle(&states, None);
+        } else if session.is_none() {
             // Announced before dialling, because a dial can take a while and
             // silence during it reads as nothing happening.
             publish(&states, Connectivity::Connecting);
-            client = tokio::select! {
+            let established = tokio::select! {
                 () = shutdown.requested() => return,
-                opened = endpoint.connect() => opened,
+                opened = endpoint.establish() => opened,
             };
+            if let Some(identified) = established {
+                publish_handle(&states, Some(identified.handle));
+                session = Some(identified.session);
+            }
+        } else if let Some(open) = session.as_ref() {
+            // The keep-alive. A socket that is merely open proves nothing:
+            // this is the round trip that tells the service the device is
+            // still here — which is what its presence for everyone else is
+            // derived from — and tells this device the service still answers.
+            let answered = tokio::select! {
+                () = shutdown.requested() => return,
+                answered = open.ping() => answered,
+            };
+            if !answered {
+                session = None;
+            }
         }
 
-        let reached = client.is_some();
+        let reached = session.is_some();
         if reached {
             failing_since = 0;
         } else if configured && failing_since == 0 {
@@ -112,6 +132,27 @@ fn publish(states: &watch::Sender<PortalisState>, connectivity: Connectivity) {
     });
 }
 
+fn publish_handle(states: &watch::Sender<PortalisState>, handle: Option<String>) {
+    states.send_if_modified(|state| {
+        if state.device.handle == handle {
+            return false;
+        }
+        state.device.handle = handle;
+        true
+    });
+}
+
+/// A service connection this device has proved its identity on.
+///
+/// The handle comes with it because the two are inseparable: the service
+/// issues it as the answer to "who is this device", so there is no moment
+/// where a session exists and the name it was given does not.
+pub(crate) struct Identified {
+    /// This device's `username#discriminator`, as the service assigned it.
+    pub handle: String,
+    pub session: Arc<dyn LiveSession>,
+}
+
 /// What this device has been told to talk to, and how to reach it.
 ///
 /// A trait so the worker can be driven without a network. Dialling a real
@@ -123,8 +164,23 @@ pub(crate) trait ConfiguredEndpoint: Send + Sync {
     /// Whether a service has been set up at all.
     fn configured(&self) -> bool;
 
-    /// Dials it, answering `None` when that did not work.
-    async fn connect(&self) -> Option<portalis_nexus_client::NexusClient>;
+    /// Dials it and proves who this device is, answering `None` when either
+    /// half did not work.
+    ///
+    /// Both, rather than dialling alone: an unauthenticated connection cannot
+    /// make a single request the app has any use for, so reporting it as a
+    /// reached service would put `Online` back to meaning less than it says.
+    async fn establish(&self) -> Option<Identified>;
+}
+
+/// An established session, for as long as it lasts.
+#[async_trait::async_trait]
+pub(crate) trait LiveSession: Send + Sync {
+    /// Whether the socket is still open.
+    fn is_live(&self) -> bool;
+
+    /// Round-trips a keep-alive, answering `false` when the service did not.
+    async fn ping(&self) -> bool;
 }
 
 /// The real one: whatever is in the device's settings, dialled for real.
@@ -139,14 +195,56 @@ impl ConfiguredEndpoint for Configured {
             .is_some()
     }
 
-    async fn connect(&self) -> Option<portalis_nexus_client::NexusClient> {
-        match crate::nexus::connect_configured().await {
-            Ok(client) => client,
+    async fn establish(&self) -> Option<Identified> {
+        let client = match crate::nexus::connect_configured().await {
+            Ok(client) => client?,
             Err(error) => {
                 crate::log::clog!("nexus", "could not reach the Nexus service: {error:#}");
+                return None;
+            }
+        };
+        let identity = match crate::device::current_nexus_identity() {
+            Ok(identity) => identity,
+            Err(error) => {
+                crate::log::clog!("nexus", "this device has no usable identity: {error:#}");
+                return None;
+            }
+        };
+        let device_name = crate::device::device_identity()
+            .map(|device| device.nickname)
+            .unwrap_or_default();
+        match crate::nexus::identify(&client, &identity, &device_name).await {
+            Ok(handle) => {
+                crate::log::clog!("nexus", "this device is {handle}");
+                Some(Identified {
+                    handle,
+                    session: Arc::new(Connected(client)),
+                })
+            }
+            Err(error) => {
+                crate::log::clog!("nexus", "the Nexus service refused this device: {error}");
                 None
             }
         }
+    }
+}
+
+/// A real client, held for as long as the service keeps answering.
+struct Connected(portalis_nexus_client::NexusClient);
+
+#[async_trait::async_trait]
+impl LiveSession for Connected {
+    fn is_live(&self) -> bool {
+        self.0.is_connected()
+    }
+
+    async fn ping(&self) -> bool {
+        // The nonce only has to differ between one ping and the next; the
+        // client matches the reply by message id, not by this.
+        self.0
+            .ping(crate::core::transfers::unix_time_ns())
+            .await
+            .is_ok()
     }
 }
 
@@ -185,7 +283,7 @@ mod tests {
             fn configured(&self) -> bool {
                 true
             }
-            async fn connect(&self) -> Option<portalis_nexus_client::NexusClient> {
+            async fn establish(&self) -> Option<Identified> {
                 None
             }
         }
@@ -226,7 +324,7 @@ mod tests {
             fn configured(&self) -> bool {
                 false
             }
-            async fn connect(&self) -> Option<portalis_nexus_client::NexusClient> {
+            async fn establish(&self) -> Option<Identified> {
                 panic!("nothing configured must not be dialled");
             }
         }
@@ -249,6 +347,140 @@ mod tests {
         })
         .await
         .expect("an unconfigured device is local only");
+
+        let _ = stop.send(true);
+        let _ = worker.await;
+    }
+
+    /// A session that is whatever a test says it is.
+    struct Fake {
+        /// Whether pings are answered. Turning this off is a service that
+        /// stopped answering without the socket noticing.
+        answers: std::sync::atomic::AtomicBool,
+        pings: std::sync::atomic::AtomicUsize,
+    }
+
+    impl Fake {
+        fn new() -> Arc<Self> {
+            Arc::new(Self {
+                answers: std::sync::atomic::AtomicBool::new(true),
+                pings: std::sync::atomic::AtomicUsize::new(0),
+            })
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl LiveSession for Fake {
+        fn is_live(&self) -> bool {
+            true
+        }
+        async fn ping(&self) -> bool {
+            self.pings.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.answers.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    struct Reachable(Arc<Fake>);
+
+    #[async_trait::async_trait]
+    impl ConfiguredEndpoint for Reachable {
+        fn configured(&self) -> bool {
+            true
+        }
+        async fn establish(&self) -> Option<Identified> {
+            Some(Identified {
+                handle: "ada#7Q4K".to_owned(),
+                session: Arc::clone(&self.0) as Arc<dyn LiveSession>,
+            })
+        }
+    }
+
+    /// The handle is the service's answer to who this device is, so it
+    /// appears when a session does — the app cannot know it any other way.
+    #[tokio::test]
+    async fn a_device_learns_its_handle_by_identifying_itself() {
+        let session = Fake::new();
+        let states = watch::Sender::new(empty_state());
+        let mut watching = states.subscribe();
+        let (stop, shutdown) = shutdown_pair();
+        let worker = tokio::spawn(follow_service(
+            states,
+            Arc::new(Reachable(Arc::clone(&session))),
+            shutdown,
+        ));
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                {
+                    let state = watching.borrow_and_update();
+                    if state.device.handle.as_deref() == Some("ada#7Q4K") {
+                        assert!(
+                            matches!(state.connectivity, Connectivity::Online(_)),
+                            "a session that identified this device is a reached service"
+                        );
+                        return;
+                    }
+                }
+                watching.changed().await.expect("the worker is running");
+            }
+        })
+        .await
+        .expect("an identified device knows its handle");
+
+        let _ = stop.send(true);
+        let _ = worker.await;
+    }
+
+    /// A socket can stay open against a service that has stopped answering.
+    /// The keep-alive is what notices, and what a person is told follows it.
+    #[tokio::test]
+    async fn a_service_that_stops_answering_stops_being_online() {
+        let session = Fake::new();
+        let states = watch::Sender::new(empty_state());
+        let mut watching = states.subscribe();
+        let (stop, shutdown) = shutdown_pair();
+        let worker = tokio::spawn(follow_service(
+            states,
+            Arc::new(Reachable(Arc::clone(&session))),
+            shutdown,
+        ));
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if matches!(
+                    watching.borrow_and_update().connectivity,
+                    Connectivity::Online(_)
+                ) {
+                    return;
+                }
+                watching.changed().await.expect("the worker is running");
+            }
+        })
+        .await
+        .expect("the session starts out reached");
+
+        session
+            .answers
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+
+        tokio::time::timeout(Duration::from_secs(20), async {
+            loop {
+                watching.changed().await.expect("the worker is running");
+                if matches!(
+                    watching.borrow_and_update().connectivity,
+                    Connectivity::Degraded { .. }
+                ) {
+                    return;
+                }
+            }
+        })
+        .await
+        .expect("a service that stopped answering is reported");
+
+        assert!(
+            session.pings.load(std::sync::atomic::Ordering::SeqCst) > 0,
+            "the keep-alive is what proves a session, so it has to be sent"
+        );
 
         let _ = stop.send(true);
         let _ = worker.await;
@@ -311,8 +543,26 @@ mod live_tests {
             fn configured(&self) -> bool {
                 true
             }
-            async fn connect(&self) -> Option<portalis_nexus_client::NexusClient> {
-                crate::nexus::connect(self.0.clone()).await.ok()
+            async fn establish(&self) -> Option<Identified> {
+                let client = crate::nexus::connect(self.0.clone()).await.ok()?;
+                // A fresh keypair each run, rather than this machine's real
+                // identity: the test registers, and a device that is already
+                // enrolled would exercise only the other half of that.
+                let mut secret = [0_u8; 32];
+                rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut secret);
+                let identity = crate::nexus::NexusIdentity::generate(
+                    crate::domain::identity::DeviceIdentity::from_bytes(&secret),
+                );
+                // Panics rather than retrying: in a live test a service that
+                // refuses this device is the result, and swallowing it would
+                // leave the loop reporting a timeout instead of the reason.
+                let handle = crate::nexus::identify(&client, &identity, "Ada's laptop")
+                    .await
+                    .expect("the service accepts a device it has never seen");
+                Some(Identified {
+                    handle,
+                    session: Arc::new(super::Connected(client)),
+                })
             }
         }
 
@@ -336,19 +586,29 @@ mod live_tests {
             super::super::supervisor::Shutdown::from_signal(signal),
         ));
 
-        tokio::time::timeout(Duration::from_secs(10), async {
+        let handle = tokio::time::timeout(Duration::from_secs(10), async {
             loop {
-                if matches!(
-                    watching.borrow_and_update().connectivity,
-                    Connectivity::Online(_)
-                ) {
-                    return;
+                {
+                    let state = watching.borrow_and_update();
+                    if matches!(state.connectivity, Connectivity::Online(_)) {
+                        return state.device.handle.clone();
+                    }
                 }
                 watching.changed().await.expect("the worker is running");
             }
         })
         .await
         .expect("a listening service is reached");
+
+        let handle = handle.expect("a reached service has already said who this device is");
+        let (username, discriminator) = handle
+            .split_once('#')
+            .unwrap_or_else(|| panic!("the service issued {handle}, which is not a handle"));
+        assert!(!username.is_empty(), "a handle names somebody");
+        assert!(
+            !discriminator.is_empty(),
+            "the discriminator is what makes {username} findable"
+        );
 
         let _ = stop.send(true);
         let _ = worker.await;

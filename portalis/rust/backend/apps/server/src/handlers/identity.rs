@@ -522,8 +522,12 @@ mod tests {
         assert_eq!(refusal(&reply), Some(ProtocolErrorCode::Unauthorized));
     }
 
+    /// An app registers on every start, because a connection's one challenge
+    /// cannot be spent discovering whether it needed to. The second
+    /// registration is answered with the handle already held, not a refusal
+    /// and not the newly requested name.
     #[tokio::test]
-    async fn registering_a_device_twice_is_rejected_as_invalid() {
+    async fn registering_a_device_twice_answers_with_the_handle_it_has() {
         let state = server();
         let hello = greeting();
         let mut session = Session::new(&hello);
@@ -545,7 +549,14 @@ mod tests {
         )
         .await;
 
-        assert_eq!(refusal(&reply), Some(ProtocolErrorCode::InvalidMessage));
+        assert_eq!(refusal(&reply), None, "an enrolled device is not refused");
+        let Some(Payload::Authenticated(identity)) = reply.payload else {
+            panic!("registering again answers with this device's identity");
+        };
+        assert_eq!(
+            identity.username, "Ada",
+            "a second registration must not rename a permanent handle"
+        );
     }
 
     #[tokio::test]

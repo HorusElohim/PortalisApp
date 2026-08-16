@@ -121,8 +121,32 @@ where
         let public_key = Self::verify(request.device_public_key, &payload, request.signature)?;
 
         let device_id = derive_device_id(&public_key);
-        if self.store.find_device(device_id).await?.is_some() {
-            return Err(IdentityError::DeviceAlreadyRegistered);
+        // Registering a device that is already enrolled answers with who it
+        // is, rather than refusing.
+        //
+        // A connection is issued one challenge and may spend it once, so a
+        // client that has to discover which of register/authenticate applies
+        // would burn its only attempt finding out. Making this idempotent is
+        // what lets an app say "this is me" on every start and be told its
+        // handle, without keeping a local "already registered" flag — a copy
+        // of the server's own fact, free to drift the moment a device is
+        // restored from a backup or pointed at a different service.
+        //
+        // The requested username is deliberately ignored here: handles are
+        // permanent, so the truthful answer for an enrolled device is the one
+        // it already has. Nothing is granted that authentication would not
+        // already grant, because reaching this line at all required a
+        // signature from the device's own key.
+        if let Some(device) = self.store.find_device(device_id).await? {
+            if device.is_revoked() {
+                return Err(IdentityError::DeviceRevoked);
+            }
+            let user = self
+                .store
+                .find_user(device.user_id)
+                .await?
+                .ok_or(IdentityError::MissingUser)?;
+            return Ok(Identity { user, device });
         }
 
         let now = self.clock.now_unix_ns();
@@ -806,11 +830,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn refuses_to_register_the_same_device_twice() {
+    /// Registering twice is how a device says "this is me" on every start.
+    ///
+    /// It answers with the handle that device already has, and refuses to
+    /// rename it: a handle is permanent, and a second registration asking for
+    /// a different name must not be a way around that.
+    async fn registering_the_same_device_again_says_who_it_already_is() {
         let service = service(&[9]);
         let signer = key(7);
         let (mut public, mut signature) = ([0; 32], [0; 64]);
-        service
+        let first = service
             .register(registration(
                 &signer,
                 "Ada",
@@ -821,17 +850,58 @@ mod tests {
             .await
             .expect("registration succeeds");
 
+        let again = service
+            .register(registration(
+                &signer,
+                "Grace",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("a device that is already enrolled is told who it is");
+
+        assert_eq!(
+            again.user.username, "Ada",
+            "asking to register as Grace must not rename Ada"
+        );
+        assert_eq!(again.user.user_id, first.user.user_id);
+        assert_eq!(again.device.device_id, first.device.device_id);
+    }
+
+    #[tokio::test]
+    /// A revoked device is not quietly re-admitted by registering again.
+    async fn a_revoked_device_cannot_register_its_way_back_in() {
+        let service = service(&[9]);
+        let signer = key(7);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+        let enrolled = service
+            .register(registration(
+                &signer,
+                "Ada",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("registration succeeds");
+
+        service
+            .revoke_device(enrolled.device.device_id)
+            .await
+            .expect("revoking succeeds");
+
         assert_eq!(
             service
                 .register(registration(
                     &signer,
-                    "Grace",
+                    "Ada",
                     &[1; 32],
                     &mut public,
                     &mut signature
                 ))
                 .await,
-            Err(IdentityError::DeviceAlreadyRegistered)
+            Err(IdentityError::DeviceRevoked)
         );
     }
 
