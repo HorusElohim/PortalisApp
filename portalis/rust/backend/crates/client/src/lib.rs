@@ -18,6 +18,7 @@
 //! - [`verify`]: whether a revision belongs after the one already held.
 
 mod candidates;
+mod capsule;
 mod config;
 mod endpoint;
 mod error;
@@ -31,6 +32,7 @@ mod transport;
 mod verify;
 
 pub use candidates::{CandidateSource, PeerCandidate, merge_candidates};
+pub use capsule::{Capsule, CapsuleError};
 pub use config::{ClientConfig, DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_REQUEST_TIMEOUT};
 pub use endpoint::{ConnectionPath, Discovery, NEXUS_ALPN, NexusEndpoint};
 pub use error::ClientError;

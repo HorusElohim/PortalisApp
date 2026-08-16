@@ -808,8 +808,24 @@ mod native {
     /// Re-adding the same torrent (e.g. re-testing) shouldn't blow up just
     /// because its files already exist on disk from a previous run.
     fn add_opts() -> AddTorrentOptions {
+        add_opts_with_peers(Vec::new())
+    }
+
+    /// The same, plus devices already known to hold the files.
+    ///
+    /// This is how a collection shared through Nexus starts moving. A tracker
+    /// and the DHT are how a public torrent finds strangers; a collection
+    /// shared with somebody is not public and has neither. The service
+    /// answers with the addresses of devices that announced they hold it, and
+    /// handing those straight to the engine is the whole of the
+    /// introduction — after which the transfer is an ordinary one.
+    fn add_opts_with_peers(initial_peers: Vec<std::net::SocketAddr>) -> AddTorrentOptions {
         AddTorrentOptions {
             overwrite: true,
+            // `None` rather than an empty list: librqbit reads the empty case
+            // as "no peers supplied", and `Some(vec![])` would say something
+            // subtly different to whoever reads this next.
+            initial_peers: (!initial_peers.is_empty()).then_some(initial_peers),
             ..Default::default()
         }
     }
@@ -1615,9 +1631,20 @@ mod native {
     }
 
     pub(super) async fn add_torrent_from_file_bytes(bytes: Vec<u8>) -> anyhow::Result<TorrentInfo> {
+        add_torrent_from_file_bytes_with_peers(bytes, Vec::new()).await
+    }
+
+    /// Adds a torrent that named devices are already known to be holding.
+    pub(super) async fn add_torrent_from_file_bytes_with_peers(
+        bytes: Vec<u8>,
+        peers: Vec<std::net::SocketAddr>,
+    ) -> anyhow::Result<TorrentInfo> {
         let session = session().await?;
         let response = session
-            .add_torrent(AddTorrent::from_bytes(bytes), Some(add_opts()))
+            .add_torrent(
+                AddTorrent::from_bytes(bytes),
+                Some(add_opts_with_peers(peers)),
+            )
             .await
             .context("adding torrent from .torrent file bytes")?;
         response_to_info(&api(session), response)
