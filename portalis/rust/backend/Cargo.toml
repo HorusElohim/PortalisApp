@@ -98,7 +98,6 @@ thiserror.workspace = true
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 x25519-dalek = { version = "3", features = ["static_secrets"] }
 rand = "0.8"
-blake3 = "1"
 hex = "0.4"
 uuid = { version = "1", features = ["v4"] }
 
