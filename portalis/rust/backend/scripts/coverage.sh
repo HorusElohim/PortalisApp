@@ -82,8 +82,8 @@ set -euo pipefail
 # and kept working. Step 9 replaces the bridge and deletes the file, and this
 # line goes with it.
 ignore='apps/server/src/(main|socket)\.rs|crates/storage/src/mongo/mod\.rs|crates/storage/src/(identity|collections|friends|envelopes|mailbox|directory|store)\.rs|crates/client/src/transport/.*\.rs|crates/client/tests/.*\.rs|demo/src/.*\.rs|backend/src/[^/]*\.rs|backend/src/domain/.*\.rs|backend/src/collections/legacy\.rs|portalis\.protocol\.v1\.rs'
-lcov="$(mktemp -t nexus-coverage.XXXXXX)"
-trap 'rm -f "$lcov"' EXIT
+report="$(mktemp -t nexus-coverage.XXXXXX)"
+trap 'rm -f "$report"' EXIT
 
 # `--all-features` turns on the application's `local-integration` feature,
 # whose one test drives two real app processes over local ports. That test is
@@ -95,36 +95,28 @@ trap 'rm -f "$lcov"' EXIT
 # it a file can keep the coverage of a test that has since been removed.
 cargo llvm-cov clean --workspace
 
-# One invocation runs the tests, applies both thresholds, and writes the LCOV
-# the per-line check below reads. One, and not two, because `cargo llvm-cov
-# report` has no workspace selection: it answers for the current package alone,
-# whatever it is passed. Reading the profile a second time that way produced an
-# LCOV covering thirteen files out of seventy-one, so the per-line gate was
-# examining the root package and silently passing everything else. A gate that
-# looks at a fifth of the code and says nothing about the rest is worse than no
-# gate, because it is believed.
+# One invocation runs the tests and writes the JSON the gate below reads. One,
+# and not two, because `cargo llvm-cov report` has no workspace selection: it
+# answers for the current package alone, whatever it is passed. Reading the
+# profile a second time that way produced a report covering thirteen files out
+# of seventy-one, so the gate was examining the root package and silently
+# passing everything else. A gate that looks at a fifth of the code and says
+# nothing about the rest is worse than no gate, because it is believed.
+#
+# The thresholds are applied by scripts/coverage_report.py rather than by
+# `--fail-under-functions`/`--fail-under-regions`, which are deliberately not
+# passed here. Those flags stop the run before any summary is printed, and
+# with a file output format there is no summary table at all, so a failing
+# gate emitted `error: ... exit code 1` and nothing else: no percentage, no
+# file, no function. The thresholds are unchanged; only their enforcement
+# moved, to somewhere that can say what is short.
 cargo llvm-cov \
   --workspace \
   --all-features \
   --ignore-filename-regex "$ignore" \
-  --fail-under-functions 100 \
-  --fail-under-regions 99 \
-  --lcov --output-path "$lcov" \
+  --json --output-path "$report" \
   -- --skip two_instances_sync
 
-# The numbers, from the profile that was just gated rather than a second
-# reading of it.
-awk -F'[:,]' '
-  /^DA:/ { total++; if ($3 > 0) hit++ }
-  END { printf "\n%d of %d lines covered (%.2f%%)\n", hit, total, 100 * hit / total }
-' "$lcov"
-
-if grep -q '^DA:[0-9]*,0$' "$lcov"; then
-  echo >&2
-  echo "Uncovered lines:" >&2
-  awk -F'[:,]' '
-    /^SF:/ { file = $2 }
-    /^DA:/ && $3 == 0 { print "  " file ":" $2 }
-  ' "$lcov" >&2
-  exit 1
-fi
+python3 "$(dirname "${BASH_SOURCE[0]}")/coverage_report.py" "$report" \
+  --min-functions 100 \
+  --min-regions 99
