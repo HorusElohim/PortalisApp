@@ -2751,12 +2751,7 @@ mod tests {
         // reading has been processed, which is the point the assertions below
         // need. A poller that never runs must fail loudly.
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
-        let store_row = || {
-            store
-                .collection(b"key")
-                .expect("reads")
-                .expect("exists")
-        };
+        let store_row = || store.collection(b"key").expect("reads").expect("exists");
         while !(store_row().started_at.is_some() && store_row().completed_at.is_some()) {
             assert!(
                 std::time::Instant::now() < deadline,
