@@ -10,7 +10,10 @@ run before any summary is printed, and with `--lcov`/`--json` output there is
 no summary table at all, so a failing gate emitted exit code 1 and nothing
 else. A gate that will not name what it rejects cannot be acted on.
 
-Thresholds are unchanged: functions 100, regions 99, and no uncovered line.
+Thresholds are unchanged: functions 100, regions 99, and no uncovered line —
+except for lines the test build cannot execute at all (`#[cfg(not(test))]`
+items and `#[ignore]`d tests), which are reported separately and excluded.
+See `unreachable_spans`.
 """
 
 from __future__ import annotations
@@ -28,7 +31,7 @@ from collections import defaultdict
 # instantiation the merged profile shows as covered. The count is stable, so
 # the region floor stays at 99 rather than pretending it is 100.
 DEFAULT_MIN_FUNCTIONS = 100.0
-DEFAULT_MIN_REGIONS = 80.0
+DEFAULT_MIN_REGIONS = 99.0
 
 
 def demangle(names: list[str]) -> dict[str, str]:
@@ -59,6 +62,77 @@ def strip_disambiguator(name: str) -> str:
     """
     without_v0 = re.sub(r"Cs[0-9A-Za-z]+_", "", name)
     return re.sub(r"17h[0-9a-f]{16}E?$", "", without_v0)
+
+
+def unreachable_spans(path: str) -> dict[int, str]:
+    """Map each line the test build cannot execute to the reason it cannot.
+
+    Two kinds of code are compiled into the instrumented binary and measured,
+    yet no passing `cargo test` run can enter them. Counting them as uncovered
+    asks for a test that is impossible to write:
+
+    `#[cfg(not(test))]`
+        The production half of a deliberate production/test split. Under
+        `cargo test` the `cfg(test)` twin is what runs, so the production
+        definition is compiled, measured, and by construction never entered.
+        `store::app_store` is the example this was written for: it caches one
+        process-wide handle, and its `cfg(test)` twin exists precisely so each
+        test gets an isolated store instead.
+
+    `#[ignore]`
+        A test that is skipped unless asked for by name, together with the
+        helpers nested inside it. `core::service::live_tests` needs a service
+        already listening (see `tool/nexus_server.sh`), so its endpoint
+        implementations are compiled but never driven by a normal run.
+
+    Excluding these is not a lowered standard: it is the difference between
+    code no test reached and code no test *can* reach. Everything else stays
+    gated at zero uncovered lines.
+    """
+    try:
+        source = open(path, encoding="utf-8").read().splitlines()
+    except OSError:
+        return {}
+
+    spans: dict[int, str] = {}
+    for index, text in enumerate(source):
+        stripped = text.strip()
+        if stripped.startswith("#[cfg(not(test))]"):
+            reason = "cfg(not(test))"
+        elif stripped.startswith("#[ignore"):
+            reason = "ignored test"
+        else:
+            continue
+
+        # Step over the rest of the attribute and doc block to the item itself.
+        start = index + 1
+        while start < len(source):
+            lead = source[start].strip()
+            if lead.startswith("#[") or lead.startswith("//") or not lead:
+                start += 1
+                continue
+            break
+        if start >= len(source):
+            continue
+
+        # Consume the item: a braced body, or a statement ending in `;` for a
+        # `static`/`const`. Depth counting is enough here because the span only
+        # has to cover whole items, not parse Rust.
+        depth = 0
+        opened = False
+        for line_number in range(start, len(source)):
+            body = source[line_number]
+            code = body.split("//", 1)[0]
+            depth += code.count("{") - code.count("}")
+            if "{" in code:
+                opened = True
+            spans[line_number + 1] = reason
+            if opened and depth <= 0:
+                break
+            if not opened and code.rstrip().endswith(";"):
+                break
+
+    return spans
 
 
 def main() -> int:
@@ -132,6 +206,7 @@ def main() -> int:
     # it. This is the merged truth across instantiations, which is why the gate
     # reads it rather than the summary's per-instantiation line tally.
     uncovered_lines: dict[str, set[int]] = defaultdict(set)
+    excluded_counts: dict[str, int] = defaultdict(int)
     for file_report in data.get("files", []):
         filename = file_report["filename"]
         covered_lines: set[int] = set()
@@ -142,8 +217,24 @@ def main() -> int:
                 continue
             (covered_lines if count > 0 else zero_lines).add(line)
         remaining = zero_lines - covered_lines
+        # Drop what the test build cannot enter, and say how much was dropped
+        # rather than letting the exclusion go unseen.
+        if remaining:
+            unreachable = unreachable_spans(filename)
+            if unreachable:
+                excluded = {line for line in remaining if line in unreachable}
+                if excluded:
+                    excluded_counts[filename] = len(excluded)
+                    remaining = remaining - excluded
         if remaining:
             uncovered_lines[filename] = remaining
+
+    if excluded_counts:
+        total_excluded = sum(excluded_counts.values())
+        print()
+        print(f"Excluded as unreachable by the test build ({total_excluded} lines):")
+        for filename in sorted(excluded_counts):
+            print(f"  {filename}  {excluded_counts[filename]}")
 
     if uncovered_lines:
         total = sum(len(v) for v in uncovered_lines.values())
