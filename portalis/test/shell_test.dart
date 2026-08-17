@@ -1,0 +1,216 @@
+import 'test_support.dart';
+import 'package:portalis/shell/mobile/bottom_nav.dart';
+
+void main() {
+  tearDown(resetTestState);
+
+  group('shell', () {
+    testWidgets('has four destinations and switches between them',
+        (tester) async {
+      await pumpApp(tester);
+
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('People'), findsOneWidget);
+      expect(find.text('Settings'), findsOneWidget);
+      // Transfers and Collections both showed the same collections a second
+      // place â€” every row now carries its own bar, rate and countdown, and
+      // the list lives on Home itself.
+      expect(find.text('Transfers'), findsNothing);
+      expect(find.text('Collections'), findsNothing);
+      expect(AppBottomNav.items.length, 4);
+
+      await tester.tap(find.byKey(const Key('navTab1')));
+      await tester.pump();
+      expect(find.byType(UserScreen), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('navTab2')));
+      await tester.pump();
+      expect(find.byType(PeopleScreen), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('navTab3')));
+      await tester.pump();
+      expect(find.byType(SettingsScreen), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Home states the aggregate active transfer summary',
+        (tester) async {
+      // The header provides a compact summary while the library owns the
+      // single source of truth for each collection.
+      await pumpApp(tester, engineCollections: [
+        buildNexusCollection(
+          status: 'Downloading',
+          transfer: const AppTransfer(
+            progress: 0.4,
+            downBytesPerSecond: 1500000,
+            upBytesPerSecond: 500000,
+            peers: 1,
+            etaSecs: null,
+          ),
+        ),
+      ]);
+
+      expect(find.textContaining('1 active transfer'), findsOneWidget);
+      expect(find.textContaining('1.5 MB/s'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('uses the phone layout narrow and three panes wide',
+        (tester) async {
+      await pumpApp(tester, engineCollections: [buildNexusCollection()]);
+
+      await pumpApp(tester, size: phoneSize);
+      expect(find.byType(AppBottomNav), findsOneWidget);
+      expect(find.byKey(const Key('headerPeopleButton')), findsNothing);
+
+      await tester.binding.setSurfaceSize(desktopSize);
+      await tester.pumpWidget(const MyApp());
+      await tester.pump();
+      AppControllers.engine
+          .debugSeed(buildNexusState([buildNexusCollection()]));
+      await tester.pump();
+      // The desktop sidebar carries a People pane that mobile has no room
+      // for, and the bottom bar is gone entirely.
+      expect(find.byType(AppBottomNav), findsNothing);
+      expect(find.byKey(const Key('headerPeopleButton')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a torrent still being prepared expands inline like any other',
+        (tester) async {
+      // It used to be the one row that could not expand, because choosing its
+      // files happened on a screen of its own. Choosing happens on the
+      // collection now, so there is nothing left for a row to defer to.
+      await pumpApp(tester, size: desktopSize, engineCollections: [
+        buildNexusCollection(id: 1, name: 'Iceland'),
+        buildNexusCollection(
+          id: 2,
+          name: 'Studio',
+          nature: 'Torrent',
+          status: 'Preparing',
+        ),
+      ]);
+
+      await tester.tap(find.text('Studio').first);
+      await pumpTransition(tester);
+
+      expect(find.byType(CollectionDetail), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a destination survives a live breakpoint crossing',
+        (tester) async {
+      // The window can now be dragged between the two layouts freely, so the
+      // shells have to agree about where you are rather than each keeping its
+      // own idea of it.
+      await pumpApp(tester,
+          size: desktopSize, engineCollections: [buildNexusCollection()]);
+      await tester.tap(find.byKey(const Key('identityChip')));
+      await tester.pump();
+
+      await tester.binding.setSurfaceSize(phoneSize);
+      await tester.pump();
+
+      expect(find.byType(UserScreen), findsOneWidget);
+
+      // Resize the mounted app back again. Re-pumping MyApp would hide the
+      // ownership error this protects against by replacing the whole tree.
+      await tester.binding.setSurfaceSize(desktopSize);
+      await tester.pump();
+
+      expect(find.byType(UserScreen), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the desktop list is destinations only, controls sit above it',
+        (tester) async {
+      // Transfers said nothing the always-visible list didn't; People and
+      // Settings are controls rather than things to look at, so they sit in
+      // the header rather than the list. What is left in the list is what
+      // there is to look at.
+      await pumpApp(tester,
+          size: desktopSize, engineCollections: [buildNexusCollection()]);
+
+      for (final gone in ['Transfers', 'Settings', 'People']) {
+        expect(find.text(gone), findsNothing, reason: '$gone is not a row');
+      }
+      expect(find.byKey(const Key('headerPeopleButton')), findsOneWidget);
+      expect(find.byKey(const Key('headerSettingsButton')), findsOneWidget);
+
+      // The identity chip is the direct way into User; engine settings keep
+      // their own header action.
+      await tester.tap(find.byKey(const Key('identityChip')));
+      await tester.pump();
+      expect(find.byType(UserScreen), findsOneWidget);
+      expect(find.text('Change name'), findsOneWidget);
+
+      // Settings is a separate destination from User and opens its own pane.
+      await tester.tap(find.byKey(const Key('headerSettingsButton')));
+      await tester.pump();
+      expect(find.byType(SettingsScreen), findsOneWidget);
+
+      // Home owns collection commands. Returning through the persistent logo
+      // must restore that single command surface.
+      await tester.tap(find.byKey(const Key('headerHomeButton')));
+      await tester.pump();
+
+      // One way in. The sidebar's New share, Join, magnet field, Paste and
+      // .torrent picker are all gone, and so is the command bar that briefly
+      // replaced them: adding anything is one sheet, asked from one button.
+      expect(find.text('New share'), findsNothing);
+      expect(find.text('Join with a key'), findsNothing);
+      expect(find.byKey(const Key('sidebarMagnetField')), findsNothing);
+      expect(find.byKey(const Key('commandBarField')), findsNothing);
+      expect(find.byKey(const Key('addTorrentButton')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+  });
+
+  group('home tab', () {
+    testWidgets('is the leftmost destination and returns from another tab',
+        (tester) async {
+      await pumpApp(tester);
+      expect(find.text('Home'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('navTab3')));
+      await tester.pump();
+      expect(find.byType(SettingsScreen), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('navTab0')));
+      await tester.pump();
+
+      expect(AppNavigation.tab.value, AppNavigation.homeTab);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'unwinds a pushed Nexus collection rather than only switching tab',
+        (tester) async {
+      // The distinction that makes it a Home button and not just a tab: one
+      // tap lands you at the start, not one screen shallower.
+      await pumpApp(tester, engineCollections: [
+        buildNexusCollection(
+          name: 'Episode',
+          nature: 'Torrent',
+          status: 'Preparing',
+        ),
+      ]);
+      await tester.tap(find.text('Episode'));
+      await pumpTransition(tester);
+      expect(find.byType(CollectionRoute), findsOneWidget);
+      expect(AppNavigation.depth.value, greaterThan(0));
+
+      AppNavigation.goHome();
+      // Stepped, so the pop transition actually finishes: depth drops
+      // immediately but the outgoing route stays mounted until it does.
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(find.byType(CollectionRoute), findsNothing);
+      expect(AppNavigation.depth.value, 0);
+      expect(tester.takeException(), isNull);
+    });
+  });
+}

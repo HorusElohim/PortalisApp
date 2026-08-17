@@ -1,5 +1,19 @@
 {
     "cSpell.words": [
-        "Portalis"
-    ]
+        "Portalis",
+        "rngs"
+    ],
+    "python-envs.pythonProjects": [
+        {
+            "path": "tests",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        }
+    ],
+    "rust-analyzer.linkedProjects": [
+        "/Users/mark/Dev/Repo/Portalis/portalis/rust/backend/Cargo.toml"
+    ],
+    "rust-analyzer.cargo.features": "all",
+    "rust-analyzer.checkOnSave.command": "clippy",
+    "rust-analyzer.check.command": "clippy"
 }

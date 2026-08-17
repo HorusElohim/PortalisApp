@@ -1,0 +1,830 @@
+//! In-memory ports for tests and local development.
+//!
+//! These are deliberately simple: one lock over both collections, a clock that
+//! only moves when a test moves it, and randomness a test can dictate. They
+//! make the identity rules provable without `MongoDB`.
+
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Mutex, MutexGuard};
+
+use crate::friendship::{FriendshipEdge, FriendshipRecord};
+use crate::ports::{
+    Clock, DeviceId, DeviceRecord, EnvelopeRepository, FriendRepository, IdentityRepository,
+    KeyEnvelopePage, KeyEnvelopeRecord, RandomSource, RepositoryError, ShareId,
+    ShareMembershipRecord, ShareRepository, ShareSnapshotRecord, UserDirectory, UserId, UserRecord,
+};
+use crate::share::ShareRecord;
+
+/// A clock that stands still until a test advances it.
+#[derive(Debug)]
+pub struct FixedClock {
+    now_unix_ns: Mutex<u64>,
+}
+
+impl FixedClock {
+    #[must_use]
+    pub fn new(now_unix_ns: u64) -> Self {
+        Self {
+            now_unix_ns: Mutex::new(now_unix_ns),
+        }
+    }
+
+    pub fn advance(&self, millis: u64) {
+        *self.lock() += millis;
+    }
+
+    pub fn set(&self, now_unix_ns: u64) {
+        *self.lock() = now_unix_ns;
+    }
+
+    fn lock(&self) -> MutexGuard<'_, u64> {
+        self.now_unix_ns
+            .lock()
+            .expect("the test clock is not poisoned")
+    }
+}
+
+impl Clock for FixedClock {
+    fn now_unix_ns(&self) -> u64 {
+        *self.lock()
+    }
+}
+
+/// Randomness a test dictates, cycling through a scripted sequence.
+#[derive(Debug)]
+pub struct ScriptedRandom {
+    bytes: Mutex<VecDeque<u8>>,
+}
+
+impl ScriptedRandom {
+    /// Repeats `sequence` for as long as callers keep drawing from it.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `sequence` is empty, which would leave nothing to draw.
+    #[must_use]
+    pub fn new(sequence: &[u8]) -> Self {
+        assert!(!sequence.is_empty(), "scripted randomness needs bytes");
+        Self {
+            bytes: Mutex::new(sequence.iter().copied().collect()),
+        }
+    }
+}
+
+impl RandomSource for ScriptedRandom {
+    fn fill(&self, buffer: &mut [u8]) {
+        let mut bytes = self
+            .bytes
+            .lock()
+            .expect("the scripted random source is not poisoned");
+        for slot in buffer.iter_mut() {
+            let byte = bytes.pop_front().unwrap_or_default();
+            bytes.push_back(byte);
+            *slot = byte;
+        }
+    }
+}
+
+/// Users and devices behind one lock, so a registration is genuinely atomic.
+#[derive(Debug, Default)]
+pub struct InMemoryIdentities {
+    stored: Mutex<Stored>,
+    unavailable: std::sync::atomic::AtomicBool,
+    /// A narrower outage than [`Self::set_unavailable`], for reaching the
+    /// paths that only run once an earlier read has already succeeded.
+    devices_unavailable: std::sync::atomic::AtomicBool,
+}
+
+#[derive(Debug, Default)]
+struct Stored {
+    users: Vec<UserRecord>,
+    devices: HashMap<DeviceId, DeviceRecord>,
+    friendships: HashMap<FriendshipEdge, FriendshipRecord>,
+    envelopes: HashMap<(ShareId, DeviceId), KeyEnvelopeRecord>,
+    shares: HashMap<ShareId, ShareRecord>,
+    snapshots: HashMap<(ShareId, u64), ShareSnapshotRecord>,
+    share_memberships: HashMap<(ShareId, UserId), ShareMembershipRecord>,
+}
+
+impl Stored {
+    fn insert_user(&mut self, user: UserRecord) -> Result<(), RepositoryError> {
+        let taken = self.users.iter().any(|existing| {
+            existing.normalized_username == user.normalized_username
+                && existing.discriminator == user.discriminator
+        });
+        if taken {
+            return Err(RepositoryError::HandleTaken);
+        }
+        self.users.push(user);
+        Ok(())
+    }
+
+    fn insert_device(&mut self, device: DeviceRecord) -> Result<(), RepositoryError> {
+        match self.devices.entry(device.device_id) {
+            Entry::Occupied(_) => Err(RepositoryError::DeviceExists),
+            Entry::Vacant(slot) => {
+                slot.insert(device);
+                Ok(())
+            }
+        }
+    }
+}
+
+impl InMemoryIdentities {
+    #[must_use]
+    pub fn user_count(&self) -> usize {
+        self.lock().users.len()
+    }
+
+    #[must_use]
+    pub fn device_count(&self) -> usize {
+        self.lock().devices.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.user_count() == 0 && self.device_count() == 0
+    }
+
+    /// Enrols a device directly, for tests that need one without registering.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::DeviceExists`] when already enrolled.
+    pub fn enrol_device(&self, device: DeviceRecord) -> Result<(), RepositoryError> {
+        self.lock().insert_device(device)
+    }
+
+    /// Stores a user directly, for tests that need one without registering.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::HandleTaken`] when the handle is claimed.
+    pub fn store_user(&self, user: UserRecord) -> Result<(), RepositoryError> {
+        self.lock().insert_user(user)
+    }
+
+    /// Makes every operation fail, for exercising what callers do when the
+    /// store is down. Off by default.
+    pub fn set_unavailable(&self, unavailable: bool) {
+        self.unavailable
+            .store(unavailable, std::sync::atomic::Ordering::Release);
+    }
+
+    /// Fails only the device listing, leaving every other read working.
+    ///
+    /// A caller that reads twice — authorize, then list the member's devices
+    /// — cannot reach its second failure path while the whole store is down,
+    /// because the first read fails first.
+    pub fn set_devices_unavailable(&self, unavailable: bool) {
+        self.devices_unavailable
+            .store(unavailable, std::sync::atomic::Ordering::Release);
+    }
+
+    /// The failure to report, or `None` while the store is healthy.
+    fn outage(&self) -> Option<RepositoryError> {
+        self.unavailable
+            .load(std::sync::atomic::Ordering::Acquire)
+            .then(|| RepositoryError::Unavailable("the store is switched off".to_owned()))
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Stored> {
+        self.stored
+            .lock()
+            .expect("the identity store is not poisoned")
+    }
+}
+
+impl UserDirectory for InMemoryIdentities {
+    fn find_user(
+        &self,
+        user_id: UserId,
+    ) -> impl std::future::Future<Output = Result<Option<UserRecord>, RepositoryError>> + Send {
+        let outage = self.outage();
+        let found = self
+            .lock()
+            .users
+            .iter()
+            .find(|user| user.user_id == user_id)
+            .cloned();
+        async move { outage.map_or(Ok(found), Err) }
+    }
+
+    fn find_user_by_handle(
+        &self,
+        normalized_username: &str,
+        discriminator: &str,
+    ) -> impl std::future::Future<Output = Result<Option<UserRecord>, RepositoryError>> + Send {
+        let outage = self.outage();
+        let found = self
+            .lock()
+            .users
+            .iter()
+            .find(|user| {
+                user.normalized_username == normalized_username
+                    && user.discriminator == discriminator
+            })
+            .cloned();
+        async move { outage.map_or(Ok(found), Err) }
+    }
+}
+
+impl IdentityRepository for InMemoryIdentities {
+    fn insert_registration(
+        &self,
+        user: UserRecord,
+        device: DeviceRecord,
+    ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+        let result = self.outage().map_or_else(
+            || {
+                let mut stored = self.lock();
+                // Both writes happen under one lock, and the handle is checked
+                // first so a collision never enrols the device.
+                stored
+                    .insert_user(user)
+                    .and_then(|()| match stored.insert_device(device) {
+                        Ok(()) => Ok(()),
+                        Err(error) => {
+                            stored.users.pop();
+                            Err(error)
+                        }
+                    })
+            },
+            Err,
+        );
+        async move { result }
+    }
+
+    fn find_device(
+        &self,
+        device_id: DeviceId,
+    ) -> impl std::future::Future<Output = Result<Option<DeviceRecord>, RepositoryError>> + Send
+    {
+        let outage = self.outage();
+        let found = self.lock().devices.get(&device_id).cloned();
+        async move { outage.map_or(Ok(found), Err) }
+    }
+
+    fn list_devices(
+        &self,
+        user: UserId,
+    ) -> impl std::future::Future<Output = Result<Vec<DeviceRecord>, RepositoryError>> + Send {
+        let outage = self.outage().or_else(|| {
+            self.devices_unavailable
+                .load(std::sync::atomic::Ordering::Acquire)
+                .then(|| {
+                    RepositoryError::Unavailable("the device listing is switched off".to_owned())
+                })
+        });
+        let mut found: Vec<_> = self
+            .lock()
+            .devices
+            .values()
+            .filter(|device| device.user_id == user && !device.is_revoked())
+            .cloned()
+            .collect();
+        found.sort_by_key(|device| device.device_id);
+        async move { outage.map_or(Ok(found), Err) }
+    }
+
+    fn link_device(
+        &self,
+        device: DeviceRecord,
+    ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+        let result = self
+            .outage()
+            .map_or_else(|| self.lock().insert_device(device), Err);
+        async move { result }
+    }
+
+    fn touch_device(
+        &self,
+        device_id: DeviceId,
+        at_unix_ns: u64,
+    ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+        let outage = self.outage();
+        if let Some(device) = self.lock().devices.get_mut(&device_id) {
+            device.last_authenticated_at_unix_ns = Some(at_unix_ns);
+        }
+        async move { outage.map_or(Ok(()), Err) }
+    }
+
+    fn revoke_device(
+        &self,
+        device_id: DeviceId,
+        at_unix_ns: u64,
+    ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+        let outage = self.outage();
+        if let Some(device) = self.lock().devices.get_mut(&device_id) {
+            // Revoking twice says the same thing, and the first time is when
+            // authority actually ended — the same rule the device log applies,
+            // and the conformance suite is what noticed these disagreed.
+            device.revoked_at_unix_ns.get_or_insert(at_unix_ns);
+        }
+        async move { outage.map_or(Ok(()), Err) }
+    }
+}
+
+impl FriendRepository for InMemoryIdentities {
+    fn find_friendship(
+        &self,
+        edge: FriendshipEdge,
+    ) -> impl std::future::Future<Output = Result<Option<FriendshipRecord>, RepositoryError>> + Send
+    {
+        let outage = self.outage();
+        let found = self.lock().friendships.get(&edge).cloned();
+        async move { outage.map_or(Ok(found), Err) }
+    }
+
+    fn save_friendship(
+        &self,
+        record: FriendshipRecord,
+        expected_version: u64,
+    ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+        let result = self.outage().map_or_else(
+            || {
+                let mut stored = self.lock();
+                let current = stored
+                    .friendships
+                    .get(&record.edge)
+                    .map_or(0, |existing| existing.version);
+                if current == expected_version {
+                    stored.friendships.insert(record.edge, record);
+                    Ok(())
+                } else {
+                    Err(RepositoryError::VersionConflict)
+                }
+            },
+            Err,
+        );
+        async move { result }
+    }
+
+    fn list_friendships(
+        &self,
+        user: UserId,
+    ) -> impl std::future::Future<Output = Result<Vec<FriendshipRecord>, RepositoryError>> + Send
+    {
+        let outage = self.outage();
+        let found: Vec<_> = self
+            .lock()
+            .friendships
+            .values()
+            .filter(|record| record.edge.joins(user))
+            .cloned()
+            .collect();
+        async move { outage.map_or(Ok(found), Err) }
+    }
+}
+
+impl EnvelopeRepository for InMemoryIdentities {
+    fn put_key_envelope(
+        &self,
+        envelope: KeyEnvelopeRecord,
+    ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+        let outage = self.outage();
+        if outage.is_none() {
+            self.lock()
+                .envelopes
+                .insert((envelope.share_id, envelope.recipient_device_id), envelope);
+        }
+        async move { outage.map_or(Ok(()), Err) }
+    }
+
+    fn list_key_envelopes(
+        &self,
+        recipient_device_id: DeviceId,
+        after_share_id: Option<ShareId>,
+    ) -> impl std::future::Future<Output = Result<KeyEnvelopePage, RepositoryError>> + Send {
+        let outage = self.outage();
+        let mut found: Vec<_> = self
+            .lock()
+            .envelopes
+            .values()
+            .filter(|envelope| {
+                envelope.recipient_device_id == recipient_device_id
+                    && after_share_id.is_none_or(|after| envelope.share_id > after)
+            })
+            .cloned()
+            .collect();
+        found.sort_unstable_by_key(|envelope| envelope.share_id);
+        let page = KeyEnvelopePage::from_sorted(found);
+        async move { outage.map_or(Ok(page), Err) }
+    }
+}
+
+impl ShareRepository for InMemoryIdentities {
+    fn find_share(
+        &self,
+        share_id: ShareId,
+    ) -> impl std::future::Future<Output = Result<Option<ShareRecord>, RepositoryError>> + Send
+    {
+        let outage = self.outage();
+        let found = self.lock().shares.get(&share_id).cloned();
+        async move { outage.map_or(Ok(found), Err) }
+    }
+
+    fn save_publication(
+        &self,
+        share: ShareRecord,
+        snapshot: ShareSnapshotRecord,
+        expected_revision: Option<u64>,
+    ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+        let result = self.outage().map_or_else(
+            || {
+                let mut stored = self.lock();
+                let actual = stored.shares.get(&share.share_id).map(|head| head.revision);
+                if actual != expected_revision {
+                    return Err(RepositoryError::VersionConflict);
+                }
+                if stored
+                    .snapshots
+                    .contains_key(&(snapshot.share_id, snapshot.revision))
+                {
+                    return Err(RepositoryError::VersionConflict);
+                }
+                stored
+                    .snapshots
+                    .insert((snapshot.share_id, snapshot.revision), snapshot);
+                stored.shares.insert(share.share_id, share);
+                Ok(())
+            },
+            Err,
+        );
+        async move { result }
+    }
+
+    fn find_snapshot(
+        &self,
+        share_id: ShareId,
+        revision: u64,
+    ) -> impl std::future::Future<Output = Result<Option<ShareSnapshotRecord>, RepositoryError>> + Send
+    {
+        let outage = self.outage();
+        let found = self.lock().snapshots.get(&(share_id, revision)).cloned();
+        async move { outage.map_or(Ok(found), Err) }
+    }
+
+    fn grant_share_access(
+        &self,
+        membership: ShareMembershipRecord,
+    ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+        let outage = self.outage();
+        if outage.is_none() {
+            self.lock()
+                .share_memberships
+                .insert((membership.share_id, membership.user_id), membership);
+        }
+        async move { outage.map_or(Ok(()), Err) }
+    }
+
+    fn revoke_share_access(
+        &self,
+        share_id: ShareId,
+        user_id: UserId,
+    ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+        let outage = self.outage();
+        if outage.is_none() {
+            self.lock().share_memberships.remove(&(share_id, user_id));
+        }
+        async move { outage.map_or(Ok(()), Err) }
+    }
+
+    fn has_share_access(
+        &self,
+        share_id: ShareId,
+        user_id: UserId,
+    ) -> impl std::future::Future<Output = Result<bool, RepositoryError>> + Send {
+        let outage = self.outage();
+        let stored = self.lock();
+        let authorized = stored
+            .shares
+            .get(&share_id)
+            .is_some_and(|share| share.owner == user_id)
+            || stored.share_memberships.contains_key(&(share_id, user_id));
+        async move { outage.map_or(Ok(authorized), Err) }
+    }
+
+    fn list_authorized_shares(
+        &self,
+        user_id: UserId,
+    ) -> impl std::future::Future<Output = Result<Vec<ShareRecord>, RepositoryError>> + Send {
+        let outage = self.outage();
+        let stored = self.lock();
+        let mut found: Vec<_> = stored
+            .shares
+            .values()
+            .filter(|share| {
+                share.owner == user_id
+                    || stored
+                        .share_memberships
+                        .contains_key(&(share.share_id, user_id))
+            })
+            .cloned()
+            .collect();
+        found.sort_unstable_by_key(|share| share.share_id);
+        async move { outage.map_or(Ok(found), Err) }
+    }
+
+    fn list_share_members(
+        &self,
+        share_id: ShareId,
+    ) -> impl std::future::Future<Output = Result<Vec<UserId>, RepositoryError>> + Send {
+        let outage = self.outage();
+        let stored = self.lock();
+        let mut members: Vec<_> = stored
+            .share_memberships
+            .values()
+            .filter(|membership| membership.share_id == share_id)
+            .map(|membership| membership.user_id)
+            .collect();
+        if let Some(owner) = stored.shares.get(&share_id).map(|share| share.owner) {
+            members.push(owner);
+        }
+        members.sort_unstable();
+        members.dedup();
+        async move { outage.map_or(Ok(members), Err) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn user(discriminator: &str) -> UserRecord {
+        UserRecord {
+            user_id: [1; 16],
+            username: "Ada".to_owned(),
+            normalized_username: "ada".to_owned(),
+            discriminator: discriminator.to_owned(),
+            created_at_unix_ns: 1,
+        }
+    }
+
+    fn device(seed: u8) -> DeviceRecord {
+        DeviceRecord {
+            device_id: [seed; 32],
+            user_id: [1; 16],
+            public_key: [3; 32],
+            encryption_public_key: [4; 32],
+            created_at_unix_ns: 1,
+            last_authenticated_at_unix_ns: None,
+            revoked_at_unix_ns: None,
+        }
+    }
+
+    #[test]
+    fn the_clock_only_moves_when_told_to() {
+        let clock = FixedClock::new(10);
+
+        assert_eq!(clock.now_unix_ns(), 10);
+        clock.advance(5);
+        assert_eq!(clock.now_unix_ns(), 15);
+        clock.set(1);
+        assert_eq!(clock.now_unix_ns(), 1);
+    }
+
+    #[test]
+    fn scripted_randomness_repeats_its_sequence() {
+        let random = ScriptedRandom::new(&[1, 2]);
+        let mut buffer = [0_u8; 5];
+
+        random.fill(&mut buffer);
+
+        assert_eq!(buffer, [1, 2, 1, 2, 1]);
+    }
+
+    #[tokio::test]
+    async fn a_registration_stores_the_user_and_its_device() {
+        let store = InMemoryIdentities::default();
+        assert!(store.is_empty());
+
+        assert_eq!(
+            store.insert_registration(user("7Q2XZ"), device(1)).await,
+            Ok(())
+        );
+
+        assert_eq!(store.user_count(), 1);
+        assert_eq!(store.device_count(), 1);
+        assert_eq!(store.find_user([1; 16]).await, Ok(Some(user("7Q2XZ"))));
+        assert_eq!(store.find_device([1; 32]).await, Ok(Some(device(1))));
+        assert_eq!(store.find_user([9; 16]).await, Ok(None));
+        assert_eq!(store.find_device([9; 32]).await, Ok(None));
+    }
+
+    #[tokio::test]
+    async fn a_taken_handle_leaves_nothing_behind() {
+        let store = InMemoryIdentities::default();
+        store
+            .insert_registration(user("7Q2XZ"), device(1))
+            .await
+            .expect("first registration");
+
+        assert_eq!(
+            store.insert_registration(user("7Q2XZ"), device(2)).await,
+            Err(RepositoryError::HandleTaken)
+        );
+
+        assert_eq!(store.user_count(), 1);
+        assert_eq!(
+            store.device_count(),
+            1,
+            "a rejected registration must not enrol its device"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_enrolled_device_cannot_register_again() {
+        let store = InMemoryIdentities::default();
+        store
+            .insert_registration(user("7Q2XZ"), device(1))
+            .await
+            .expect("first registration");
+
+        assert_eq!(
+            store.insert_registration(user("ABCDE"), device(1)).await,
+            Err(RepositoryError::DeviceExists)
+        );
+        assert_eq!(
+            store.user_count(),
+            1,
+            "a rejected registration must not claim its handle"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_friendship_write_must_match_the_stored_version() {
+        let store = InMemoryIdentities::default();
+        let edge = FriendshipEdge::between([1; 16], [2; 16]).expect("distinct users");
+        let first = FriendshipRecord::requested(edge, [1; 16], 1);
+
+        // Version zero means the edge must not exist yet.
+        assert_eq!(store.save_friendship(first.clone(), 0).await, Ok(()));
+        assert_eq!(
+            store.save_friendship(first.clone(), 0).await,
+            Err(RepositoryError::VersionConflict),
+            "a second writer that read nothing must not overwrite"
+        );
+
+        let accepted = FriendshipRecord {
+            version: 2,
+            ..first.clone()
+        };
+        assert_eq!(store.save_friendship(accepted.clone(), 1).await, Ok(()));
+        assert_eq!(store.find_friendship(edge).await, Ok(Some(accepted)));
+        assert_eq!(
+            store.list_friendships([1; 16]).await.map(|all| all.len()),
+            Ok(1)
+        );
+        assert_eq!(store.list_friendships([9; 16]).await, Ok(Vec::new()));
+    }
+
+    #[tokio::test]
+    async fn a_linked_device_joins_an_existing_user_without_touching_it() {
+        let store = InMemoryIdentities::default();
+        store
+            .insert_registration(user("7Q2XZ"), device(1))
+            .await
+            .expect("first device registered");
+
+        assert_eq!(store.link_device(device(2)).await, Ok(()));
+
+        assert_eq!(store.user_count(), 1, "linking creates no new user");
+        assert_eq!(store.device_count(), 2);
+        assert_eq!(store.find_device([2; 32]).await, Ok(Some(device(2))));
+        assert_eq!(
+            store.link_device(device(2)).await,
+            Err(RepositoryError::DeviceExists)
+        );
+    }
+
+    #[tokio::test]
+    async fn records_authentication_and_revocation() {
+        let store = InMemoryIdentities::default();
+        store.enrol_device(device(1)).expect("device enrolled");
+        store.store_user(user("7Q2XZ")).expect("user stored");
+        assert_eq!(
+            store.enrol_device(device(1)),
+            Err(RepositoryError::DeviceExists)
+        );
+        assert_eq!(
+            store.store_user(user("7Q2XZ")),
+            Err(RepositoryError::HandleTaken)
+        );
+
+        assert_eq!(store.touch_device([1; 32], 42).await, Ok(()));
+        assert_eq!(store.revoke_device([1; 32], 43).await, Ok(()));
+
+        let stored = store
+            .find_device([1; 32])
+            .await
+            .expect("stored")
+            .expect("present");
+        assert_eq!(stored.last_authenticated_at_unix_ns, Some(42));
+        assert_eq!(stored.revoked_at_unix_ns, Some(43));
+        assert!(stored.is_revoked());
+
+        // Updating a device that is not there is a no-op, not an error.
+        assert_eq!(store.touch_device([9; 32], 1).await, Ok(()));
+        assert_eq!(store.revoke_device([9; 32], 1).await, Ok(()));
+    }
+
+    /// A refused write must not also land. The double reports the outage and
+    /// keeps the envelope out, so a test that switches the store off and back
+    /// on does not find writes it never accepted.
+    #[tokio::test]
+    async fn an_envelope_refused_by_an_outage_is_not_stored() {
+        let store = InMemoryIdentities::default();
+        let envelope = KeyEnvelopeRecord {
+            share_id: [7; 16],
+            recipient_device_id: [2; 32],
+            ephemeral_public_key: [9; 32],
+            ciphertext: b"sealed".to_vec(),
+            created_at_unix_ns: 1,
+        };
+
+        store.set_unavailable(true);
+        assert_eq!(
+            store.put_key_envelope(envelope.clone()).await,
+            Err(RepositoryError::Unavailable(
+                "the store is switched off".to_owned()
+            ))
+        );
+
+        store.set_unavailable(false);
+        assert_eq!(
+            store
+                .list_key_envelopes([2; 32], None)
+                .await
+                .map(|page| page.envelopes),
+            Ok(Vec::new()),
+            "the refused write left nothing behind"
+        );
+
+        assert_eq!(store.put_key_envelope(envelope.clone()).await, Ok(()));
+        assert_eq!(
+            store
+                .list_key_envelopes([2; 32], None)
+                .await
+                .map(|page| page.envelopes),
+            Ok(vec![envelope])
+        );
+    }
+
+    /// The in-memory store has to refuse the same writes the durable one
+    /// does, or a rule proven against it would not hold in production.
+    #[tokio::test]
+    async fn a_publication_is_refused_unless_the_head_is_where_it_was_read() {
+        let store = InMemoryIdentities::default();
+        let share = ShareRecord {
+            share_id: [1; 16],
+            owner: [2; 16],
+            revision: 1,
+            snapshot_id: [3; 32],
+            capsule: b"sealed".to_vec(),
+            capsule_signature: vec![4; 64],
+            created_at_unix_ns: 1,
+            updated_at_unix_ns: 1,
+        };
+        let snapshot = ShareSnapshotRecord {
+            share_id: share.share_id,
+            revision: 1,
+            snapshot_id: share.snapshot_id,
+            capsule: share.capsule.clone(),
+            capsule_signature: share.capsule_signature.clone(),
+            created_at_unix_ns: 1,
+        };
+
+        // Expecting a revision that is not stored is a lost race, not a write.
+        assert_eq!(
+            store
+                .save_publication(share.clone(), snapshot.clone(), Some(7))
+                .await,
+            Err(RepositoryError::VersionConflict)
+        );
+        assert_eq!(store.find_share(share.share_id).await, Ok(None));
+
+        assert_eq!(
+            store
+                .save_publication(share.clone(), snapshot.clone(), None)
+                .await,
+            Ok(())
+        );
+
+        // A revision that already exists is immutable, so re-writing it is
+        // refused even when the head is exactly where the writer expected.
+        let same_revision_again = ShareRecord {
+            revision: 1,
+            capsule: b"different".to_vec(),
+            ..share.clone()
+        };
+        assert_eq!(
+            store
+                .save_publication(same_revision_again, snapshot, Some(1))
+                .await,
+            Err(RepositoryError::VersionConflict)
+        );
+        assert_eq!(store.find_share(share.share_id).await, Ok(Some(share)));
+    }
+}

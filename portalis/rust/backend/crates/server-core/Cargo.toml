@@ -1,0 +1,19 @@
+[package]
+name = "portalis-nexus-server-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+portalis-nexus-protocol.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+ed25519-dalek.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

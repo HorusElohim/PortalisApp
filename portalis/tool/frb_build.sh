@@ -11,6 +11,15 @@ CRATE="rust/backend"
 PLATFORM="${1:-macos}"
 
 function maybe_codegen() {
+  # PowerShell sees Cargo's bin directory automatically on a typical Windows
+  # install, while Git Bash may not inherit it. Resolve the same directory
+  # before declaring a tool that is already installed to be missing.
+  if ! command -v flutter_rust_bridge_codegen >/dev/null 2>&1 \
+      && [[ -n "${USERPROFILE:-}" ]] \
+      && command -v cygpath >/dev/null 2>&1; then
+    CARGO_BIN=$(cygpath -u "${CARGO_HOME:-$USERPROFILE/.cargo}/bin")
+    export PATH="$PATH:$CARGO_BIN"
+  fi
   if ! command -v flutter_rust_bridge_codegen >/dev/null 2>&1; then
     echo "(error) flutter_rust_bridge_codegen not found."
     echo "        Install with: cargo install flutter_rust_bridge_codegen"
@@ -18,11 +27,18 @@ function maybe_codegen() {
   fi
   echo "==> Regenerating flutter_rust_bridge bindings"
   # Use new CLI (2.x): rust_input expects crate paths, and rust_root points to the crate dir.
+  # IMPORTANT: list every bridged module explicitly (never the bare "crate"
+  # wildcard) — flutter_rust_bridge_codegen's crate-wide scan walks every
+  # `mod` declaration regardless of visibility (pub/pub(crate)/private all
+  # look the same to it), so a bare "crate" sweeps up internal-only modules
+  # like `domain` too and fails to compile (private fields it assumes are
+  # bridgeable). See rust/backend/README.md's "Flutter boundary API".
   flutter_rust_bridge_codegen generate \
     --rust-root "$CRATE" \
-    --rust-input crate \
-    --dart-output "lib/bridge_generated" \
-    --rust-output "$CRATE/src/api.rs"
+    --rust-input crate::bridge,crate::portalis_api,crate::torrent,crate::device,crate::settings,crate::nexus_settings \
+    --dart-output "lib/nexus/bridge" \
+    --rust-output "$CRATE/src/api.rs" \
+    --no-add-mod-to-lib
 }
 
 function build_macos() {

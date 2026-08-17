@@ -1,0 +1,1626 @@
+//! Registration and device authentication.
+
+use portalis_nexus_protocol::{
+    DISCRIMINATOR_CHARS, SessionBinding, SignatureError, UUID_V7_ENTROPY_BYTES,
+    authentication_payload, derive_device_id, is_contributory_x25519_public_key,
+    link_device_payload, registration_payload, user_id_from, verify_signature,
+};
+use thiserror::Error;
+
+use crate::handle::{
+    HandleError, discriminator_from_entropy, normalize_username, validate_username,
+};
+use crate::ports::{
+    Clock, DeviceKey, DeviceRecord, EncryptionKey, IdentityRepository, RandomSource,
+    RepositoryError, UserId, UserRecord,
+};
+
+/// How many random discriminators a registration tries before giving up.
+///
+/// Allocation always retries a fresh random value against the unique index; it
+/// never scans for the next free one, which would leak how many users share a
+/// username and serialise every registration on the same scan.
+pub const HANDLE_ALLOCATION_ATTEMPTS: usize = 8;
+
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum IdentityError {
+    #[error(transparent)]
+    Handle(#[from] HandleError),
+    #[error(transparent)]
+    Signature(#[from] SignatureError),
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+    #[error("no free discriminator after {HANDLE_ALLOCATION_ATTEMPTS} attempts")]
+    UsernameUnavailable,
+    #[error("this device is already registered")]
+    DeviceAlreadyRegistered,
+    #[error("this device is not authorized")]
+    UnknownDevice,
+    #[error("this device was revoked")]
+    DeviceRevoked,
+    #[error("the device is authorized but its user is missing")]
+    MissingUser,
+}
+
+/// Who a verified connection belongs to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Identity {
+    pub user: UserRecord,
+    pub device: DeviceRecord,
+}
+
+/// A signed request to claim a new username.
+#[derive(Clone, Copy, Debug)]
+pub struct RegistrationRequest<'a> {
+    pub binding: SessionBinding<'a>,
+    pub requested_username: &'a str,
+    pub device_public_key: &'a [u8],
+    pub encryption_public_key: &'a [u8],
+    pub signature: &'a [u8],
+}
+
+/// A signed request to prove ownership of an enrolled device.
+#[derive(Clone, Copy, Debug)]
+pub struct AuthenticationRequest<'a> {
+    pub binding: SessionBinding<'a>,
+    pub device_public_key: &'a [u8],
+    pub signature: &'a [u8],
+}
+
+/// A durable approval from an already-authorized device to enrol a new one.
+#[derive(Clone, Copy, Debug)]
+pub struct LinkDeviceRequest<'a> {
+    pub candidate_signing_public_key: &'a [u8],
+    pub candidate_encryption_public_key: &'a [u8],
+    pub approval_signature: &'a [u8],
+}
+
+/// Applies the identity rules over injected storage, time, and randomness.
+pub struct IdentityService<S, C, R> {
+    store: S,
+    clock: C,
+    random: R,
+}
+
+impl<S, C, R> IdentityService<S, C, R>
+where
+    S: IdentityRepository,
+    C: Clock,
+    R: RandomSource,
+{
+    pub const fn new(store: S, clock: C, random: R) -> Self {
+        Self {
+            store,
+            clock,
+            random,
+        }
+    }
+
+    /// Claims a username and enrols the signing device as its first.
+    ///
+    /// The signature is verified before anything is written, so an unsigned
+    /// request cannot consume a discriminator or reveal whether a name exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentityError`] when the username breaks the handle rules,
+    /// the signature does not cover this request, the device is already
+    /// enrolled, no discriminator is free, or storage fails.
+    pub async fn register(
+        &self,
+        request: RegistrationRequest<'_>,
+    ) -> Result<Identity, IdentityError> {
+        validate_username(request.requested_username)?;
+        let encryption_public_key = Self::verify_encryption_key(request.encryption_public_key)?;
+        let payload = registration_payload(
+            &request.binding,
+            request.requested_username,
+            request.device_public_key,
+            request.encryption_public_key,
+        );
+        let public_key = Self::verify(request.device_public_key, &payload, request.signature)?;
+
+        let device_id = derive_device_id(&public_key);
+        // Registering a device that is already enrolled answers with who it
+        // is, rather than refusing.
+        //
+        // A connection is issued one challenge and may spend it once, so a
+        // client that has to discover which of register/authenticate applies
+        // would burn its only attempt finding out. Making this idempotent is
+        // what lets an app say "this is me" on every start and be told its
+        // handle, without keeping a local "already registered" flag — a copy
+        // of the server's own fact, free to drift the moment a device is
+        // restored from a backup or pointed at a different service.
+        //
+        // The requested username is deliberately ignored here: handles are
+        // permanent, so the truthful answer for an enrolled device is the one
+        // it already has. Nothing is granted that authentication would not
+        // already grant, because reaching this line at all required a
+        // signature from the device's own key.
+        if let Some(device) = self.store.find_device(device_id).await? {
+            if device.is_revoked() {
+                return Err(IdentityError::DeviceRevoked);
+            }
+            let user = self
+                .store
+                .find_user(device.user_id)
+                .await?
+                .ok_or(IdentityError::MissingUser)?;
+            return Ok(Identity { user, device });
+        }
+
+        let now = self.clock.now_unix_ns();
+        let user_id = self.new_user_id(now);
+        let device = DeviceRecord {
+            device_id,
+            user_id,
+            public_key,
+            encryption_public_key,
+            created_at_unix_ns: now,
+            last_authenticated_at_unix_ns: Some(now),
+            revoked_at_unix_ns: None,
+        };
+
+        self.allocate_handle(request.requested_username, user_id, device, now)
+            .await
+    }
+
+    /// Verifies that a connection holds the key of an authorized device.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentityError`] when the signature does not cover this
+    /// request, the device is unknown or revoked, its user is missing, or
+    /// storage fails.
+    pub async fn authenticate(
+        &self,
+        request: AuthenticationRequest<'_>,
+    ) -> Result<Identity, IdentityError> {
+        let payload = authentication_payload(&request.binding, request.device_public_key);
+        let public_key = Self::verify(request.device_public_key, &payload, request.signature)?;
+
+        let device_id = derive_device_id(&public_key);
+        let mut device = self
+            .store
+            .find_device(device_id)
+            .await?
+            .ok_or(IdentityError::UnknownDevice)?;
+        if device.is_revoked() {
+            return Err(IdentityError::DeviceRevoked);
+        }
+
+        let user = self
+            .store
+            .find_user(device.user_id)
+            .await?
+            .ok_or(IdentityError::MissingUser)?;
+
+        let now = self.clock.now_unix_ns();
+        self.store.touch_device(device_id, now).await?;
+        device.last_authenticated_at_unix_ns = Some(now);
+
+        Ok(Identity { user, device })
+    }
+
+    /// Enrols a new device for `approver`'s user, authorized by that device's
+    /// signature over the candidate's keys rather than by a fresh challenge.
+    ///
+    /// The approving device is re-read from storage rather than trusted from
+    /// an earlier authentication, so a revocation takes effect immediately
+    /// even on a connection that has been open since before it happened.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentityError`] when the approving device is unknown or
+    /// revoked, the approval signature does not cover these exact candidate
+    /// keys for this server, the candidate's encryption key has the wrong
+    /// length, the candidate device is already enrolled, or storage fails.
+    pub async fn link_device(
+        &self,
+        approver_device_id: [u8; 32],
+        server_identity: &str,
+        request: LinkDeviceRequest<'_>,
+    ) -> Result<Identity, IdentityError> {
+        let approver = self
+            .store
+            .find_device(approver_device_id)
+            .await?
+            .ok_or(IdentityError::UnknownDevice)?;
+        if approver.is_revoked() {
+            return Err(IdentityError::DeviceRevoked);
+        }
+
+        let payload = link_device_payload(
+            server_identity,
+            request.candidate_signing_public_key,
+            request.candidate_encryption_public_key,
+        );
+        // The approving device signs, not the candidate: this proves consent
+        // from an already-authorized key, not possession of the new one. The
+        // candidate proves possession of its own key the first time it
+        // authenticates, the same as any other device.
+        verify_signature(&approver.public_key, &payload, request.approval_signature)?;
+
+        let candidate_signing_public_key =
+            DeviceKey::try_from(request.candidate_signing_public_key).map_err(|_| {
+                SignatureError::InvalidKeyLength {
+                    actual: request.candidate_signing_public_key.len(),
+                }
+            })?;
+        let candidate_encryption_public_key =
+            Self::verify_encryption_key(request.candidate_encryption_public_key)?;
+
+        let device_id = derive_device_id(&candidate_signing_public_key);
+        if self.store.find_device(device_id).await?.is_some() {
+            return Err(IdentityError::DeviceAlreadyRegistered);
+        }
+
+        let now = self.clock.now_unix_ns();
+        let device = DeviceRecord {
+            device_id,
+            user_id: approver.user_id,
+            public_key: candidate_signing_public_key,
+            encryption_public_key: candidate_encryption_public_key,
+            created_at_unix_ns: now,
+            last_authenticated_at_unix_ns: None,
+            revoked_at_unix_ns: None,
+        };
+        self.store.link_device(device.clone()).await?;
+
+        let user = self
+            .store
+            .find_user(approver.user_id)
+            .await?
+            .ok_or(IdentityError::MissingUser)?;
+        Ok(Identity { user, device })
+    }
+
+    /// Revokes a device, ending its ability to authenticate.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentityError`] when the device is unknown or storage fails.
+    pub async fn revoke_device(&self, device_id: [u8; 32]) -> Result<(), IdentityError> {
+        if self.store.find_device(device_id).await?.is_none() {
+            return Err(IdentityError::UnknownDevice);
+        }
+        let now = self.clock.now_unix_ns();
+        self.store.revoke_device(device_id, now).await?;
+        Ok(())
+    }
+
+    /// Verifies a signature and returns the key in its fixed-size form.
+    fn verify(
+        device_public_key: &[u8],
+        payload: &[u8],
+        signature: &[u8],
+    ) -> Result<DeviceKey, IdentityError> {
+        verify_signature(device_public_key, payload, signature)?;
+        // Verification already proved the length, so this cannot fail.
+        let key = DeviceKey::try_from(device_public_key)
+            .expect("a verified signature implies a fixed-size key");
+        Ok(key)
+    }
+
+    /// Checks an encryption key has the right shape.
+    ///
+    /// Unlike a signing key this is never itself verified against a
+    /// signature, so its length has to be checked on its own.
+    fn verify_encryption_key(encryption_public_key: &[u8]) -> Result<EncryptionKey, IdentityError> {
+        let key = EncryptionKey::try_from(encryption_public_key).map_err(|_| {
+            IdentityError::Signature(SignatureError::InvalidEncryptionKeyLength {
+                actual: encryption_public_key.len(),
+            })
+        })?;
+        if !is_contributory_x25519_public_key(&key) {
+            return Err(SignatureError::NonContributoryEncryptionKey.into());
+        }
+        Ok(key)
+    }
+
+    fn new_user_id(&self, now_unix_ns: u64) -> UserId {
+        let mut entropy = [0_u8; UUID_V7_ENTROPY_BYTES];
+        self.random.fill(&mut entropy);
+        user_id_from(now_unix_ns, &entropy)
+    }
+
+    /// Retries random discriminators against the unique index.
+    ///
+    /// Each attempt writes the user and its device together, so a collision
+    /// leaves nothing behind and a success cannot strand either record.
+    async fn allocate_handle(
+        &self,
+        username: &str,
+        user_id: UserId,
+        device: DeviceRecord,
+        now_unix_ns: u64,
+    ) -> Result<Identity, IdentityError> {
+        for _ in 0..HANDLE_ALLOCATION_ATTEMPTS {
+            let mut entropy = [0_u8; DISCRIMINATOR_CHARS];
+            self.random.fill(&mut entropy);
+            // The username was validated on entry and the discriminator is
+            // generated from the alphabet, so the pair is a valid handle by
+            // construction and needs no re-validation here.
+            let user = UserRecord {
+                user_id,
+                username: username.to_owned(),
+                normalized_username: normalize_username(username),
+                discriminator: discriminator_from_entropy(&entropy),
+                created_at_unix_ns: now_unix_ns,
+            };
+            match self
+                .store
+                .insert_registration(user.clone(), device.clone())
+                .await
+            {
+                Ok(()) => return Ok(Identity { user, device }),
+                Err(RepositoryError::HandleTaken) => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Err(IdentityError::UsernameUnavailable)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ed25519_dalek::{Signer, SigningKey};
+    use portalis_nexus_protocol::CURRENT_PROTOCOL_VERSION;
+
+    use super::*;
+    use crate::memory::{FixedClock, InMemoryIdentities, ScriptedRandom};
+    use crate::ports::UserDirectory;
+
+    const NOW: u64 = 1_700_000_000_000_000_000;
+    const SERVER_IDENTITY: &str = "test-nexus-node";
+
+    /// One service type across every test. `IdentityService` is generic, so a
+    /// second instantiation would be measured as its own set of coverage
+    /// regions; the fault-injecting stores stand in for the plain ones with
+    /// `Fault::None`.
+    type TestService = IdentityService<FaultyStore, FixedClock, ScriptedRandom>;
+
+    /// Which store operation should fail, so the service's degraded paths are
+    /// exercised rather than assumed.
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    enum Fault {
+        #[default]
+        None,
+        FindUser,
+        FindDevice,
+        /// Fails `find_device` from its second call onward within one
+        /// operation, rather than its first. `link_device` calls it twice —
+        /// once for the approver, once for the candidate — and this is the
+        /// only way to make the second of those calls fail in isolation.
+        FindDeviceAgain,
+        Insert,
+        Link,
+        Touch,
+        Revoke,
+    }
+
+    impl Fault {
+        /// Returns the failure for `operation`, or `None` to pass through.
+        fn hits(self, operation: Fault) -> Option<RepositoryError> {
+            (self == operation).then(|| RepositoryError::Unavailable(self.label().to_owned()))
+        }
+
+        fn label(self) -> &'static str {
+            match self {
+                Self::None => "none",
+                Self::FindUser => "find-user",
+                Self::FindDevice | Self::FindDeviceAgain => "find-device",
+                Self::Insert => "insert",
+                Self::Link => "link",
+                Self::Touch => "touch",
+                Self::Revoke => "revoke",
+            }
+        }
+    }
+
+    #[derive(Default)]
+    struct FaultyStore {
+        inner: InMemoryIdentities,
+        fault: Fault,
+        find_device_calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl UserDirectory for FaultyStore {
+        fn find_user(
+            &self,
+            user_id: UserId,
+        ) -> impl std::future::Future<Output = Result<Option<UserRecord>, RepositoryError>> + Send
+        {
+            let failure = self.fault.hits(Fault::FindUser);
+            let inner = self.inner.find_user(user_id);
+            async move {
+                match failure {
+                    Some(error) => Err(error),
+                    None => inner.await,
+                }
+            }
+        }
+
+        fn find_user_by_handle(
+            &self,
+            normalized_username: &str,
+            discriminator: &str,
+        ) -> impl std::future::Future<Output = Result<Option<UserRecord>, RepositoryError>> + Send
+        {
+            let failure = self.fault.hits(Fault::FindUser);
+            let inner = self
+                .inner
+                .find_user_by_handle(normalized_username, discriminator);
+            async move {
+                match failure {
+                    Some(error) => Err(error),
+                    None => inner.await,
+                }
+            }
+        }
+    }
+
+    impl IdentityRepository for FaultyStore {
+        fn insert_registration(
+            &self,
+            user: UserRecord,
+            device: DeviceRecord,
+        ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+            let failure = self.fault.hits(Fault::Insert);
+            let inner = self.inner.insert_registration(user, device);
+            async move {
+                match failure {
+                    Some(error) => Err(error),
+                    None => inner.await,
+                }
+            }
+        }
+
+        fn find_device(
+            &self,
+            device_id: crate::ports::DeviceId,
+        ) -> impl std::future::Future<Output = Result<Option<DeviceRecord>, RepositoryError>> + Send
+        {
+            let call = self
+                .find_device_calls
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let failure = match self.fault {
+                Fault::FindDevice if call == 0 => {
+                    Some(RepositoryError::Unavailable(self.fault.label().to_owned()))
+                }
+                Fault::FindDeviceAgain if call > 0 => {
+                    Some(RepositoryError::Unavailable(self.fault.label().to_owned()))
+                }
+                _ => None,
+            };
+            let inner = self.inner.find_device(device_id);
+            async move {
+                match failure {
+                    Some(error) => Err(error),
+                    None => inner.await,
+                }
+            }
+        }
+
+        fn list_devices(
+            &self,
+            user: crate::ports::UserId,
+        ) -> impl std::future::Future<Output = Result<Vec<DeviceRecord>, RepositoryError>> + Send
+        {
+            self.inner.list_devices(user)
+        }
+
+        fn link_device(
+            &self,
+            device: DeviceRecord,
+        ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+            let failure = self.fault.hits(Fault::Link);
+            let inner = self.inner.link_device(device);
+            async move {
+                match failure {
+                    Some(error) => Err(error),
+                    None => inner.await,
+                }
+            }
+        }
+
+        fn touch_device(
+            &self,
+            device_id: crate::ports::DeviceId,
+            at_unix_ns: u64,
+        ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+            let failure = self.fault.hits(Fault::Touch);
+            let inner = self.inner.touch_device(device_id, at_unix_ns);
+            async move {
+                match failure {
+                    Some(error) => Err(error),
+                    None => inner.await,
+                }
+            }
+        }
+
+        fn revoke_device(
+            &self,
+            device_id: crate::ports::DeviceId,
+            at_unix_ns: u64,
+        ) -> impl std::future::Future<Output = Result<(), RepositoryError>> + Send {
+            let failure = self.fault.hits(Fault::Revoke);
+            let inner = self.inner.revoke_device(device_id, at_unix_ns);
+            async move {
+                match failure {
+                    Some(error) => Err(error),
+                    None => inner.await,
+                }
+            }
+        }
+    }
+
+    fn unavailable(operation: &str) -> IdentityError {
+        IdentityError::Repository(RepositoryError::Unavailable(operation.to_owned()))
+    }
+
+    fn service(random: &[u8]) -> TestService {
+        service_with(FaultyStore::default(), random)
+    }
+
+    fn service_with(store: FaultyStore, random: &[u8]) -> TestService {
+        IdentityService::new(store, FixedClock::new(NOW), ScriptedRandom::new(random))
+    }
+
+    fn key(seed: u8) -> SigningKey {
+        SigningKey::from_bytes(&[seed; 32])
+    }
+
+    fn binding(challenge: &[u8; 32]) -> SessionBinding<'_> {
+        SessionBinding {
+            protocol_version: CURRENT_PROTOCOL_VERSION,
+            server_identity: SERVER_IDENTITY,
+            connection_id: &[4; 16],
+            challenge,
+            server_time_unix_ns: NOW,
+        }
+    }
+
+    const ENCRYPTION_KEY: [u8; 32] = [6; 32];
+
+    /// Signs a well-formed registration for `username` with `signer`.
+    fn registration<'a>(
+        signer: &SigningKey,
+        username: &'a str,
+        challenge: &'a [u8; 32],
+        public_key: &'a mut [u8; 32],
+        signature: &'a mut [u8; 64],
+    ) -> RegistrationRequest<'a> {
+        *public_key = signer.verifying_key().to_bytes();
+        let payload =
+            registration_payload(&binding(challenge), username, public_key, &ENCRYPTION_KEY);
+        *signature = signer.sign(&payload).to_bytes();
+        RegistrationRequest {
+            binding: binding(challenge),
+            requested_username: username,
+            device_public_key: public_key,
+            encryption_public_key: &ENCRYPTION_KEY,
+            signature,
+        }
+    }
+
+    /// Signs a well-formed authentication for `signer`.
+    fn authentication<'a>(
+        signer: &SigningKey,
+        challenge: &'a [u8; 32],
+        public_key: &'a mut [u8; 32],
+        signature: &'a mut [u8; 64],
+    ) -> AuthenticationRequest<'a> {
+        *public_key = signer.verifying_key().to_bytes();
+        let payload = authentication_payload(&binding(challenge), public_key);
+        *signature = signer.sign(&payload).to_bytes();
+        AuthenticationRequest {
+            binding: binding(challenge),
+            device_public_key: public_key,
+            signature,
+        }
+    }
+
+    /// Signs a well-formed approval from `approver` for `candidate`'s keys.
+    fn link_device_request<'a>(
+        approver: &SigningKey,
+        candidate: &SigningKey,
+        candidate_encryption_public_key: &'a [u8; 32],
+        signing_public_key: &'a mut [u8; 32],
+        signature: &'a mut [u8; 64],
+    ) -> LinkDeviceRequest<'a> {
+        *signing_public_key = candidate.verifying_key().to_bytes();
+        let payload = link_device_payload(
+            SERVER_IDENTITY,
+            signing_public_key,
+            candidate_encryption_public_key,
+        );
+        *signature = approver.sign(&payload).to_bytes();
+        LinkDeviceRequest {
+            candidate_signing_public_key: signing_public_key,
+            candidate_encryption_public_key,
+            approval_signature: signature,
+        }
+    }
+
+    #[tokio::test]
+    async fn registers_a_user_and_enrols_its_first_device() {
+        let service = service(&[9]);
+        let signer = key(7);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+
+        let identity = service
+            .register(registration(
+                &signer,
+                "Ada",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("registration succeeds");
+
+        assert_eq!(identity.user.username, "Ada");
+        assert_eq!(identity.user.normalized_username, "ada");
+        assert_eq!(identity.user.discriminator.len(), DISCRIMINATOR_CHARS);
+        assert_eq!(identity.user.created_at_unix_ns, NOW);
+        assert_eq!(identity.device.device_id, derive_device_id(&public));
+        assert_eq!(identity.device.user_id, identity.user.user_id);
+        assert_eq!(identity.device.public_key, public);
+        assert!(!identity.device.is_revoked());
+    }
+
+    #[tokio::test]
+    async fn an_enrolled_device_authenticates_and_records_the_time() {
+        let service = service(&[9]);
+        let signer = key(7);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+        let registered = service
+            .register(registration(
+                &signer,
+                "Ada",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("registration succeeds");
+        service.clock.advance(5_000);
+
+        let identity = service
+            .authenticate(authentication(
+                &signer,
+                &[2; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("authentication succeeds");
+
+        assert_eq!(identity.user, registered.user);
+        assert_eq!(identity.device.device_id, registered.device.device_id);
+        assert_eq!(
+            identity.device.last_authenticated_at_unix_ns,
+            Some(NOW + 5_000)
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_a_signature_from_the_wrong_key() {
+        let service = service(&[9]);
+        let signer = key(7);
+        let impostor = key(8);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+        service
+            .register(registration(
+                &signer,
+                "Ada",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("registration succeeds");
+
+        // The impostor claims the enrolled key but signs with its own.
+        let enrolled = signer.verifying_key().to_bytes();
+        let payload = authentication_payload(&binding(&[2; 32]), &enrolled);
+        let forged = impostor.sign(&payload).to_bytes();
+
+        assert_eq!(
+            service
+                .authenticate(AuthenticationRequest {
+                    binding: binding(&[2; 32]),
+                    device_public_key: &enrolled,
+                    signature: &forged,
+                })
+                .await,
+            Err(IdentityError::Signature(SignatureError::Rejected))
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_a_signature_replayed_from_another_challenge() {
+        let service = service(&[9]);
+        let signer = key(7);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+        service
+            .register(registration(
+                &signer,
+                "Ada",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("registration succeeds");
+        // A signature captured against one challenge.
+        let captured = authentication(&signer, &[2; 32], &mut public, &mut signature);
+        let stolen_signature = *captured.signature.first_chunk::<64>().expect("64 bytes");
+
+        // Replayed onto a connection issued a different challenge.
+        let public_key = signer.verifying_key().to_bytes();
+        assert_eq!(
+            service
+                .authenticate(AuthenticationRequest {
+                    binding: binding(&[3; 32]),
+                    device_public_key: &public_key,
+                    signature: &stolen_signature,
+                })
+                .await,
+            Err(IdentityError::Signature(SignatureError::Rejected))
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_an_unknown_device() {
+        let service = service(&[9]);
+        let stranger = key(11);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+
+        assert_eq!(
+            service
+                .authenticate(authentication(
+                    &stranger,
+                    &[2; 32],
+                    &mut public,
+                    &mut signature
+                ))
+                .await,
+            Err(IdentityError::UnknownDevice)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_revoked_device_can_no_longer_authenticate() {
+        let service = service(&[9]);
+        let signer = key(7);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+        let identity = service
+            .register(registration(
+                &signer,
+                "Ada",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("registration succeeds");
+
+        service
+            .revoke_device(identity.device.device_id)
+            .await
+            .expect("revocation succeeds");
+
+        assert_eq!(
+            service
+                .authenticate(authentication(
+                    &signer,
+                    &[2; 32],
+                    &mut public,
+                    &mut signature
+                ))
+                .await,
+            Err(IdentityError::DeviceRevoked)
+        );
+        assert_eq!(
+            service.revoke_device([0; 32]).await,
+            Err(IdentityError::UnknownDevice)
+        );
+    }
+
+    #[tokio::test]
+    /// Registering twice is how a device says "this is me" on every start.
+    ///
+    /// It answers with the handle that device already has, and refuses to
+    /// rename it: a handle is permanent, and a second registration asking for
+    /// a different name must not be a way around that.
+    async fn registering_the_same_device_again_says_who_it_already_is() {
+        let service = service(&[9]);
+        let signer = key(7);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+        let first = service
+            .register(registration(
+                &signer,
+                "Ada",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("registration succeeds");
+
+        let again = service
+            .register(registration(
+                &signer,
+                "Grace",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("a device that is already enrolled is told who it is");
+
+        assert_eq!(
+            again.user.username, "Ada",
+            "asking to register as Grace must not rename Ada"
+        );
+        assert_eq!(again.user.user_id, first.user.user_id);
+        assert_eq!(again.device.device_id, first.device.device_id);
+    }
+
+    #[tokio::test]
+    /// A revoked device is not quietly re-admitted by registering again.
+    async fn a_revoked_device_cannot_register_its_way_back_in() {
+        let service = service(&[9]);
+        let signer = key(7);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+        let enrolled = service
+            .register(registration(
+                &signer,
+                "Ada",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("registration succeeds");
+
+        service
+            .revoke_device(enrolled.device.device_id)
+            .await
+            .expect("revoking succeeds");
+
+        assert_eq!(
+            service
+                .register(registration(
+                    &signer,
+                    "Ada",
+                    &[1; 32],
+                    &mut public,
+                    &mut signature
+                ))
+                .await,
+            Err(IdentityError::DeviceRevoked)
+        );
+    }
+
+    #[tokio::test]
+    async fn an_authorized_device_links_a_second_one_for_the_same_user() {
+        let approver = key(7);
+        let service = with_enrolled_identity(Fault::None, &approver);
+        let candidate = key(8);
+        let (mut candidate_public, mut approval) = ([0; 32], [0; 64]);
+
+        let linked = service
+            .link_device(
+                derive_device_id(&approver.verifying_key().to_bytes()),
+                SERVER_IDENTITY,
+                link_device_request(
+                    &approver,
+                    &candidate,
+                    &ENCRYPTION_KEY,
+                    &mut candidate_public,
+                    &mut approval,
+                ),
+            )
+            .await
+            .expect("linking succeeds");
+
+        assert_eq!(linked.user.user_id, [9; 16]);
+        assert_eq!(linked.device.device_id, derive_device_id(&candidate_public));
+        assert_eq!(linked.device.user_id, [9; 16]);
+        assert_eq!(linked.device.public_key, candidate_public);
+        assert_eq!(linked.device.encryption_public_key, ENCRYPTION_KEY);
+        assert!(!linked.device.is_revoked());
+        assert_eq!(linked.device.last_authenticated_at_unix_ns, None);
+
+        // The linked device can now authenticate on its own.
+        let (mut public, mut signature) = (candidate_public, [0; 64]);
+        assert_eq!(
+            service
+                .authenticate(authentication(
+                    &candidate,
+                    &[2; 32],
+                    &mut public,
+                    &mut signature
+                ))
+                .await
+                .map(|identity| identity.device.device_id),
+            Ok(linked.device.device_id)
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unknown_approver_cannot_link_a_device() {
+        let service = service(&[9]);
+        let approver = key(7);
+        let candidate = key(8);
+        let (mut candidate_public, mut approval) = ([0; 32], [0; 64]);
+
+        assert_eq!(
+            service
+                .link_device(
+                    derive_device_id(&approver.verifying_key().to_bytes()),
+                    SERVER_IDENTITY,
+                    link_device_request(
+                        &approver,
+                        &candidate,
+                        &ENCRYPTION_KEY,
+                        &mut candidate_public,
+                        &mut approval,
+                    ),
+                )
+                .await,
+            Err(IdentityError::UnknownDevice)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_revoked_approver_cannot_link_a_device() {
+        let approver = key(7);
+        let service = with_enrolled_identity(Fault::None, &approver);
+        let approver_device_id = derive_device_id(&approver.verifying_key().to_bytes());
+        service
+            .revoke_device(approver_device_id)
+            .await
+            .expect("revocation succeeds");
+        let candidate = key(8);
+        let (mut candidate_public, mut approval) = ([0; 32], [0; 64]);
+
+        assert_eq!(
+            service
+                .link_device(
+                    approver_device_id,
+                    SERVER_IDENTITY,
+                    link_device_request(
+                        &approver,
+                        &candidate,
+                        &ENCRYPTION_KEY,
+                        &mut candidate_public,
+                        &mut approval,
+                    ),
+                )
+                .await,
+            Err(IdentityError::DeviceRevoked)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_link_approval_must_be_signed_by_the_approving_device() {
+        let approver = key(7);
+        let service = with_enrolled_identity(Fault::None, &approver);
+        let impostor = key(99);
+        let candidate = key(8);
+        let (mut candidate_public, mut approval) = ([0; 32], [0; 64]);
+
+        assert_eq!(
+            service
+                .link_device(
+                    derive_device_id(&approver.verifying_key().to_bytes()),
+                    SERVER_IDENTITY,
+                    // Signed by a key the server never enrolled as this user's.
+                    link_device_request(
+                        &impostor,
+                        &candidate,
+                        &ENCRYPTION_KEY,
+                        &mut candidate_public,
+                        &mut approval,
+                    ),
+                )
+                .await,
+            Err(IdentityError::Signature(SignatureError::Rejected))
+        );
+    }
+
+    #[tokio::test]
+    async fn a_link_approval_cannot_be_replayed_onto_a_different_candidate() {
+        let approver = key(7);
+        let service = with_enrolled_identity(Fault::None, &approver);
+        let candidate = key(8);
+        let (mut candidate_public, mut approval) = ([0; 32], [0; 64]);
+        let genuine = link_device_request(
+            &approver,
+            &candidate,
+            &ENCRYPTION_KEY,
+            &mut candidate_public,
+            &mut approval,
+        );
+        let stolen_signature = *genuine
+            .approval_signature
+            .first_chunk::<64>()
+            .expect("64 bytes");
+
+        let other_candidate = key(10).verifying_key().to_bytes();
+        assert_eq!(
+            service
+                .link_device(
+                    derive_device_id(&approver.verifying_key().to_bytes()),
+                    SERVER_IDENTITY,
+                    LinkDeviceRequest {
+                        candidate_signing_public_key: &other_candidate,
+                        candidate_encryption_public_key: &ENCRYPTION_KEY,
+                        approval_signature: &stolen_signature,
+                    },
+                )
+                .await,
+            Err(IdentityError::Signature(SignatureError::Rejected))
+        );
+    }
+
+    #[tokio::test]
+    async fn a_link_approval_does_not_carry_across_servers() {
+        let approver = key(7);
+        let service = with_enrolled_identity(Fault::None, &approver);
+        let candidate = key(8);
+        let candidate_public = candidate.verifying_key().to_bytes();
+        let payload =
+            link_device_payload("nexus.attacker.test", &candidate_public, &ENCRYPTION_KEY);
+        let forged = approver.sign(&payload).to_bytes();
+
+        assert_eq!(
+            service
+                .link_device(
+                    derive_device_id(&approver.verifying_key().to_bytes()),
+                    SERVER_IDENTITY,
+                    LinkDeviceRequest {
+                        candidate_signing_public_key: &candidate_public,
+                        candidate_encryption_public_key: &ENCRYPTION_KEY,
+                        approval_signature: &forged,
+                    },
+                )
+                .await,
+            Err(IdentityError::Signature(SignatureError::Rejected))
+        );
+    }
+
+    #[tokio::test]
+    async fn a_malformed_candidate_encryption_key_is_refused() {
+        let approver = key(7);
+        let service = with_enrolled_identity(Fault::None, &approver);
+        let candidate = key(8);
+        let candidate_public = candidate.verifying_key().to_bytes();
+        let short_encryption_key = [7_u8; 10];
+        let payload =
+            link_device_payload(SERVER_IDENTITY, &candidate_public, &short_encryption_key);
+        let approval = approver.sign(&payload).to_bytes();
+
+        assert_eq!(
+            service
+                .link_device(
+                    derive_device_id(&approver.verifying_key().to_bytes()),
+                    SERVER_IDENTITY,
+                    LinkDeviceRequest {
+                        candidate_signing_public_key: &candidate_public,
+                        candidate_encryption_public_key: &short_encryption_key,
+                        approval_signature: &approval,
+                    },
+                )
+                .await,
+            Err(IdentityError::Signature(
+                SignatureError::InvalidEncryptionKeyLength { actual: 10 }
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn a_malformed_candidate_signing_key_is_refused() {
+        let approver = key(7);
+        let service = with_enrolled_identity(Fault::None, &approver);
+        let short_signing_key = [7_u8; 10];
+        let payload = link_device_payload(SERVER_IDENTITY, &short_signing_key, &ENCRYPTION_KEY);
+        let approval = approver.sign(&payload).to_bytes();
+
+        assert_eq!(
+            service
+                .link_device(
+                    derive_device_id(&approver.verifying_key().to_bytes()),
+                    SERVER_IDENTITY,
+                    LinkDeviceRequest {
+                        candidate_signing_public_key: &short_signing_key,
+                        candidate_encryption_public_key: &ENCRYPTION_KEY,
+                        approval_signature: &approval,
+                    },
+                )
+                .await,
+            Err(IdentityError::Signature(SignatureError::InvalidKeyLength {
+                actual: 10
+            }))
+        );
+    }
+
+    #[tokio::test]
+    async fn linking_an_already_enrolled_device_is_refused() {
+        let approver = key(7);
+        let service = with_enrolled_identity(Fault::None, &approver);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+        // The candidate registers on its own first.
+        service
+            .register(registration(
+                &key(8),
+                "Grace",
+                &[3; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("registration succeeds");
+        let candidate = key(8);
+        let (mut candidate_public, mut approval) = ([0; 32], [0; 64]);
+
+        assert_eq!(
+            service
+                .link_device(
+                    derive_device_id(&approver.verifying_key().to_bytes()),
+                    SERVER_IDENTITY,
+                    link_device_request(
+                        &approver,
+                        &candidate,
+                        &ENCRYPTION_KEY,
+                        &mut candidate_public,
+                        &mut approval,
+                    ),
+                )
+                .await,
+            Err(IdentityError::DeviceAlreadyRegistered)
+        );
+    }
+
+    #[tokio::test]
+    async fn reports_storage_failures_during_linking() {
+        let approver = key(7);
+        let candidate = key(8);
+
+        for fault in [
+            Fault::FindDevice,
+            Fault::FindDeviceAgain,
+            Fault::Link,
+            Fault::FindUser,
+        ] {
+            let service = with_enrolled_identity(fault, &approver);
+            let (mut candidate_public, mut approval) = ([0; 32], [0; 64]);
+
+            assert_eq!(
+                service
+                    .link_device(
+                        derive_device_id(&approver.verifying_key().to_bytes()),
+                        SERVER_IDENTITY,
+                        link_device_request(
+                            &approver,
+                            &candidate,
+                            &ENCRYPTION_KEY,
+                            &mut candidate_public,
+                            &mut approval,
+                        ),
+                    )
+                    .await,
+                Err(unavailable(fault.label()))
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn linking_from_a_device_whose_user_vanished_is_reported() {
+        let approver = key(7);
+        // The approver's device is enrolled, but its user is not.
+        let service = with_enrolled_device(Fault::None, &approver);
+        let candidate = key(8);
+        let (mut candidate_public, mut approval) = ([0; 32], [0; 64]);
+
+        assert_eq!(
+            service
+                .link_device(
+                    derive_device_id(&approver.verifying_key().to_bytes()),
+                    SERVER_IDENTITY,
+                    link_device_request(
+                        &approver,
+                        &candidate,
+                        &ENCRYPTION_KEY,
+                        &mut candidate_public,
+                        &mut approval,
+                    ),
+                )
+                .await,
+            Err(IdentityError::MissingUser)
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_a_username_that_breaks_the_handle_rules() {
+        let service = service(&[9]);
+        let signer = key(7);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+
+        assert_eq!(
+            service
+                .register(registration(
+                    &signer,
+                    "ad",
+                    &[1; 32],
+                    &mut public,
+                    &mut signature
+                ))
+                .await,
+            Err(IdentityError::Handle(HandleError::UsernameTooShort {
+                actual: 2
+            }))
+        );
+        assert!(
+            service.store.inner.is_empty(),
+            "a rejected registration must write nothing"
+        );
+    }
+
+    #[tokio::test]
+    async fn shares_a_username_by_allocating_a_different_discriminator() {
+        // Randomness that yields a fresh discriminator on the second draw.
+        let service = service(&[1, 1, 1, 1, 1, 2]);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+        let first = service
+            .register(registration(
+                &key(7),
+                "Ada",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("first registration succeeds");
+
+        let second = service
+            .register(registration(
+                &key(8),
+                "Ada",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("second registration succeeds");
+
+        assert_eq!(
+            first.user.normalized_username,
+            second.user.normalized_username
+        );
+        assert_ne!(first.user.discriminator, second.user.discriminator);
+        assert_ne!(first.user.user_id, second.user.user_id);
+    }
+
+    #[tokio::test]
+    async fn gives_up_when_no_discriminator_is_free() {
+        // Constant randomness always proposes the same taken discriminator.
+        let service = service(&[1]);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+        service
+            .register(registration(
+                &key(7),
+                "Ada",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("first registration succeeds");
+
+        assert_eq!(
+            service
+                .register(registration(
+                    &key(8),
+                    "Ada",
+                    &[1; 32],
+                    &mut public,
+                    &mut signature
+                ))
+                .await,
+            Err(IdentityError::UsernameUnavailable)
+        );
+        assert_eq!(service.store.inner.user_count(), 1);
+        assert_eq!(
+            service.store.inner.device_count(),
+            1,
+            "a registration that cannot claim a handle must not enrol its device"
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_a_registration_that_is_not_signed_for_this_request() {
+        let service = service(&[9]);
+        let signer = key(7);
+        let public = signer.verifying_key().to_bytes();
+        // Signed for a different username than the one requested.
+        let payload = registration_payload(&binding(&[1; 32]), "Grace", &public, &ENCRYPTION_KEY);
+        let signature = signer.sign(&payload).to_bytes();
+
+        assert_eq!(
+            service
+                .register(RegistrationRequest {
+                    binding: binding(&[1; 32]),
+                    requested_username: "Ada",
+                    device_public_key: &public,
+                    encryption_public_key: &ENCRYPTION_KEY,
+                    signature: &signature,
+                })
+                .await,
+            Err(IdentityError::Signature(SignatureError::Rejected))
+        );
+        assert!(
+            service.store.inner.is_empty(),
+            "nothing is written for a bad signature"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_malformed_registration_encryption_key_is_refused() {
+        let service = service(&[9]);
+        let signer = key(7);
+        let public = signer.verifying_key().to_bytes();
+        let short_encryption_key = [7_u8; 10];
+
+        assert_eq!(
+            service
+                .register(RegistrationRequest {
+                    binding: binding(&[1; 32]),
+                    requested_username: "Ada",
+                    device_public_key: &public,
+                    encryption_public_key: &short_encryption_key,
+                    // Checked before the signature, so it need not verify.
+                    signature: &[0; 64],
+                })
+                .await,
+            Err(IdentityError::Signature(
+                SignatureError::InvalidEncryptionKeyLength { actual: 10 }
+            ))
+        );
+        assert!(service.store.inner.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_non_contributory_registration_encryption_key_is_refused() {
+        let service = service(&[9]);
+        let signer = key(7);
+        let public = signer.verifying_key().to_bytes();
+
+        assert_eq!(
+            service
+                .register(RegistrationRequest {
+                    binding: binding(&[1; 32]),
+                    requested_username: "Ada",
+                    device_public_key: &public,
+                    encryption_public_key: &[0; 32],
+                    signature: &[0; 64],
+                })
+                .await,
+            Err(IdentityError::Signature(
+                SignatureError::NonContributoryEncryptionKey
+            ))
+        );
+        assert!(service.store.inner.is_empty());
+    }
+
+    #[tokio::test]
+    async fn authenticating_a_device_whose_user_vanished_is_reported() {
+        let signer = key(7);
+        let service = with_enrolled_device(Fault::None, &signer);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+
+        assert_eq!(
+            service
+                .authenticate(authentication(
+                    &signer,
+                    &[2; 32],
+                    &mut public,
+                    &mut signature
+                ))
+                .await,
+            Err(IdentityError::MissingUser)
+        );
+    }
+
+    /// A device record for `signer`, owned by the fixed test user.
+    fn enrolled_record(signer: &SigningKey) -> DeviceRecord {
+        let public = signer.verifying_key().to_bytes();
+        DeviceRecord {
+            device_id: derive_device_id(&public),
+            user_id: [9; 16],
+            public_key: public,
+            encryption_public_key: ENCRYPTION_KEY,
+            created_at_unix_ns: NOW,
+            last_authenticated_at_unix_ns: None,
+            revoked_at_unix_ns: None,
+        }
+    }
+
+    /// A service whose store already holds `signer`'s device, but no user.
+    fn with_enrolled_device(fault: Fault, signer: &SigningKey) -> TestService {
+        let store = FaultyStore {
+            fault,
+            ..FaultyStore::default()
+        };
+        store
+            .inner
+            .enrol_device(enrolled_record(signer))
+            .expect("device enrolled");
+        service_with(store, &[9])
+    }
+
+    /// A service whose store holds `signer`'s device and the user owning it.
+    fn with_enrolled_identity(fault: Fault, signer: &SigningKey) -> TestService {
+        let service = with_enrolled_device(fault, signer);
+        service
+            .store
+            .inner
+            .store_user(UserRecord {
+                user_id: [9; 16],
+                username: "Ada".to_owned(),
+                normalized_username: "ada".to_owned(),
+                discriminator: "7Q2XZ".to_owned(),
+                created_at_unix_ns: NOW,
+            })
+            .expect("user stored");
+        service
+    }
+
+    #[tokio::test]
+    async fn reports_storage_failures_during_registration() {
+        let signer = key(7);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+
+        for fault in [Fault::FindDevice, Fault::Insert] {
+            let service = service_with(
+                FaultyStore {
+                    fault,
+                    ..FaultyStore::default()
+                },
+                &[9],
+            );
+
+            assert_eq!(
+                service
+                    .register(registration(
+                        &signer,
+                        "Ada",
+                        &[1; 32],
+                        &mut public,
+                        &mut signature
+                    ))
+                    .await,
+                Err(unavailable(fault.label()))
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn reports_storage_failures_during_authentication() {
+        let signer = key(7);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+
+        for (service, fault) in [
+            (
+                with_enrolled_device(Fault::FindDevice, &signer),
+                Fault::FindDevice,
+            ),
+            (
+                with_enrolled_device(Fault::FindUser, &signer),
+                Fault::FindUser,
+            ),
+            (with_enrolled_identity(Fault::Touch, &signer), Fault::Touch),
+        ] {
+            assert_eq!(
+                service
+                    .authenticate(authentication(
+                        &signer,
+                        &[2; 32],
+                        &mut public,
+                        &mut signature
+                    ))
+                    .await,
+                Err(unavailable(fault.label()))
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn reports_storage_failures_during_revocation() {
+        let signer = key(7);
+        let device_id = derive_device_id(&signer.verifying_key().to_bytes());
+
+        for fault in [Fault::FindDevice, Fault::Revoke] {
+            let service = with_enrolled_device(fault, &signer);
+
+            assert_eq!(
+                service.revoke_device(device_id).await,
+                Err(unavailable(fault.label()))
+            );
+        }
+    }
+
+    /// The fault-injecting double must be transparent when nothing is set to
+    /// fail, or the failure tests above could pass for the wrong reason.
+    #[tokio::test]
+    async fn the_double_passes_through_when_no_fault_is_injected() {
+        let signer = key(7);
+        let (mut public, mut signature) = ([0; 32], [0; 64]);
+
+        let fresh = service(&[9]);
+        let registered = fresh
+            .register(registration(
+                &signer,
+                "Ada",
+                &[1; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("registration passes through");
+
+        let enrolled = with_enrolled_identity(Fault::None, &signer);
+        enrolled
+            .authenticate(authentication(
+                &signer,
+                &[2; 32],
+                &mut public,
+                &mut signature,
+            ))
+            .await
+            .expect("authentication passes through");
+        enrolled
+            .revoke_device(derive_device_id(&signer.verifying_key().to_bytes()))
+            .await
+            .expect("revocation passes through");
+
+        assert_eq!(Fault::None.label(), "none");
+        assert_eq!(
+            enrolled
+                .store
+                .list_devices(registered.user.user_id)
+                .await
+                .expect("listing passes through")
+                .len(),
+            0,
+            "a different service's user has no devices in this store"
+        );
+
+        // The directory lookups are part of the same store, so exercise both
+        // their pass-through and their failure here.
+        let found = fresh
+            .store
+            .find_user_by_handle("ada", &registered.user.discriminator)
+            .await
+            .expect("the lookup passes through");
+        assert_eq!(
+            found.map(|user| user.user_id),
+            Some(registered.user.user_id)
+        );
+        let failing = service_with(
+            FaultyStore {
+                fault: Fault::FindUser,
+                ..FaultyStore::default()
+            },
+            &[9],
+        );
+        assert_eq!(
+            failing.store.find_user_by_handle("ada", "7Q2XZ").await,
+            Err(RepositoryError::Unavailable("find-user".to_owned()))
+        );
+    }
+}

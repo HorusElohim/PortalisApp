@@ -16,7 +16,8 @@
 ├── doc/                  # Build & setup guides (see doc/build.md)
 ├── portalis/             # Flutter project (Dart UI + Rust FFI bindings)
 │   ├── lib/              # Flutter widgets and FRB-generated API surface
-│   ├── rust/backend/     # Rust crate compiled into native libs / wasm
+│   ├── rust/backend/     # Unified Nexus app core + server workspace
+│   ├── rust/vendor/      # Locally maintained Rust dependencies
 │   └── tool/             # Platform-specific build helpers
 ├── setup/                # Environment bootstrap scripts for Linux, macOS & Windows
 ├── tests/                # Shell helpers to run Rust/Flutter test suites
@@ -29,6 +30,8 @@ Install the toolchains listed below before working on the project:
 
 - Flutter SDK 3.32.x (stable channel recommended)
 - Rust toolchain via `rustup`
+- Buf CLI for Portalis Nexus protobuf validation
+- `cargo-llvm-cov` for Portalis Nexus coverage reports
 - Android Studio (SDK + NDK) for mobile builds
 - Xcode for iOS/macOS builds on macOS hosts
 - Chrome (or another Flutter-supported browser) for web builds
@@ -39,7 +42,7 @@ To accelerate setup on fresh machines, run the platform wizard that matches your
 - macOS: `./setup/wizard_darwin.sh`
 - Windows: `powershell -ExecutionPolicy Bypass -File .\setup\wizard_windows.ps1`
 
-Each wizard installs common dependencies, configures environment variables, and validates with `flutter doctor` plus `rustc`/`cargo` checks. Re-running is safe and idempotent.
+Each wizard installs common dependencies, Buf, Rust coverage tooling, configures environment variables, and validates with `flutter doctor` plus Rust/Nexus tool checks. Re-running is safe and idempotent.
 
 ## Quick Start
 1. Clone the repository and enter it: `git clone ... && cd Portalis`
@@ -53,19 +56,111 @@ Each wizard installs common dependencies, configures environment variables, and 
 
 Detailed build instructions for every platform live in [`doc/build.md`](doc/build.md).
 
+## Portalis Nexus
+
+[`portalis/rust/backend/`](portalis/rust/backend/) is the unified Nexus application core. It owns the Flutter boundary, local collection state, identity, application networking, and the Torrent engine that moves media directly between peers.
+
+The same workspace owns the versioned protobuf contract, portable networking crates, server domain logic, and Linux server binary. See the [Nexus README](portalis/rust/backend/README.md) and [protocol specification](portalis/rust/backend/SPEC.md).
+
+```bash
+cd portalis/rust/backend
+
+# Validate the contract and Rust workspace.
+buf lint
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-targets --all-features
+
+# Start the local discovery server.
+PORTALIS_NEXUS_LISTEN_ADDR=127.0.0.1:8080 cargo run -p portalis-nexus-server
+curl http://127.0.0.1:8080/health
+```
+
+Run coverage with `./scripts/coverage.sh`. On Linux, the server can also run with `docker compose -f docker/compose.yaml up --build` from `portalis/rust/backend/`.
+
+## Building
+
+Every command below runs from the `portalis/` directory.
+
+### The one rule worth knowing
+
+On **desktop**, `flutter run` does *not* build the Rust crate — nothing in the CMake/Xcode desktop config invokes cargo on Windows or Linux. Instead `flutter_rust_bridge` loads the native library at runtime by relative path, `rust/backend/target/release/`, configured in `lib/bridge_generated/frb_generated.dart`. Two consequences:
+
+- Always build the Rust side with `--release`, even when running Flutter in debug. There is no debug lookup path.
+- After changing any Rust source, rebuild it yourself. Skipping this gives you a `Bad state: Content hash on Dart side (...) is different from Rust side (...)` at startup — the app is loading a stale library.
+
+Mobile and web are different: their platform hooks build Rust for you (see the last column below).
+
+### Dev loop
+
+| Platform | Build Rust | Run | Who builds the native lib |
+|---|---|---|---|
+| 🪟 Windows | `cargo build --release --manifest-path rust/backend/Cargo.toml` | `flutter run -d windows` | you (manual) |
+| 🐧 Linux | `cargo build --release --manifest-path rust/backend/Cargo.toml` | `flutter run -d linux` | you (manual) |
+| 🍎 macOS | — | `flutter run -d macos` | Xcode build phase → `macos/Runner/build_backend.sh` |
+| 📱 iOS | — | `flutter run -d ios` | Xcode build phase → `ios/Runner/build_rust_ios.sh` |
+| 🤖 Android | — | `flutter run -d android` | Gradle hook → `android/build_rust_android.sh` |
+| 🕸️ Web | `./tool/frb_build.sh web` | `flutter run -d chrome` | you (produces `web/pkg/*.wasm`) |
+
+### Release builds
+
+These mirror `.github/actions/build-*/action.yml` exactly, so a local release build matches CI.
+
+```bash
+# 🪟 Windows
+cargo build --release --manifest-path rust/backend/Cargo.toml
+flutter build windows --release
+cp rust/backend/target/release/backend.dll build/windows/x64/runner/Release/
+
+# 🐧 Linux
+cargo build --release --manifest-path rust/backend/Cargo.toml
+flutter build linux --release
+cp rust/backend/target/release/libbackend.so build/linux/x64/release/bundle/lib/
+
+# 🍎 macOS / 📱 iOS / 🤖 Android — the platform hook builds Rust
+flutter build macos --release
+bash ios/Runner/build_rust_ios.sh && flutter build ios --release --no-codesign
+bash ./android/build_rust_android.sh release && flutter build apk --release
+
+# 🕸️ Web
+bash ./tool/frb_build.sh web
+flutter build web --release
+```
+
+Windows and Linux need that explicit copy: the relative path FRB uses during `flutter run` doesn't exist beside a packaged binary, so the library has to ship next to the runner (Windows) or in the bundle's `lib/` (Linux).
+
+### Regenerating bindings
+
+Only needed when a **signature or DTO changes** in one of the bridged Rust modules (`bridge`, `torrent`, `device`, `collections::legacy`, `settings`, `nexus_settings`). Editing a function body doesn't require it.
+
+```bash
+cargo install flutter_rust_bridge_codegen   # once
+./tool/frb_build.sh <macos|ios|android|linux|windows|web>
+```
+
+On Windows, regenerate the bindings without building or launching the app:
+
+```powershell
+cd portalis
+.\tool\frb_generate.ps1
+```
+
+Then rebuild the Rust library for your platform. Never invoke the codegen with `--rust-input crate`: its module scan ignores Rust visibility, so the bare wildcard pulls in internal-only modules such as `domain` and fails to compile. `tool/frb_build.sh` passes the correct explicit module list.
+
 ## Testing
 Use the scripts in `tests/` to exercise the codebase consistently:
 
-- `./tests/backend.sh` – Runs `cargo test` for the Rust crate.
+- `./tests/nexus.sh` – Validates and tests the complete Nexus workspace,
+  enforces coverage, and builds the server.
 - `./tests/frontend.sh` – Runs `flutter pub get`, `flutter analyze`, and `flutter test --no-pub`.
-- `./tests/all.sh` – Executes backend then frontend checks (same sequence used in CI).
+- `./tests/all.sh` – Executes Nexus then frontend checks (same sequence used in CI).
 
-CI invokes `./tests/all.sh` first and only builds artifacts if all suites pass.
+CI runs the independently rerunnable Nexus and frontend jobs before building artifacts.
 
 ## Continuous Integration
 The GitHub Actions workflow (`.github/workflows/pipeline.yml`) executes the following jobs on pushes and pull requests:
 
-1. **🧪 Tests** – Installs toolchains, runs `./tests/all.sh` (Rust + Flutter checks).
+1. **🦀 Backend Nexus** and **🐦 Frontend** – Run independently rerunnable checks.
 2. **Platform builds** – Each downloads the repo, reuses cached toolchains, and produces release artifacts. Parallel jobs for: 
 * 🕸️ Web
 * 🤖 Android

@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package portalis.protocol.v1;
+
+// A random per-share symmetric key, sealed to one recipient device's X25519
+// public key, addressed by a client-generated share_id.
+//
+// Nexus stores and relays this opaquely: it never receives the key in
+// plaintext, and share_id carries no ownership or membership record of its
+// own until M4 adds one. Sent by an already-authenticated device on behalf
+// of the recipient device it names, which must belong to the same user.
+message PutKeyEnvelope {
+  bytes share_id = 1;
+  bytes recipient_device_id = 2;
+  bytes ephemeral_public_key = 3;
+  bytes ciphertext = 4;
+}
+
+// Confirms an envelope was stored for its recipient.
+message KeyEnvelopePut {
+  bytes share_id = 1;
+  bytes recipient_device_id = 2;
+}
+
+// Asks for every envelope addressed to the requesting connection's device.
+message ListKeyEnvelopesRequest {
+  // Return entries strictly after this share ID in bytewise order. Empty starts
+  // from the beginning. The server fixes the page size to its protocol limit.
+  bytes after_share_id = 1;
+}
+
+// One sealed envelope, addressed to the device that asked for it.
+message KeyEnvelope {
+  bytes share_id = 1;
+  bytes ephemeral_public_key = 2;
+  bytes ciphertext = 3;
+}
+
+message ListKeyEnvelopesResponse {
+  repeated KeyEnvelope envelopes = 1;
+  // The next request's after_share_id. Empty means this was the last page.
+  bytes next_after_share_id = 2;
+}
+
+// The immutable, encrypted state published at one share revision. Nexus can
+// route and bound these bytes but cannot inspect the torrent capsule.
+message ShareSnapshot {
+  bytes share_id = 1;
+  bytes owner_user_id = 2;
+  uint64 revision = 3;
+  bytes snapshot_id = 4;
+  bytes capsule = 5;
+  bytes capsule_signature = 6;
+  uint64 created_at_unix_ns = 7;
+}
+
+message PublishShare {
+  bytes share_id = 1;
+  uint64 revision = 2;
+  // Empty only for revision one.
+  bytes prior_snapshot_id = 3;
+  bytes snapshot_id = 4;
+  bytes capsule = 5;
+  // The owner's signature is relayed so recipients can authenticate the
+  // opaque capsule without trusting Nexus with its plaintext.
+  bytes capsule_signature = 6;
+}
+
+message SharePublished {
+  ShareSnapshot share = 1;
+}
+
+message ListSharesRequest {}
+
+message ListSharesResponse {
+  repeated ShareSnapshot shares = 1;
+}
+
+message FetchShareRequest {
+  bytes share_id = 1;
+}
+
+message FetchShareResponse {
+  ShareSnapshot share = 1;
+}
+
+message GrantShareAccess {
+  bytes share_id = 1;
+  bytes member_user_id = 2;
+}
+
+message ShareAccessGranted {
+  bytes share_id = 1;
+  bytes member_user_id = 2;
+  repeated ShareRecipientDevice recipient_devices = 3;
+}
+
+// A currently authorized device that can receive the share key. The public
+// key is returned with the grant so the owner can envelope the key without
+// another identity lookup round trip.
+message ShareRecipientDevice {
+  bytes device_id = 1;
+  bytes encryption_public_key = 2;
+}
+
+// Removes a member's access to a share. Only the owner may send it, and the
+// owner cannot be removed from their own share.
+//
+// Nexus stops answering that user with summaries, capsules, envelopes, and
+// handoffs. It does not reach the share key they already hold, so an owner
+// who means to exclude them rotates the key and publishes the next revision
+// sealed only to the members who remain.
+message RevokeShareAccess {
+  bytes share_id = 1;
+  bytes member_user_id = 2;
+}
+
+message ShareAccessRevoked {
+  bytes share_id = 1;
+  bytes member_user_id = 2;
+}
+
+// Unsolicited notification that an authorized share has moved.
+message ShareEvent {
+  ShareSnapshot share = 1;
+}
+
+// A bounded, encrypted live payload. It is forwarded to an authorized device
+// and never persisted by Nexus. An empty recipient_device_id is the sender's
+// acknowledgement; a non-empty one addresses the event.
+message ShareHandoff {
+  bytes share_id = 1;
+  bytes recipient_device_id = 2;
+  bytes ciphertext = 3;
+  // The torrent's info hash is authenticated by the client-side handoff
+  // envelope and lets the recipient identify the exact bytes before opening.
+  bytes info_hash = 4;
+}

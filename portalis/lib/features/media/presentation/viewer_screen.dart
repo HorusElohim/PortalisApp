@@ -1,0 +1,146 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
+
+import '../../collections/presentation/source.dart';
+import '../../../design/design.dart';
+import '../../collections/domain/collection.dart';
+import '../application/formats.dart';
+import '../domain/item.dart';
+import 'viewer.dart';
+
+/// Coordinates live collection state and the lifetime of an inline player.
+class MediaViewerScreen extends StatefulWidget {
+  const MediaViewerScreen({
+    super.key,
+    required this.collection,
+    required this.media,
+    required this.source,
+  });
+
+  /// Where live progress comes from while this is open. The same seam
+  /// `CollectionDetail` uses, so a Nexus collection's viewer stays live
+  /// rather than freezing on the snapshot it was opened with.
+  final CollectionSource source;
+
+  /// Seeds rather than sources of truth. Current values are looked up while
+  /// the view is open so download progress remains live.
+  final Collection collection;
+  final MediaItem media;
+
+  @override
+  State<MediaViewerScreen> createState() => _MediaViewerScreenState();
+}
+
+class _MediaViewerScreenState extends State<MediaViewerScreen> {
+  VideoPlayerController? _videoController;
+  String? _playingPath;
+  bool _videoFailed = false;
+
+  Collection get _collection => widget.source.resolve(widget.collection);
+
+  /// The live version of what was opened.
+  ///
+  /// Matched by the engine's own entry handle where there is one. It used to
+  /// match on the torrent hash as well, which the engine never fills in for a
+  /// collection entry — so the comparison was against an empty string, and a
+  /// viewer that failed it silently kept showing the snapshot it opened with.
+  MediaItem get _media {
+    final wanted = widget.media.entryId;
+    for (final media in _collection.media) {
+      final matches = wanted == null
+          ? media.label == widget.media.label
+          : media.entryId == wanted;
+      if (matches) return media;
+    }
+    return widget.media;
+  }
+
+  bool get _isPlayableVideo =>
+      _media.isReady &&
+      MediaFormats.resolve(_media.label).preview == PreviewSupport.player;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncVideo();
+    widget.source.listenable.addListener(_syncVideo);
+  }
+
+  @override
+  void dispose() {
+    widget.source.listenable.removeListener(_syncVideo);
+    _disposeVideo();
+    super.dispose();
+  }
+
+  void _syncVideo() {
+    final path = _isPlayableVideo ? _media.localPath : null;
+    if (path == _playingPath) return;
+
+    _disposeVideo();
+    _playingPath = path;
+    if (path != null) _initializeVideo(path);
+  }
+
+  void _initializeVideo(String path) {
+    final controller = VideoPlayerController.file(File(path));
+    _videoController = controller;
+    controller.initialize().then((_) {
+      if (!mounted || _videoController != controller) return;
+      if (!controller.value.isInitialized) {
+        setState(() => _videoFailed = true);
+        return;
+      }
+      setState(() {});
+    }).catchError((_) {
+      if (!mounted || _videoController != controller) return;
+      setState(() => _videoFailed = true);
+    });
+  }
+
+  void _disposeVideo() {
+    _videoController?.dispose();
+    _videoController = null;
+    _playingPath = null;
+    _videoFailed = false;
+  }
+
+  Future<void> _openExternally() async {
+    final path = _media.localPath;
+    if (path == null) return;
+
+    final opened = await launchUrl(Uri.file(path));
+    if (!opened && mounted) {
+      showToast(
+        context,
+        'Couldn\'t open ${_media.label}',
+        severity: ToastSeverity.error,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.source.listenable,
+      builder: (context, _) => CollectionMediaViewer(
+        collection: _collection,
+        media: _media,
+        isPlayableVideo: _isPlayableVideo,
+        videoFailed: _videoFailed,
+        videoController: _videoController,
+        onClose: () => Navigator.of(context).pop(),
+        onRefresh: _refreshVideo,
+        onOpenExternally: _openExternally,
+      ),
+    );
+  }
+
+  void _refreshVideo() {
+    _disposeVideo();
+    _syncVideo();
+  }
+}

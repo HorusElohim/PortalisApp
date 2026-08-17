@@ -197,6 +197,23 @@ Win32Window::MessageHandler(HWND hwnd,
 
       return 0;
     }
+    case WM_GETMINMAXINFO: {
+      // The smallest phone the design targets. Below kDesktopBreakpoint
+      // (1000pt, lib/screens/root_shell.dart) the app renders its phone
+      // layout, which is a first-class layout here rather than a fallback —
+      // so the floor is about staying usable, not about staying "desktop".
+      // Scaled per-monitor, since the sizes here are logical pixels but
+      // MINMAXINFO is in physical ones.
+      auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
+      const double scale_factor =
+          FlutterDesktopGetDpiForMonitor(
+              MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)) /
+          96.0;
+      info->ptMinTrackSize.x = Scale(375, scale_factor);
+      info->ptMinTrackSize.y = Scale(667, scale_factor);
+      return 0;
+    }
+
     case WM_SIZE: {
       RECT rect = GetClientArea();
       if (child_content_ != nullptr) {
