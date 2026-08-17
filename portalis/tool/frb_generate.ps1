@@ -19,7 +19,7 @@ Set-Location $repoRoot
 
 flutter_rust_bridge_codegen generate `
   --rust-root 'rust/backend' `
-  --rust-input 'crate::bridge,crate::portalis_api,crate::torrent,crate::device,crate::collections::legacy,crate::settings,crate::nexus_settings' `
+  --rust-input 'crate::bridge,crate::portalis_api,crate::device,crate::collections::legacy,crate::settings,crate::nexus_settings' `
   --dart-output 'lib/nexus/bridge' `
   --rust-output 'rust/backend/src/api.rs' `
   --no-add-mod-to-lib

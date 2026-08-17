@@ -1,6 +1,5 @@
 import '../../../nexus/bridge/portalis_api.dart' as nexus_bridge;
 import '../../../nexus/bridge/settings.dart' as settings_bridge;
-import '../../../nexus/bridge/torrent.dart' as torrent_bridge;
 import '../domain/engine.dart';
 import '../domain/storage_entry.dart';
 
@@ -30,8 +29,13 @@ class FrbSettingsRepository implements SettingsRepository {
       settings_bridge.setEngineSettings(settings: _toBridge(settings));
 
   @override
-  Future<int> storageUsageBytes() async =>
-      (await torrent_bridge.storageUsageBytes()).toInt();
+  Future<int> storageUsageBytes() async {
+    // ADR-0001: the single seam is `portalis_api`. The total is the sum of
+    // the per-entry breakdown that seam already exposes, so no second
+    // bridge function is needed for the meter.
+    final entries = await nexus_bridge.storageBreakdown();
+    return entries.fold(0, (total, entry) => total + entry.bytes.toInt());
+  }
 
   @override
   Future<List<StorageEntry>> storageBreakdown() async =>
