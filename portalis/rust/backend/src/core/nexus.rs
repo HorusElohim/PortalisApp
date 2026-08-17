@@ -336,6 +336,15 @@ impl LocalCollections {
             .find_map(|(handle, stored)| (stored == key).then_some(*handle))
     }
 
+    /// A test that drives the poller without standing up the whole Nexus
+    /// needs a collection→handle mapping without hydrating from a store.
+    #[cfg(test)]
+    pub(crate) fn test_with_collection(key: &[u8]) -> Self {
+        let mut local = Self::default();
+        local.assign(key.to_vec());
+        local
+    }
+
     fn forget(&mut self, handle: Handle) {
         self.keys.remove(&handle);
     }
@@ -1530,6 +1539,8 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+    use crate::core::supervisor::Shutdown;
+    use crate::core::transfers::{self as transfers, Holdings};
     use crate::projection::state::{CollectionState, Role, Status};
 
     /// A directory that removes itself.
@@ -2640,6 +2651,161 @@ mod tests {
         assert!(
             refused.to_string().contains("upgrade"),
             "the person is told what to do: {refused}"
+        );
+    }
+
+    /// The transfer poller is the one worker that turns a substrate reading
+    /// into state and history: it attributes a holding to the collection that
+    /// claims it, records the start and finish moments when they arrive, keeps
+    /// the ring of readings bounded, and releases a torrent no collection
+    /// claims. Driven here with a scripted double rather than a swarm, so each
+    /// of those decisions is exercised on real store rows instead of being
+    /// trusted.
+    #[tokio::test]
+    async fn the_transfer_poller_turns_each_reading_into_state_and_history() {
+        let scratch = Scratch::new("transfer-poller");
+        let store = Arc::new(Store::open(scratch.0.join("portalis.redb")).expect("opens store"));
+        store
+            .put_collection(
+                b"key",
+                &StoredCollection {
+                    name: "Iceland".to_owned(),
+                    role: StoredRole::Owner,
+                    content_key: [0; 32],
+                    media_path: scratch.0.join("media").to_string_lossy().into_owned(),
+                    sources: Vec::new(),
+                    paused: false,
+                    on_disk_bytes: 0,
+                    substrate_handle: Some("a1b2".to_owned()),
+                    draft: false,
+                    started_at: None,
+                    completed_at: None,
+                },
+            )
+            .expect("writes the collection");
+
+        let local = Arc::new(Mutex::new(LocalCollections::test_with_collection(b"key")));
+        let handle = local
+            .lock()
+            .expect("local collections")
+            .handle(b"key")
+            .expect("the one collection");
+
+        let mut initial = state(vec![collection("Iceland")]);
+        initial.collections[0].id = handle;
+        let (states, _watcher) = watch::channel(initial);
+
+        // Two readings, in order: a download in progress, then the engine
+        // saying it is done. A second torrent in the first reading that no
+        // collection claims is the orphan the poller is meant to release.
+        fn reading(info_hash: &str, progress: u64, finished: bool) -> crate::torrent::TorrentInfo {
+            crate::torrent::TorrentInfo {
+                id: 1,
+                info_hash: info_hash.to_owned(),
+                name: "Iceland".to_owned(),
+                state: "live".to_owned(),
+                progress_bytes: progress,
+                total_bytes: 100,
+                uploaded_bytes: 0,
+                finished,
+                error: None,
+                files: Vec::new(),
+                live_peers: 1,
+                live_peer_addrs: vec!["10.0.0.1:6881".to_owned()],
+            }
+        }
+        let moving = reading("a1b2", 10, false);
+        let done = reading("a1b2", 100, true);
+        let orphan = reading("deadbeef", 10, false);
+        let substrate = Arc::new(crate::substrate::Recorded::reading(vec![
+            vec![moving, orphan],
+            vec![done],
+        ]));
+
+        let holdings = Holdings::default();
+        let sources = super::DetailSources {
+            store: Arc::clone(&store),
+            collections: Arc::clone(&local),
+            holdings: holdings.clone(),
+            senders: Arc::new(Mutex::new(HashMap::new())),
+        };
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let shutdown = Shutdown::from_signal(shutdown_rx);
+
+        let poller = tokio::spawn({
+            let substrate = Arc::clone(&substrate);
+            let states = states.clone();
+            let local = Arc::clone(&local);
+            let sources = sources.clone();
+            let store = Arc::clone(&store);
+            let holdings = holdings.clone();
+            async move {
+                transfers::follow_transfers(
+                    store, states, local, substrate, holdings, shutdown, sources,
+                )
+                .await
+            }
+        });
+
+        // Bounded, condition-driven wait: the moments land once the second
+        // reading has been processed, which is the point the assertions below
+        // need. A poller that never runs must fail loudly.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let store_row = || {
+            store
+                .collection(b"key")
+                .expect("reads")
+                .expect("exists")
+        };
+        while !(store_row().started_at.is_some() && store_row().completed_at.is_some()) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the poller never recorded both moments"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        // The moments are written once each, the moment the engine reported
+        // them, and the ring holds the readings that differed.
+        let row = store_row();
+        assert!(row.started_at.is_some(), "the first byte started it");
+        assert!(row.completed_at.is_some(), "the engine's word finished it");
+        assert!(row.completed_at.expect("an end") >= row.started_at.expect("a start"));
+        let samples = store.samples(b"key").expect("reads the ring");
+        assert!(
+            samples.len() >= 2,
+            "the ramp and the finish are both in the history, got {}",
+            samples.len()
+        );
+
+        // The progress tier says what the last reading says, for the
+        // collection the poller found by its handle.
+        let seen = states.borrow();
+        let seen = seen
+            .collections
+            .iter()
+            .find(|collection| collection.id == handle)
+            .expect("the collection is in the snapshot");
+        assert_eq!(seen.on_disk_bytes, 100, "the reading's bytes land in state");
+        assert_eq!(seen.total_bytes, 100);
+        assert_eq!(seen.status, Status::Available, "finished is available");
+
+        // The orphan was released: the poller noticed it and asked the engine
+        // to let it go. (Copied out before the await, so the guard is never
+        // held across it.)
+        let released = substrate.released.lock().unwrap().clone();
+
+        shutdown_tx.send(true).expect("asks the poller to stop");
+        poller.await.expect("the poller winds up");
+
+        assert_eq!(
+            released.as_slice(),
+            &["deadbeef".to_owned()],
+            "unclaimed torrents go"
+        );
+        assert!(
+            !released.iter().any(|handle| handle == "a1b2"),
+            "a claimed collection is never released"
         );
     }
 }

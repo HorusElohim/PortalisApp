@@ -162,6 +162,10 @@ pub(crate) fn current() -> Arc<dyn Substrate> {
 pub(crate) struct Recorded {
     pub(crate) held: Mutex<Vec<String>>,
     pub(crate) released: Mutex<Vec<String>>,
+    /// What `holdings()` reports on successive calls, in order. What a real
+    /// engine says on each poll is the engine's business; what Nexus does
+    /// with the answer is what the tests are about.
+    pub(crate) readings: Mutex<std::collections::VecDeque<Vec<TorrentInfo>>>,
     pub(crate) published: Mutex<Vec<String>>,
     /// Every `(source, files, destination)` a selection was started for.
     pub(crate) selections: Mutex<Vec<(String, Vec<usize>, std::path::PathBuf)>>,
@@ -180,6 +184,18 @@ impl Recorded {
     pub(crate) fn publishing(info_hash: String, descriptor: Vec<u8>) -> Self {
         Self {
             publication: Mutex::new(Some((info_hash, descriptor))),
+            ..Self::default()
+        }
+    }
+
+    /// A double that answers `holdings()` with a scripted sequence of
+    /// readings, in order. What a real engine reports on each poll is the
+    /// engine's business; what Nexus does with the answer is what the tests
+    /// are about. Once the queue is exhausted the last reading repeats —
+    /// the engine holding steady is the normal state, not an error.
+    pub(crate) fn reading(sequence: Vec<Vec<TorrentInfo>>) -> Self {
+        Self {
+            readings: Mutex::new(std::collections::VecDeque::from(sequence)),
             ..Self::default()
         }
     }
@@ -261,6 +277,13 @@ impl Substrate for Recorded {
     }
 
     async fn holdings(&self) -> Vec<TorrentInfo> {
+        let mut readings = self.readings.lock().unwrap();
+        if let Some(next) = readings.pop_front() {
+            if let Some(last) = next.last() {
+                readings.push_back(vec![last.clone()]);
+            }
+            return next;
+        }
         self.held
             .lock()
             .unwrap()
