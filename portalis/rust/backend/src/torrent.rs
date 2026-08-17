@@ -350,11 +350,14 @@ mod validation_tests {
 /// the same location — since the files are already there and match the
 /// piece hashes just computed from them, librqbit verifies them as already
 /// complete and starts seeding immediately, no download needed. This is
-/// the "share something" side of the app; `add_torrent_from_*` above is
+/// the "share something" side of the app; `add_torrent_from_*` below is
 /// the "join a swarm" side — both produce the exact same `TorrentInfo`
 /// shape either way (see the backend README on why: it's the same
 /// protocol regardless of which side of the swarm you started on).
-pub async fn create_collection(
+///
+/// Internal only: the app-facing seam is `portalis_api` (ADR-0001). These
+/// helpers exist so `substrate` and `core` can drive the engine directly.
+pub(crate) async fn create_collection(
     name: String,
     files: Vec<SourceFile>,
 ) -> anyhow::Result<TorrentInfo> {
@@ -370,21 +373,22 @@ pub(crate) async fn publish(
     native::create_collection(name, files, progress).await
 }
 
-/// Add a torrent from a magnet link (or bare 40-char info-hash, which
-/// `librqbit` also accepts as a magnet-equivalent).
-pub async fn add_torrent_from_magnet(magnet_or_hash: String) -> anyhow::Result<TorrentInfo> {
+/// Internal: the app-facing way to join a swarm is `portalis_api::send` with an
+/// `addMedia`/`importTorrent` command (ADR-0001). This drives the engine
+/// directly for `substrate`/`core`.
+pub(crate) async fn add_torrent_from_magnet(magnet_or_hash: String) -> anyhow::Result<TorrentInfo> {
     native::add_torrent_from_magnet(magnet_or_hash).await
 }
 
-/// Add a `.torrent` file without loading its metadata into Dart first.
-pub async fn add_torrent_from_file_path(path: String) -> anyhow::Result<TorrentInfo> {
+/// Internal: add a `.torrent` file without loading its metadata into Dart first.
+pub(crate) async fn add_torrent_from_file_path(path: String) -> anyhow::Result<TorrentInfo> {
     native::add_torrent_from_file_path(path).await
 }
 
-/// Snapshot of every torrent currently managed by the debug session. The
-/// Flutter side polls this on a timer — this is a smoke test, not the
-/// push-based `watch_*` design the real Collections API will use.
-pub async fn list_torrents() -> anyhow::Result<Vec<TorrentInfo>> {
+/// Snapshot of every torrent currently managed by the session. Internal:
+/// `substrate::holdings` uses it; the app reads torrent state from the
+/// `portalis_api` `watch_*` streams instead (ADR-0001).
+pub(crate) async fn list_torrents() -> anyhow::Result<Vec<TorrentInfo>> {
     native::list_torrents().await
 }
 
@@ -393,13 +397,14 @@ pub async fn list_torrents() -> anyhow::Result<Vec<TorrentInfo>> {
 /// invisible in practice). A real desktop `MediaStorageSink` (see the
 /// backend README) will replace this later; for this smoke test it's just
 /// the platform Downloads folder.
-pub fn output_dir() -> anyhow::Result<String> {
+pub(crate) fn output_dir() -> anyhow::Result<String> {
     Ok(native::output_dir().display().to_string())
 }
 
-/// Real disk usage of everything downloaded/shared so far — the Settings
-/// screen's storage meter. Recursive over `output_dir()`.
-pub async fn storage_usage_bytes() -> anyhow::Result<u64> {
+/// Real disk usage of everything downloaded/shared so far. Internal: the
+/// bridged surface for storage is `portalis_api::storage_breakdown` (ADR-0001);
+/// this is just a helper the engine layer can use.
+pub(crate) async fn storage_usage_bytes() -> anyhow::Result<u64> {
     native::storage_usage_bytes().await
 }
 
