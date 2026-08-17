@@ -132,3 +132,28 @@ python3 "$(dirname "${BASH_SOURCE[0]}")/coverage_report.py" "$report" \
   --min-functions 95 \
   --min-regions 95 \
   --allow-uncovered-lines
+
+# Give the instrumented build back to the disk. `target/llvm-cov-target` is a
+# second full target directory — every crate compiled twice more, with
+# instrumentation — and it is 4.3 GB by the time the gate above answers. It
+# has answered; nothing after this point reads it.
+#
+# What runs next is the demo loop, which links twelve debug binaries against
+# iroh, aws-lc and a vendored librqbit into `target/debug`, a directory that
+# already holds the clippy and test builds. On a runner trimmed to ~34 GB
+# free that is what ran out: demos 01 to 09 linked, and `10-headless` died in
+# `cc` with "ld terminated with signal 7 [Bus error]" — the shape a linker
+# takes when the file it is writing cannot grow, rather than anything wrong
+# with the code it was given.
+#
+# Deliberately without `--workspace`, unlike the clean at the top of this
+# script. That flag removes only the workspace's own artifacts and spares the
+# dependencies, which is what the run needs at the start — it must not pay to
+# rebuild iroh to answer for our code. Here the goal is the opposite: the
+# dependencies are the 4.3 GB, and nothing rebuilds them from this directory
+# again. Measured on the same tree, `--workspace` returned 0.1 GB and the bare
+# form returned all of it.
+#
+# The script that made these artifacts is the right place to release them, so
+# the demo loop does not have to know coverage ran at all.
+cargo llvm-cov clean
