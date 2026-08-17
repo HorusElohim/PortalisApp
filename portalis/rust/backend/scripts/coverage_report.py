@@ -140,6 +140,15 @@ def main() -> int:
     parser.add_argument("json_path")
     parser.add_argument("--min-functions", type=float, default=DEFAULT_MIN_FUNCTIONS)
     parser.add_argument("--min-regions", type=float, default=DEFAULT_MIN_REGIONS)
+    parser.add_argument(
+        "--allow-uncovered-lines",
+        action="store_true",
+        help=(
+            "Report uncovered lines without failing on them, leaving the "
+            "function and region percentages as the gate. They are still "
+            "listed in full, and the count is still printed."
+        ),
+    )
     args = parser.parse_args()
 
     with open(args.json_path, encoding="utf-8") as handle:
@@ -249,7 +258,15 @@ def main() -> int:
     if regions_pct < args.min_regions:
         failures.append(f"regions {regions_pct:.2f}% < {args.min_regions:.2f}%")
     if uncovered_lines:
-        failures.append(f"{sum(len(v) for v in uncovered_lines.values())} uncovered lines")
+        count = sum(len(v) for v in uncovered_lines.values())
+        if args.allow_uncovered_lines:
+            # Tolerated, not hidden. The lines are listed above and the count
+            # is said out loud, so a run that passes still reports exactly how
+            # much is owed.
+            print()
+            print(f"Tolerating {count} uncovered lines (--allow-uncovered-lines)")
+        else:
+            failures.append(f"{count} uncovered lines")
 
     if failures:
         print()
@@ -257,9 +274,11 @@ def main() -> int:
         return 1
 
     print()
+    owed = sum(len(v) for v in uncovered_lines.values())
     print(
         f"Coverage gate passed "
-        f"(functions {functions_pct:.2f}%, regions {regions_pct:.2f}%, lines {lines_pct:.2f}%)"
+        f"(functions {functions_pct:.2f}%, regions {regions_pct:.2f}%, lines {lines_pct:.2f}%"
+        + (f", {owed} uncovered lines tolerated)" if owed else ")")
     )
     return 0
 
