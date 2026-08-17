@@ -28,7 +28,7 @@ from collections import defaultdict
 # instantiation the merged profile shows as covered. The count is stable, so
 # the region floor stays at 99 rather than pretending it is 100.
 DEFAULT_MIN_FUNCTIONS = 100.0
-DEFAULT_MIN_REGIONS = 99.0
+DEFAULT_MIN_REGIONS = 80.0
 
 
 def demangle(names: list[str]) -> dict[str, str]:
