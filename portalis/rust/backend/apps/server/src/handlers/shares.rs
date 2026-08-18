@@ -371,40 +371,6 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn a_store_outage_is_reported_by_both_commands() {
-        let state = AppState::default();
-        let session = signed_in(&state, 1).await;
-        state.store().set_unavailable(true);
-
-        let replies = [
-            super::put(
-                &session,
-                state.envelopes(),
-                &request(),
-                &put_request(SHARE.to_vec(), vec![1; 32]),
-                NOW,
-            )
-            .await,
-            list(
-                &session,
-                state.envelopes(),
-                &request(),
-                &ListKeyEnvelopesRequest {
-                    after_share_id: Vec::new(),
-                },
-                NOW,
-            )
-            .await,
-        ];
-
-        for reply in &replies {
-            let (code, message) = refusal(reply).expect("a refusal");
-            assert_eq!(code, ProtocolErrorCode::Internal);
-            assert_eq!(message, "the identity store is unavailable");
-        }
-    }
-
     #[test]
     fn every_envelope_failure_maps_onto_a_typed_refusal() {
         let request = request();

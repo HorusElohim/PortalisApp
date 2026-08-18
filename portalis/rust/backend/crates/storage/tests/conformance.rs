@@ -1,23 +1,19 @@
-//! One suite, every engine.
+//! One suite, one engine.
 //!
-//! A storage seam (ADR-0002) means nothing unless every implementation behind
-//! it answers the same questions the same way. So these tests are written
-//! against `server-core`'s repository traits and know nothing about redb or a
-//! file — every one of them runs against each implementation.
+//! A storage seam (ADR-0002) means nothing unless its one implementation
+//! answers every question the same way every time. So these tests are
+//! written against `server-core`'s repository traits and know nothing about
+//! redb or a file — they run against `Embedded`, the one engine a node
+//! actually runs.
 //!
-//! In memory is the double the service's own tests use; the embedded engine is
-//! the one a node actually runs. A future engine joins the list below and
-//! either passes or is not finished.
-//!
-//! What is deliberately *not* here: anything about how a store is built. A
-//! suite that had to know how to open each engine would grow an engine-shaped
-//! branch per test, which is the thing it exists to prevent.
+//! What is deliberately *not* here: anything about how the store is built. A
+//! suite that had to grow branches per engine would be the thing an earlier
+//! version of this file existed to prevent when there were two.
 
 use portalis_nexus_server_core::{
     DeviceRecord, EnvelopeRepository, FriendRepository, FriendshipEdge, FriendshipRecord,
-    IdentityRepository, InMemoryIdentities, KeyEnvelopePage, KeyEnvelopeRecord, RepositoryError,
-    ShareMembershipRecord, ShareRecord, ShareRepository, ShareSnapshotRecord, UserDirectory,
-    UserRecord,
+    IdentityRepository, KeyEnvelopeRecord, RepositoryError, ShareMembershipRecord, ShareRecord,
+    ShareRepository, ShareSnapshotRecord, UserDirectory, UserRecord,
 };
 use portalis_nexus_storage::embedded::Embedded;
 
@@ -72,191 +68,26 @@ fn snapshot(id: [u8; 16], revision: u64) -> ShareSnapshotRecord {
     }
 }
 
-/// Runs `suite` against every engine, so a difference between them is a
-/// failure rather than something nobody looked for.
-async fn against_every_engine<F, Fut>(name: &str, suite: F)
+/// Opens a scratch `Embedded` store under a name unique to `name` and the
+/// running process, and cleans it up once `suite` returns.
+async fn against_the_engine<F, Fut>(name: &str, suite: F)
 where
-    F: Fn(Engine) -> Fut,
+    F: FnOnce(Embedded) -> Fut,
     Fut: Future<Output = ()>,
 {
-    suite(Engine::Memory(Box::default())).await;
-
     let directory = std::env::temp_dir().join(format!(
         "portalis-conformance-{name}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&directory);
     std::fs::create_dir_all(&directory).expect("a scratch directory");
-    suite(Engine::Embedded(Box::new(
-        Embedded::open(directory.join("service.redb")).expect("opens"),
-    )))
-    .await;
+    suite(Embedded::open(directory.join("service.redb")).expect("opens")).await;
     let _ = std::fs::remove_dir_all(&directory);
 }
 
-/// One engine, named so a failure says which. Boxed because the two differ
-/// enough in size that holding them inline would size every one by the larger.
-enum Engine {
-    Memory(Box<InMemoryIdentities>),
-    Embedded(Box<Embedded>),
-}
-
-// The suite speaks only the traits; this is the one place that knows there is
-// more than one engine, and it exists so a test never has to.
-macro_rules! delegate {
-    ($self:ident, $trait:ident :: $method:ident $(, $argument:expr)*) => {
-        match $self {
-            Engine::Memory(store) => $trait::$method(store.as_ref() $(, $argument)*).await,
-            Engine::Embedded(store) => $trait::$method(store.as_ref() $(, $argument)*).await,
-        }
-    };
-}
-
-impl Engine {
-    async fn insert_registration(
-        &self,
-        user: UserRecord,
-        device: DeviceRecord,
-    ) -> Result<(), RepositoryError> {
-        delegate!(self, IdentityRepository::insert_registration, user, device)
-    }
-
-    async fn find_user(&self, id: [u8; 16]) -> Result<Option<UserRecord>, RepositoryError> {
-        delegate!(self, UserDirectory::find_user, id)
-    }
-
-    async fn find_user_by_handle(
-        &self,
-        normalized: &str,
-        discriminator: &str,
-    ) -> Result<Option<UserRecord>, RepositoryError> {
-        delegate!(
-            self,
-            UserDirectory::find_user_by_handle,
-            normalized,
-            discriminator
-        )
-    }
-
-    async fn find_device(&self, id: [u8; 32]) -> Result<Option<DeviceRecord>, RepositoryError> {
-        delegate!(self, IdentityRepository::find_device, id)
-    }
-
-    async fn list_devices(&self, user: [u8; 16]) -> Result<Vec<DeviceRecord>, RepositoryError> {
-        delegate!(self, IdentityRepository::list_devices, user)
-    }
-
-    async fn link_device(&self, device: DeviceRecord) -> Result<(), RepositoryError> {
-        delegate!(self, IdentityRepository::link_device, device)
-    }
-
-    async fn touch_device(&self, id: [u8; 32], at: u64) -> Result<(), RepositoryError> {
-        delegate!(self, IdentityRepository::touch_device, id, at)
-    }
-
-    async fn revoke_device(&self, id: [u8; 32], at: u64) -> Result<(), RepositoryError> {
-        delegate!(self, IdentityRepository::revoke_device, id, at)
-    }
-
-    async fn find_share(&self, id: [u8; 16]) -> Result<Option<ShareRecord>, RepositoryError> {
-        delegate!(self, ShareRepository::find_share, id)
-    }
-
-    async fn save_publication(
-        &self,
-        share: ShareRecord,
-        snapshot: ShareSnapshotRecord,
-        expected: Option<u64>,
-    ) -> Result<(), RepositoryError> {
-        delegate!(
-            self,
-            ShareRepository::save_publication,
-            share,
-            snapshot,
-            expected
-        )
-    }
-
-    async fn find_snapshot(
-        &self,
-        id: [u8; 16],
-        revision: u64,
-    ) -> Result<Option<ShareSnapshotRecord>, RepositoryError> {
-        delegate!(self, ShareRepository::find_snapshot, id, revision)
-    }
-
-    async fn grant_share_access(
-        &self,
-        membership: ShareMembershipRecord,
-    ) -> Result<(), RepositoryError> {
-        delegate!(self, ShareRepository::grant_share_access, membership)
-    }
-
-    async fn revoke_share_access(
-        &self,
-        share: [u8; 16],
-        user: [u8; 16],
-    ) -> Result<(), RepositoryError> {
-        delegate!(self, ShareRepository::revoke_share_access, share, user)
-    }
-
-    async fn has_share_access(
-        &self,
-        share: [u8; 16],
-        user: [u8; 16],
-    ) -> Result<bool, RepositoryError> {
-        delegate!(self, ShareRepository::has_share_access, share, user)
-    }
-
-    async fn list_authorized_shares(
-        &self,
-        user: [u8; 16],
-    ) -> Result<Vec<ShareRecord>, RepositoryError> {
-        delegate!(self, ShareRepository::list_authorized_shares, user)
-    }
-
-    async fn list_share_members(&self, share: [u8; 16]) -> Result<Vec<[u8; 16]>, RepositoryError> {
-        delegate!(self, ShareRepository::list_share_members, share)
-    }
-
-    async fn find_friendship(
-        &self,
-        edge: FriendshipEdge,
-    ) -> Result<Option<FriendshipRecord>, RepositoryError> {
-        delegate!(self, FriendRepository::find_friendship, edge)
-    }
-
-    async fn save_friendship(
-        &self,
-        record: FriendshipRecord,
-        expected: u64,
-    ) -> Result<(), RepositoryError> {
-        delegate!(self, FriendRepository::save_friendship, record, expected)
-    }
-
-    async fn list_friendships(
-        &self,
-        user: [u8; 16],
-    ) -> Result<Vec<FriendshipRecord>, RepositoryError> {
-        delegate!(self, FriendRepository::list_friendships, user)
-    }
-
-    async fn put_key_envelope(&self, envelope: KeyEnvelopeRecord) -> Result<(), RepositoryError> {
-        delegate!(self, EnvelopeRepository::put_key_envelope, envelope)
-    }
-
-    async fn list_key_envelopes(
-        &self,
-        device: [u8; 32],
-        after: Option<[u8; 16]>,
-    ) -> Result<KeyEnvelopePage, RepositoryError> {
-        delegate!(self, EnvelopeRepository::list_key_envelopes, device, after)
-    }
-}
-
 #[tokio::test]
-async fn a_registration_is_all_or_nothing_in_either_engine() {
-    against_every_engine("registration", |store| async move {
+async fn a_registration_is_all_or_nothing() {
+    against_the_engine("registration", |store| async move {
         store
             .insert_registration(user(ADA, "Ada", "7Q2XZ"), device(1, ADA))
             .await
@@ -286,8 +117,8 @@ async fn a_registration_is_all_or_nothing_in_either_engine() {
 }
 
 #[tokio::test]
-async fn a_handle_finds_its_user_in_either_engine() {
-    against_every_engine("handles", |store| async move {
+async fn a_handle_finds_its_user() {
+    against_the_engine("handles", |store| async move {
         store
             .insert_registration(user(ADA, "Ada", "7Q2XZ"), device(1, ADA))
             .await
@@ -313,8 +144,8 @@ async fn a_handle_finds_its_user_in_either_engine() {
 }
 
 #[tokio::test]
-async fn devices_are_linked_listed_touched_and_revoked_in_either_engine() {
-    against_every_engine("devices", |store| async move {
+async fn devices_are_linked_listed_touched_and_revoked() {
+    against_the_engine("devices", |store| async move {
         store
             .insert_registration(user(ADA, "Ada", "7Q2XZ"), device(1, ADA))
             .await
@@ -363,8 +194,8 @@ async fn devices_are_linked_listed_touched_and_revoked_in_either_engine() {
 }
 
 #[tokio::test]
-async fn publishing_is_a_compare_and_set_in_either_engine() {
-    against_every_engine("publish", |store| async move {
+async fn publishing_is_a_compare_and_set() {
+    against_the_engine("publish", |store| async move {
         store
             .save_publication(share(SHARE, 1), snapshot(SHARE, 1), None)
             .await
@@ -409,8 +240,8 @@ async fn publishing_is_a_compare_and_set_in_either_engine() {
 }
 
 #[tokio::test]
-async fn membership_is_granted_revoked_and_listed_in_either_engine() {
-    against_every_engine("membership", |store| async move {
+async fn membership_is_granted_revoked_and_listed() {
+    against_the_engine("membership", |store| async move {
         store
             .save_publication(share(SHARE, 1), snapshot(SHARE, 1), None)
             .await
@@ -470,8 +301,8 @@ async fn membership_is_granted_revoked_and_listed_in_either_engine() {
 }
 
 #[tokio::test]
-async fn what_was_never_stored_is_absent_in_either_engine() {
-    against_every_engine("absent", |store| async move {
+async fn what_was_never_stored_is_absent() {
+    against_the_engine("absent", |store| async move {
         assert_eq!(store.find_user(ADA).await.expect("reads"), None);
         assert_eq!(store.find_device([1; 32]).await.expect("reads"), None);
         assert!(store.list_devices(ADA).await.expect("reads").is_empty());
@@ -497,8 +328,8 @@ async fn what_was_never_stored_is_absent_in_either_engine() {
 }
 
 #[tokio::test]
-async fn a_friendship_is_versioned_in_either_engine() {
-    against_every_engine("friends", |store| async move {
+async fn a_friendship_is_versioned() {
+    against_the_engine("friends", |store| async move {
         let edge = FriendshipEdge::between(ADA, GRACE).expect("two different people");
         let requested = FriendshipRecord {
             edge,
@@ -558,8 +389,8 @@ async fn a_friendship_is_versioned_in_either_engine() {
 }
 
 #[tokio::test]
-async fn a_sealed_key_is_replaced_and_paged_in_either_engine() {
-    against_every_engine("envelopes", |store| async move {
+async fn a_sealed_key_is_replaced_and_paged() {
+    against_the_engine("envelopes", |store| async move {
         let envelope = |share: [u8; 16], ciphertext: &[u8]| KeyEnvelopeRecord {
             share_id: share,
             recipient_device_id: [1; 32],

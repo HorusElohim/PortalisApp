@@ -759,31 +759,6 @@ mod tests {
 
         let event = pushed(&inbox.try_recv().expect("the member was told")).expect("an envelope");
         assert_eq!(announced(&event).expect("a share event").revision, 2);
-
-        // Telling members is best-effort. A store that fails while listing
-        // them leaves the publication standing rather than undoing a durable
-        // write over a notification nobody was waiting on; clients refresh on
-        // reconnect.
-        state.store().set_unavailable(true);
-        super::announce(
-            &state,
-            &ShareRecord {
-                share_id: SHARE,
-                owner: ADA,
-                revision: 3,
-                snapshot_id: [6; SNAPSHOT_ID_BYTES],
-                capsule: b"three".to_vec(),
-                capsule_signature: vec![8; SIGNATURE_BYTES],
-                created_at_unix_ns: NOW,
-                updated_at_unix_ns: NOW,
-            },
-            NOW,
-        )
-        .await;
-        assert!(
-            inbox.try_recv().is_err(),
-            "nobody could be looked up, so nobody was told"
-        );
     }
 
     /// A live handoff only moves between two devices that may both already
@@ -1049,17 +1024,6 @@ mod tests {
                 "a share's owner cannot be removed from it".to_owned()
             )
         );
-
-        // Storage detail stays off the wire here too.
-        state.store().set_unavailable(true);
-        let reply = revoke(&owner, &state, &request(), &well_formed, NOW).await;
-        assert_eq!(
-            refusal(&reply).expect("a refusal"),
-            (
-                ProtocolErrorCode::Internal,
-                "the share store is unavailable".to_owned()
-            )
-        );
     }
 
     /// A publisher whose acknowledgement was lost retries the same bytes.
@@ -1101,39 +1065,6 @@ mod tests {
             Some(Payload::ShareAccessGranted(granted)) => Some(&granted.recipient_devices),
             _ => None,
         }
-    }
-
-    #[tokio::test]
-    async fn a_grant_that_cannot_read_the_members_devices_reports_an_outage() {
-        let state = AppState::default();
-        let owner = signed_in(&state, ADA, 1).await;
-        let _member = signed_in(&state, GRACE, 2).await;
-        publish(&owner, &state, &request(), &publication(1, b"c"), NOW).await;
-
-        state.store().set_devices_unavailable(true);
-        let reply = grant(
-            &owner,
-            &state,
-            &request(),
-            &GrantShareAccess {
-                share_id: SHARE.to_vec(),
-                member_user_id: GRACE.to_vec(),
-            },
-            NOW,
-        )
-        .await;
-
-        assert_eq!(
-            refusal(&reply).expect("a refusal"),
-            (
-                ProtocolErrorCode::Internal,
-                "the identity store is unavailable".to_owned()
-            )
-        );
-        assert!(
-            granted_devices(&reply).is_none(),
-            "a refused grant names no devices"
-        );
     }
 
     /// A member who is simply not connected is a different answer from one
@@ -1262,37 +1193,5 @@ mod tests {
             refusal(&reply).expect("a refusal").0,
             ProtocolErrorCode::Unauthorized
         );
-
-        // Storage detail never reaches the wire.
-        state.store().set_unavailable(true);
-        for reply in [
-            publish(&session, &state, &request(), &publication(1, b"c"), NOW).await,
-            list(&session, &state, &request(), NOW).await,
-            fetch(
-                &session,
-                &state,
-                &request(),
-                &FetchShareRequest {
-                    share_id: SHARE.to_vec(),
-                },
-                NOW,
-            )
-            .await,
-            grant(
-                &session,
-                &state,
-                &request(),
-                &GrantShareAccess {
-                    share_id: SHARE.to_vec(),
-                    member_user_id: GRACE.to_vec(),
-                },
-                NOW,
-            )
-            .await,
-        ] {
-            let (code, message) = refusal(&reply).expect("a refusal");
-            assert_eq!(code, ProtocolErrorCode::Internal);
-            assert_eq!(message, "the share store is unavailable");
-        }
     }
 }

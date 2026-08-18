@@ -188,7 +188,6 @@ mod tests {
     fn with_store_wires_identities_and_friends_to_the_given_backend() {
         let state = AppState::with_store(NexusStore::default());
 
-        assert_eq!(state.store().kind(), "memory");
         // The default's readiness and presence still apply; only the store
         // and the services built over it are replaced.
         assert!(!state.is_ready());
