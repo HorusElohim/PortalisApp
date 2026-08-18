@@ -34,7 +34,7 @@ class FrbSettingsRepository implements SettingsRepository {
     // the per-entry breakdown that seam already exposes, so no second
     // bridge function is needed for the meter.
     final entries = await nexus_bridge.storageBreakdown();
-    return entries.fold(0, (total, entry) => total + entry.bytes.toInt());
+    return entries.fold<int>(0, (total, entry) => total + entry.bytes.toInt());
   }
 
   @override
