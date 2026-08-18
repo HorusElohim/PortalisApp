@@ -93,32 +93,23 @@ RUST_LOG=portalis_nexus_client=debug,portalis_nexus_server=debug \
 
 The server process requires durable storage and a stable QUIC identity. An
 embedded deployment generates a private 32-byte `node-secret` file beside its
-data on first start. For a MongoDB or container deployment, set
+data on first start. For a container deployment, set
 `PORTALIS_NEXUS_NODE_SECRET` to 64 hexadecimal characters generated once (for
 example, `openssl rand -hex 32`) and retain it across restarts. The public node
 ID is derived from that secret; never use the node ID as the secret.
 
-Start a MongoDB server with:
+Start a server with:
 
 ```sh
 PORTALIS_NEXUS_NODE_SECRET="$(openssl rand -hex 32)" \
-PORTALIS_NEXUS_MONGODB_URI=mongodb://127.0.0.1:27017/?directConnection=true \
+PORTALIS_NEXUS_DATA_DIR=/var/lib/portalis \
   cargo run -p portalis-nexus-server
 ```
 
-Registration writes a user and its first device in one transaction, so the
-server needs a replica set rather than a standalone. `PORTALIS_NEXUS_DATABASE`
-names the database and defaults to `portalis_nexus`. `docker/compose.yaml`
-brings up both the server and a single-node replica set already configured for
-this.
-
-The MongoDB tests start their own replica set through Docker and are skipped
-when Docker is unavailable. To run them against a server you already have:
-
-```sh
-PORTALIS_NEXUS_TEST_MONGODB_URI=mongodb://127.0.0.1:27017/?directConnection=true \
-  cargo test -p portalis-nexus-server --test mongo
-```
+`PORTALIS_NEXUS_DATA_DIR` is the one storage setting (ADR-0002): the embedded
+redb engine keeps its files there, and registration's user-plus-device write is
+one transaction against that file. `docker/compose.yaml` runs the server with a
+named volume mounted at that path. The whole suite runs without Docker.
 
 ## Client
 

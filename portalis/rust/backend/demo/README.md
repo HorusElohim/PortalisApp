@@ -50,17 +50,14 @@ where the device keys are written (`demo-device.key` by default). That file
 holds two 32-byte secrets side by side: the Ed25519 signing seed and the
 X25519 encryption secret. Delete it to start over as a new device.
 
-The server keeps identities in memory unless `PORTALIS_NEXUS_MONGODB_URI` is
+The server keeps identities in memory unless `PORTALIS_NEXUS_DATA_DIR` is
 set, so without it a restart forgets them. With it, the same key authenticates
 across restarts:
 
 ```sh
-PORTALIS_NEXUS_MONGODB_URI='mongodb://localhost:27017/?directConnection=true' \
+PORTALIS_NEXUS_DATA_DIR=/var/lib/portalis \
   cargo run -p portalis-nexus-server
 ```
-
-MongoDB must be a replica set: registration writes a user and its first device
-in one transaction. `docker/compose.yaml` starts one.
 
 ## What to read
 
