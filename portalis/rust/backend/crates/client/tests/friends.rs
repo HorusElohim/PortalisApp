@@ -225,26 +225,13 @@ async fn an_answer_of_the_wrong_shape_is_rejected() {
     server.abort();
 }
 
-#[tokio::test]
-async fn a_store_outage_is_reported_over_the_socket() {
-    let address = reserve_address().await;
-    let (state, server) = start_server(address).await;
-    let (ada, _, _) = registered(address, "ada", 7).await;
-
-    state.store().set_unavailable(true);
-
-    for error in [
-        ada.list_friends().await.expect_err("the store is down"),
-        ada.resolve_handle("ada#7Q2XZ")
-            .await
-            .expect_err("the store is down"),
-        ada.friend_command(FriendAction::Request, &[2; 16])
-            .await
-            .expect_err("the store is down"),
-    ] {
-        assert_eq!(refusal(&error), ProtocolErrorCode::Internal);
-    }
-
-    ada.shutdown().await;
-    server.abort();
-}
+// A store-outage-over-the-socket test lived here before ADR-0002. It hung a
+// fault switch off `NexusStore::Memory`, which no longer exists: the one
+// engine left is `Embedded`, a redb file, and there is no way to make a
+// healthy open file fail on demand (see scripts/coverage.sh's rationale for
+// the embedded engine's excluded error arms). The socket-level plumbing this
+// test covered — an `Unavailable` repository error becoming
+// `ProtocolErrorCode::Internal` over the wire — is exercised directly at the
+// handler layer instead; see `crates/server-core/src/envelopes.rs`'s
+// `a_store_outage_is_reported_while_reading`, which injects the fault on a
+// double built for exactly that.
