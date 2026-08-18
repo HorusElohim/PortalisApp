@@ -1,16 +1,16 @@
-//! Debug-only torrent smoke test: add a magnet link or raw `.torrent` file
-//! and watch it download via a bare `librqbit::Session`, bypassing the
-//! Collection/Manifest domain model entirely. This exists to validate the
-//! `librqbit` integration itself (the thing `rust/backend/README.md` calls
-//! `SwarmEngine`) works end-to-end before building the real ports/adapters
-//! around it. Not part of the production API surface.
+//! The librqbit engine: publish, inspect, acquire and account for content on
+//! a `librqbit::Session`. This is the online strategy behind
+//! `substrate::Torrents` (ADR-0003) — the collection/manifest domain model
+//! sits above it and never names BitTorrent.
 //!
-//! The DTO and function signatures below are unconditional (needed on every
-//! target, wasm32 included) because `flutter_rust_bridge`'s generated glue
-//! (`src/api.rs`) references `crate::torrent::*` regardless of this
-//! module's own visibility or any `#[cfg]` on its declaration — only the
-//! *implementation* is target-gated, falling back to an error on wasm32
-//! (Web is a viewer, not a swarm participant; see the backend README).
+//! It reaches the app only through the single `AppSnapshot`/`Command` seam
+//! (ADR-0001); nothing here is exported across the FFI directly.
+//!
+//! The DTOs and function signatures below are unconditional (compiled on
+//! every target, wasm32 included) because `substrate` is target-agnostic and
+//! refers to them regardless of platform — only the *implementation* is
+//! target-gated, falling back to an error on wasm32 (Web is a viewer, not a
+//! swarm participant; see the backend README).
 
 #[derive(Debug, Clone)]
 pub struct TorrentInfo {
