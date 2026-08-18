@@ -15,7 +15,6 @@ import 'nexus_settings.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
 import 'portalis_api.dart';
 import 'settings.dart';
-import 'torrent.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustLibApiImplPlatform({
@@ -30,15 +29,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RustStreamSink<AppSnapshot> dco_decode_StreamSink_app_snapshot_Sse(
-      dynamic raw);
+    dynamic raw,
+  );
 
   @protected
   RustStreamSink<Uint8List> dco_decode_StreamSink_list_prim_u_8_strict_Sse(
-      dynamic raw);
+    dynamic raw,
+  );
 
   @protected
   RustStreamSink<AppDetail?>
-      dco_decode_StreamSink_opt_box_autoadd_app_detail_Sse(dynamic raw);
+  dco_decode_StreamSink_opt_box_autoadd_app_detail_Sse(dynamic raw);
 
   @protected
   String dco_decode_String(dynamic raw);
@@ -104,9 +105,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   NexusEndpointConfig dco_decode_box_autoadd_nexus_endpoint_config(dynamic raw);
 
   @protected
-  TorrentInfo dco_decode_box_autoadd_torrent_info(dynamic raw);
-
-  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
 
   @protected
@@ -140,22 +138,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<AppStorageEntry> dco_decode_list_app_storage_entry(dynamic raw);
 
   @protected
-  List<PieceRun> dco_decode_list_piece_run(dynamic raw);
-
-  @protected
   Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
-
-  @protected
-  List<SourceFile> dco_decode_list_source_file(dynamic raw);
-
-  @protected
-  List<TorrentFile> dco_decode_list_torrent_file(dynamic raw);
-
-  @protected
-  List<TorrentInfo> dco_decode_list_torrent_info(dynamic raw);
 
   @protected
   NexusEndpointConfig dco_decode_nexus_endpoint_config(dynamic raw);
@@ -182,18 +168,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw);
 
   @protected
-  PieceRun dco_decode_piece_run(dynamic raw);
-
-  @protected
-  SourceFile dco_decode_source_file(dynamic raw);
-
-  @protected
-  TorrentFile dco_decode_torrent_file(dynamic raw);
-
-  @protected
-  TorrentInfo dco_decode_torrent_info(dynamic raw);
-
-  @protected
   int dco_decode_u_16(dynamic raw);
 
   @protected
@@ -209,23 +183,23 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
-  BigInt dco_decode_usize(dynamic raw);
-
-  @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
   RustStreamSink<AppSnapshot> sse_decode_StreamSink_app_snapshot_Sse(
-      SseDeserializer deserializer);
+    SseDeserializer deserializer,
+  );
 
   @protected
   RustStreamSink<Uint8List> sse_decode_StreamSink_list_prim_u_8_strict_Sse(
-      SseDeserializer deserializer);
+    SseDeserializer deserializer,
+  );
 
   @protected
   RustStreamSink<AppDetail?>
-      sse_decode_StreamSink_opt_box_autoadd_app_detail_Sse(
-          SseDeserializer deserializer);
+  sse_decode_StreamSink_opt_box_autoadd_app_detail_Sse(
+    SseDeserializer deserializer,
+  );
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
@@ -286,14 +260,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   EngineSettings sse_decode_box_autoadd_engine_settings(
-      SseDeserializer deserializer);
+    SseDeserializer deserializer,
+  );
 
   @protected
   NexusEndpointConfig sse_decode_box_autoadd_nexus_endpoint_config(
-      SseDeserializer deserializer);
-
-  @protected
-  TorrentInfo sse_decode_box_autoadd_torrent_info(SseDeserializer deserializer);
+    SseDeserializer deserializer,
+  );
 
   @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
@@ -303,7 +276,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   DeviceIdentityInfo sse_decode_device_identity_info(
-      SseDeserializer deserializer);
+    SseDeserializer deserializer,
+  );
 
   @protected
   EngineSettings sse_decode_engine_settings(SseDeserializer deserializer);
@@ -316,7 +290,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AppCollection> sse_decode_list_app_collection(
-      SseDeserializer deserializer);
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<AppContact> sse_decode_list_app_contact(SseDeserializer deserializer);
@@ -326,14 +301,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AppSourceFile> sse_decode_list_app_source_file(
-      SseDeserializer deserializer);
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<AppStorageEntry> sse_decode_list_app_storage_entry(
-      SseDeserializer deserializer);
-
-  @protected
-  List<PieceRun> sse_decode_list_piece_run(SseDeserializer deserializer);
+    SseDeserializer deserializer,
+  );
 
   @protected
   Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
@@ -342,32 +316,27 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
-  List<SourceFile> sse_decode_list_source_file(SseDeserializer deserializer);
-
-  @protected
-  List<TorrentFile> sse_decode_list_torrent_file(SseDeserializer deserializer);
-
-  @protected
-  List<TorrentInfo> sse_decode_list_torrent_info(SseDeserializer deserializer);
-
-  @protected
   NexusEndpointConfig sse_decode_nexus_endpoint_config(
-      SseDeserializer deserializer);
+    SseDeserializer deserializer,
+  );
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
   AppDetail? sse_decode_opt_box_autoadd_app_detail(
-      SseDeserializer deserializer);
+    SseDeserializer deserializer,
+  );
 
   @protected
   AppPending? sse_decode_opt_box_autoadd_app_pending(
-      SseDeserializer deserializer);
+    SseDeserializer deserializer,
+  );
 
   @protected
   AppTransfer? sse_decode_opt_box_autoadd_app_transfer(
-      SseDeserializer deserializer);
+    SseDeserializer deserializer,
+  );
 
   @protected
   bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
@@ -377,18 +346,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer);
-
-  @protected
-  PieceRun sse_decode_piece_run(SseDeserializer deserializer);
-
-  @protected
-  SourceFile sse_decode_source_file(SseDeserializer deserializer);
-
-  @protected
-  TorrentFile sse_decode_torrent_file(SseDeserializer deserializer);
-
-  @protected
-  TorrentInfo sse_decode_torrent_info(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
@@ -406,26 +363,31 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
-  BigInt sse_decode_usize(SseDeserializer deserializer);
-
-  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
   void sse_encode_AnyhowException(
-      AnyhowException self, SseSerializer serializer);
+    AnyhowException self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_StreamSink_app_snapshot_Sse(
-      RustStreamSink<AppSnapshot> self, SseSerializer serializer);
+    RustStreamSink<AppSnapshot> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_StreamSink_list_prim_u_8_strict_Sse(
-      RustStreamSink<Uint8List> self, SseSerializer serializer);
+    RustStreamSink<Uint8List> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_StreamSink_opt_box_autoadd_app_detail_Sse(
-      RustStreamSink<AppDetail?> self, SseSerializer serializer);
+    RustStreamSink<AppDetail?> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
@@ -462,7 +424,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_app_storage_entry(
-      AppStorageEntry self, SseSerializer serializer);
+    AppStorageEntry self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_app_transfer(AppTransfer self, SseSerializer serializer);
@@ -472,34 +436,42 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_app_command(
-      AppCommand self, SseSerializer serializer);
+    AppCommand self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_app_detail(
-      AppDetail self, SseSerializer serializer);
+    AppDetail self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_app_pending(
-      AppPending self, SseSerializer serializer);
+    AppPending self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_app_transfer(
-      AppTransfer self, SseSerializer serializer);
+    AppTransfer self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_engine_settings(
-      EngineSettings self, SseSerializer serializer);
+    EngineSettings self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_nexus_endpoint_config(
-      NexusEndpointConfig self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_box_autoadd_torrent_info(
-      TorrentInfo self, SseSerializer serializer);
+    NexusEndpointConfig self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
@@ -509,11 +481,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_device_identity_info(
-      DeviceIdentityInfo self, SseSerializer serializer);
+    DeviceIdentityInfo self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_engine_settings(
-      EngineSettings self, SseSerializer serializer);
+    EngineSettings self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_f_32(double self, SseSerializer serializer);
@@ -523,64 +499,69 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_app_collection(
-      List<AppCollection> self, SseSerializer serializer);
+    List<AppCollection> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_app_contact(
-      List<AppContact> self, SseSerializer serializer);
+    List<AppContact> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_app_entry(List<AppEntry> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_app_source_file(
-      List<AppSourceFile> self, SseSerializer serializer);
+    List<AppSourceFile> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_app_storage_entry(
-      List<AppStorageEntry> self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_list_piece_run(List<PieceRun> self, SseSerializer serializer);
+    List<AppStorageEntry> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_32_strict(
-      Uint32List self, SseSerializer serializer);
+    Uint32List self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_8_strict(
-      Uint8List self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_list_source_file(
-      List<SourceFile> self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_list_torrent_file(
-      List<TorrentFile> self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_list_torrent_info(
-      List<TorrentInfo> self, SseSerializer serializer);
+    Uint8List self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_nexus_endpoint_config(
-      NexusEndpointConfig self, SseSerializer serializer);
+    NexusEndpointConfig self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_app_detail(
-      AppDetail? self, SseSerializer serializer);
+    AppDetail? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_app_pending(
-      AppPending? self, SseSerializer serializer);
+    AppPending? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_app_transfer(
-      AppTransfer? self, SseSerializer serializer);
+    AppTransfer? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
@@ -590,18 +571,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_piece_run(PieceRun self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_source_file(SourceFile self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_torrent_file(TorrentFile self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_torrent_info(TorrentInfo self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);
@@ -617,9 +586,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_usize(BigInt self, SseSerializer serializer);
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);

@@ -22,10 +22,7 @@ class DeviceIdentityInfo {
   final String deviceId;
   final String nickname;
 
-  const DeviceIdentityInfo({
-    required this.deviceId,
-    required this.nickname,
-  });
+  const DeviceIdentityInfo({required this.deviceId, required this.nickname});
 
   @override
   int get hashCode => deviceId.hashCode ^ nickname.hashCode;
