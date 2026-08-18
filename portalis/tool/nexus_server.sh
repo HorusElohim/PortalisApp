@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Runs a Nexus service for testing an app against.
 #
-#   tool/nexus_server.sh          # Docker Compose, on MongoDB — what deploys
+#   tool/nexus_server.sh          # Docker Compose, on redb — what deploys
 #   tool/nexus_server.sh local    # the binary, on the embedded store — quick
 #   tool/nexus_server.sh down     # stop the compose stack, keeping the data
 #   tool/nexus_server.sh reset    # stop it and forget everything
@@ -18,8 +18,8 @@ set -euo pipefail
 # for the same reason.
 #
 # Which to use: `local` builds in seconds and stores identities in a directory,
-# which is what app QA wants. The default is Docker on MongoDB, which is what
-# actually deploys — use it before believing anything about storage.
+# which is what app QA wants. The default is Docker on redb in a named volume,
+# which is what actually deploys — use it before believing anything about storage.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_DIR="$ROOT_DIR/rust/backend/docker"
@@ -72,7 +72,7 @@ MODE="${1:-up}"
 
 case "$MODE" in
   local)
-    # No Mongo, no image: registrations land in a directory. Same identity as
+    # No container, no image: registrations land in a directory. Same identity as
     # the compose stack, so an app configured against one reaches the other.
     # Checked before building, because the failure otherwise arrives a minute
     # later as "Address already in use" from a log, and the usual culprit is
@@ -151,12 +151,11 @@ case "$MODE" in
     ;;
 esac
 
-echo "==> Building and starting Nexus and MongoDB"
+echo "==> Building and starting Nexus"
 docker compose up --build --detach
 
-# Ready is when the service says so, not when the container starts: it waits
-# for Mongo to become primary first, and dialling before then fails in a way
-# that looks like a wrong address.
+# Ready is when the service says so, not when the container starts: dialling
+# before then fails in a way that looks like a wrong address.
 echo "==> Waiting for the service"
 NODE_ID=""
 for _ in $(seq 1 180); do
@@ -177,7 +176,7 @@ if [ -z "$NODE_ID" ]; then
   exit 1
 fi
 
-announce "$NODE_ID" "MongoDB, in the compose volume"
+announce "$NODE_ID" "redb, in the compose volume"
 cat <<EOF
   A container cannot answer mDNS across Docker's network, so with this mode
   set the direct address too. tool/nexus_server.sh local can be found without

@@ -91,7 +91,7 @@ else
   surprised by.
 
     tool/nexus_server.sh local    quick, found without an address
-    tool/nexus_server.sh          Docker and MongoDB, as deployed
+    tool/nexus_server.sh          Docker and redb, as deployed
 
 EOF
 fi
