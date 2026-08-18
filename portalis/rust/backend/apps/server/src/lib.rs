@@ -32,7 +32,7 @@ mod shutdown;
 mod state;
 mod store;
 
-pub use config::{DEFAULT_DATABASE, DEFAULT_LISTEN_ADDR, MissingStorage, ServerConfig, Storage};
+pub use config::{DEFAULT_LISTEN_ADDR, MissingStorage, ServerConfig, Storage};
 pub use connections::Connections;
 pub use environment::{OsRandom, SystemClock, now_unix_ns};
 pub use handlers::{departed, dispatch};
@@ -45,7 +45,6 @@ pub use messages::{
     protocol_error, reply_with, response_for, server_hello,
 };
 pub use node::{NodeSecretError, load_node_secret};
-pub use portalis_nexus_storage::mongo::MongoStore;
 pub use session::Session;
 pub use shutdown::{GRACEFUL_DRAIN_TIMEOUT, Shutdown};
 pub use state::AppState;

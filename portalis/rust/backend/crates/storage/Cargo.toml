@@ -9,7 +9,6 @@ publish = false
 [dependencies]
 portalis-nexus-server-core.workspace = true
 futures-util.workspace = true
-mongodb.workspace = true
 portalis-nexus-protocol.workspace = true
 tracing.workspace = true
 redb.workspace = true
@@ -18,7 +17,6 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-testcontainers-modules.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
