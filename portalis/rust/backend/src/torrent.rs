@@ -120,35 +120,6 @@ fn numbered_source_name(name: &str, suffix: u32) -> String {
     }
 }
 
-pub(crate) fn validate_source_files(files: &[SourceFile]) -> anyhow::Result<u64> {
-    anyhow::ensure!(!files.is_empty(), "a collection needs at least one file");
-    let mut names = std::collections::HashSet::new();
-    let mut total_bytes = 0u64;
-    for file in files {
-        let name = native::sanitize_component(&file.name);
-        anyhow::ensure!(
-            names.insert(name.to_lowercase()),
-            "duplicate source filename {:?}",
-            file.name
-        );
-        let location = crate::content_location::ContentLocation::from_source_path(&file.path)?;
-        let length = location.length(file.length_bytes)?;
-        total_bytes = total_bytes
-            .checked_add(length)
-            .ok_or_else(|| anyhow::anyhow!("source size overflow"))?;
-    }
-    Ok(total_bytes)
-}
-
-pub(crate) async fn inspect_source_files(files: &[SourceFile]) -> anyhow::Result<u64> {
-    let files = files.to_vec();
-    tokio::task::spawn_blocking(move || validate_source_files(&files))
-        .await
-        .map_err(|error| anyhow::anyhow!("source inspection task failed: {error}"))?
-}
-
-/// Reads and validates a local `.torrent` descriptor without creating an
-/// engine session or fetching any payload bytes.
 pub(crate) const TORRENT_PIECE_LENGTH: u64 = 2 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
@@ -237,9 +208,8 @@ impl PublishProgress {
 mod validation_tests {
     use super::{
         is_magnet, is_remote_source, is_torrent_path, make_source_names_unique,
-        native::sanitize_component, validate_source_files, SourceFile,
+        native::sanitize_component, SourceFile,
     };
-    use std::io::Write;
 
     /// The magnet that broke this: its `xs=` web-seed hint ends in
     /// `big-buck-bunny.torrent`, so judging by the tail of the string reads a
@@ -289,28 +259,6 @@ mod validation_tests {
     }
 
     #[test]
-    fn accepts_a_path_source_without_a_size_cap() {
-        let path = std::env::temp_dir().join(format!("portalis-source-{}", uuid::Uuid::new_v4()));
-        let mut file = std::fs::File::create(&path).unwrap();
-        file.write_all(&[0; 1024]).unwrap();
-        assert_eq!(
-            validate_source_files(&[SourceFile {
-                name: "photo.jpg".into(),
-                path: path.to_string_lossy().into_owned(),
-                length_bytes: None,
-            }])
-            .unwrap(),
-            1024
-        );
-        let _ = std::fs::remove_file(path);
-    }
-
-    #[test]
-    fn rejects_an_empty_share() {
-        assert!(validate_source_files(&[]).is_err());
-    }
-
-    #[test]
     fn duplicate_source_names_get_stable_suffixes() {
         let mut files = vec![
             SourceFile {
@@ -355,16 +303,8 @@ mod validation_tests {
 /// shape either way (see the backend README on why: it's the same
 /// protocol regardless of which side of the swarm you started on).
 ///
-/// Internal only: the app-facing seam is `portalis_api` (ADR-0001). These
-/// helpers exist so `substrate` and `core` can drive the engine directly.
-pub(crate) async fn create_collection(
-    name: String,
-    files: Vec<SourceFile>,
-) -> anyhow::Result<TorrentInfo> {
-    let total = inspect_source_files(&files).await?;
-    native::create_collection(name, files, PublishProgress::new(total)).await
-}
-
+/// Internal only: the app-facing seam is `portalis_api` (ADR-0001). This
+/// helper exists so `substrate` and `core` can drive the engine directly.
 pub(crate) async fn publish(
     name: String,
     files: Vec<SourceFile>,
@@ -373,39 +313,11 @@ pub(crate) async fn publish(
     native::create_collection(name, files, progress).await
 }
 
-/// Internal: the app-facing way to join a swarm is `portalis_api::send` with an
-/// `addMedia`/`importTorrent` command (ADR-0001). This drives the engine
-/// directly for `substrate`/`core`.
-pub(crate) async fn add_torrent_from_magnet(magnet_or_hash: String) -> anyhow::Result<TorrentInfo> {
-    native::add_torrent_from_magnet(magnet_or_hash).await
-}
-
-/// Internal: add a `.torrent` file without loading its metadata into Dart first.
-pub(crate) async fn add_torrent_from_file_path(path: String) -> anyhow::Result<TorrentInfo> {
-    native::add_torrent_from_file_path(path).await
-}
-
 /// Snapshot of every torrent currently managed by the session. Internal:
 /// `substrate::holdings` uses it; the app reads torrent state from the
 /// `portalis_api` `watch_*` streams instead (ADR-0001).
 pub(crate) async fn list_torrents() -> anyhow::Result<Vec<TorrentInfo>> {
     native::list_torrents().await
-}
-
-/// Where downloaded files actually land, so the UI can show the user a real
-/// path instead of leaving them to guess (this was a temp directory before —
-/// invisible in practice). A real desktop `MediaStorageSink` (see the
-/// backend README) will replace this later; for this smoke test it's just
-/// the platform Downloads folder.
-pub(crate) fn output_dir() -> anyhow::Result<String> {
-    Ok(native::output_dir().display().to_string())
-}
-
-/// Real disk usage of everything downloaded/shared so far. Internal: the
-/// bridged surface for storage is `portalis_api::storage_breakdown` (ADR-0001);
-/// this is just a helper the engine layer can use.
-pub(crate) async fn storage_usage_bytes() -> anyhow::Result<u64> {
-    native::storage_usage_bytes().await
 }
 
 /// One top-level item under the download directory — in practice, almost
@@ -1624,46 +1536,6 @@ mod native {
         response_to_info(&api(session), response)
     }
 
-    pub(super) async fn add_torrent_from_magnet(
-        magnet_or_hash: String,
-    ) -> anyhow::Result<TorrentInfo> {
-        let session = session().await?;
-        let response = session
-            .add_torrent(AddTorrent::from_url(magnet_or_hash), Some(add_opts()))
-            .await
-            .context("adding torrent from magnet/URL")?;
-        response_to_info(&api(session), response)
-    }
-
-    pub(super) async fn add_torrent_from_file_bytes(bytes: Vec<u8>) -> anyhow::Result<TorrentInfo> {
-        add_torrent_from_file_bytes_with_peers(bytes, Vec::new()).await
-    }
-
-    /// Adds a torrent that named devices are already known to be holding.
-    pub(super) async fn add_torrent_from_file_bytes_with_peers(
-        bytes: Vec<u8>,
-        peers: Vec<std::net::SocketAddr>,
-    ) -> anyhow::Result<TorrentInfo> {
-        let session = session().await?;
-        let response = session
-            .add_torrent(
-                AddTorrent::from_bytes(bytes),
-                Some(add_opts_with_peers(peers)),
-            )
-            .await
-            .context("adding torrent from .torrent file bytes")?;
-        response_to_info(&api(session), response)
-    }
-
-    pub(super) async fn add_torrent_from_file_path(path: String) -> anyhow::Result<TorrentInfo> {
-        let read_path = path.clone();
-        let bytes = tokio::task::spawn_blocking(move || std::fs::read(&read_path))
-            .await
-            .context("torrent metadata read task failed")?
-            .with_context(|| format!("reading .torrent metadata from {path:?}"))?;
-        add_torrent_from_file_bytes(bytes).await
-    }
-
     pub(super) async fn list_torrents() -> anyhow::Result<Vec<TorrentInfo>> {
         let session = session().await?;
         let api = api(session.clone());
@@ -1681,10 +1553,6 @@ mod native {
     const STORAGE_TTL: std::time::Duration = std::time::Duration::from_secs(5);
     static STORAGE_CACHE: std::sync::Mutex<Option<(std::time::Instant, Vec<RawStorageEntry>)>> =
         std::sync::Mutex::new(None);
-
-    pub(super) async fn storage_usage_bytes() -> anyhow::Result<u64> {
-        Ok(storage_breakdown().await?.iter().map(|e| e.bytes).sum())
-    }
 
     pub(super) async fn storage_breakdown() -> anyhow::Result<Vec<RawStorageEntry>> {
         // Ensures output_dir() actually exists before walking it (a fresh
