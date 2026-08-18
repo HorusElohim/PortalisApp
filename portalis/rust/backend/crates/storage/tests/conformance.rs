@@ -1,13 +1,13 @@
-//! One suite, both engines.
+//! One suite, every engine.
 //!
-//! "Storage is a trait with two engines" (D5) means nothing unless the two
-//! answer the same questions the same way. So these tests are written against
-//! `server-core`'s repository traits and know nothing about redb, a file, or a
-//! connection string — every one of them runs twice.
+//! A storage seam (ADR-0002) means nothing unless every implementation behind
+//! it answers the same questions the same way. So these tests are written
+//! against `server-core`'s repository traits and know nothing about redb or a
+//! file — every one of them runs against each implementation.
 //!
-//! In memory is the double the service's own tests use, and the embedded
-//! engine is what a self-hoster runs. When the `MongoDB` engine moves into this
-//! crate it joins the list below and either passes or is not finished.
+//! In memory is the double the service's own tests use; the embedded engine is
+//! the one a node actually runs. A future engine joins the list below and
+//! either passes or is not finished.
 //!
 //! What is deliberately *not* here: anything about how a store is built. A
 //! suite that had to know how to open each engine would grow an engine-shaped

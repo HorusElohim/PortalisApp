@@ -12,7 +12,7 @@ pub const UUID_V7_ENTROPY_BYTES: usize = 10;
 /// `new_message_id` reads the system clock and its own randomness, which makes
 /// it untestable. Identifiers the server allocates for durable records go
 /// through here instead, so a test can pin exactly which one is produced.
-/// Time-ordered identifiers also keep `MongoDB` index writes local.
+/// Time-ordered identifiers also keep index writes local.
 #[must_use]
 pub fn user_id_from(
     now_unix_ns: u64,

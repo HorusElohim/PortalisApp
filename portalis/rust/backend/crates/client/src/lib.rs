@@ -1,7 +1,7 @@
 //! The portable Portalis Nexus client.
 //!
-//! This crate builds for macOS, iOS, Android, and Linux. It has no `MongoDB`,
-//! `Axum`, or server-core dependency.
+//! This crate builds for macOS, iOS, Android, and Linux. It has no storage
+//! engine, `Axum`, or server-core dependency.
 //!
 //! Module layout:
 //!
