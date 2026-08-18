@@ -2,7 +2,7 @@
 //!
 //! These are deliberately simple: one lock over both collections, a clock that
 //! only moves when a test moves it, and randomness a test can dictate. They
-//! make the identity rules provable without `MongoDB`.
+//! make the identity rules provable without a durable engine.
 
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
