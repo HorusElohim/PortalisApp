@@ -81,11 +81,7 @@ class AppAccepted {
   final int? collection;
   final bool queued;
 
-  const AppAccepted({
-    required this.id,
-    this.collection,
-    required this.queued,
-  });
+  const AppAccepted({required this.id, this.collection, required this.queued});
 
   @override
   int get hashCode => id.hashCode ^ collection.hashCode ^ queued.hashCode;
@@ -424,10 +420,7 @@ class AppPending {
   final BigInt command;
   final bool queued;
 
-  const AppPending({
-    required this.command,
-    required this.queued,
-  });
+  const AppPending({required this.command, required this.queued});
 
   @override
   int get hashCode => command.hashCode ^ queued.hashCode;

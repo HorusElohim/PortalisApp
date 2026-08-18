@@ -7,7 +7,7 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `default_service`, `endpoint_addr`, `normalise`, `normalized`, `present`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `clone`, `eq`, `fmt`
 
 /// The Nexus service this build talks to.
 ///
@@ -46,10 +46,7 @@ class NexusEndpointConfig {
   /// when discovery should not be relied on to find it.
   final String? directAddress;
 
-  const NexusEndpointConfig({
-    this.nodeId,
-    this.directAddress,
-  });
+  const NexusEndpointConfig({this.nodeId, this.directAddress});
 
   static Future<NexusEndpointConfig> default_() =>
       RustLib.instance.api.crateNexusSettingsNexusEndpointConfigDefault();
@@ -60,9 +57,7 @@ class NexusEndpointConfig {
   /// different words, and a person who has overridden the default should be
   /// able to see that they did.
   Future<bool> isDefaultService() => RustLib.instance.api
-          .crateNexusSettingsNexusEndpointConfigIsDefaultService(
-        that: this,
-      );
+      .crateNexusSettingsNexusEndpointConfigIsDefaultService(that: this);
 
   @override
   int get hashCode => nodeId.hashCode ^ directAddress.hashCode;
