@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Removed
+
+- Removed the MongoDB storage backend (ADR-0002). The coordination node
+  persists to the embedded redb engine only; PostgreSQL is the scale successor
+  if a node ever saturates. `PORTALIS_NEXUS_MONGODB_URI` and
+  `PORTALIS_NEXUS_DATABASE` are gone — set `PORTALIS_NEXUS_DATA_DIR` instead.
+  `docker/compose.yaml` now runs the server against a named volume rather than
+  a replica set, and the test suite no longer needs Docker.
+
 ### Fixed
 
 - Fixed the staged Nexus migration opening `portalis.redb` twice on app start.
