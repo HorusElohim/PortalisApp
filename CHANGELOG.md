@@ -202,6 +202,13 @@
 
 <!-- Behaviour and UX changes go here before the next release. -->
 
+- Collapsed the Flutter/Rust bridge onto a single API seam (ADR-0001): the app
+  now drives the backend exclusively through `AppSnapshot` reads and `Command`
+  writes. The parallel legacy torrent bridge surface — `torrent.dart` and its
+  generated per-call FRB entry points — has been deleted, and the FRB bindings
+  were regenerated against the reduced surface. No user-facing capability is
+  removed; the same operations are expressed as commands.
+
 - Nexus command connections now run over authenticated QUIC streams. The
   service accepts connections concurrently and drains those streams gracefully
   on shutdown; its ALPN identifier is owned by the shared protocol crate.
