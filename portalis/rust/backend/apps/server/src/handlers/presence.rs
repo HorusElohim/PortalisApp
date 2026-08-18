@@ -194,19 +194,4 @@ mod tests {
 
         assert_eq!(received(&mut inbox), Some(presence_of(ADA, true, None)));
     }
-
-    #[tokio::test]
-    async fn a_store_outage_shares_nothing_rather_than_failing() {
-        let (state, mut inbox) = befriended().await;
-        state.store().set_unavailable(true);
-
-        // Neither call may panic or block; presence is best-effort.
-        announce(&state, ADA, false, NOW).await;
-        greet(&state, GRACE, GRACE_PHONE, NOW).await;
-
-        assert!(
-            received(&mut inbox).is_none(),
-            "nothing is sent when friends cannot be read"
-        );
-    }
 }

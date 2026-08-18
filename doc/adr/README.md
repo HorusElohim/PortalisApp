@@ -13,7 +13,7 @@ instead of a living SPEC.
 | # | Title | Status | Superseded by |
 |---|-------|--------|---------------|
 | [0001](0001-single-api-seam.md) | Single API seam: AppSnapshot + Command | proposed | — |
-| [0002](0002-server-storage-redb-postgres.md) | Server storage: redb now, Postgres scale target, Mongo deleted | proposed | — |
+| [0002](0002-server-storage-redb-postgres.md) | Server storage: redb now, Postgres scale target, Mongo + duplicate in-memory engine deleted | proposed | — |
 | [0003](0003-transport-substrate-dual-engine.md) | Transport: Substrate as a Strategy with two real engines | proposed | — |
 | [0004](0004-naming-discipline.md) | Naming discipline: no same-name across levels | proposed | — |
 | [0005](0005-decision-records-adrs.md) | Decision records: ADRs only + index, no living SPEC | proposed | — |

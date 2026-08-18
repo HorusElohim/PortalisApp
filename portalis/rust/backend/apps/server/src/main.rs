@@ -102,7 +102,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         listen_addr = %config.listen_addr,
         node_id = %endpoint.node_id(),
         server_identity = %server_identity,
-        store = state.store().kind(),
         "Portalis Nexus is ready"
     );
 

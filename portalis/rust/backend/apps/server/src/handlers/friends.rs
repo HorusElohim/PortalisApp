@@ -286,44 +286,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_store_outage_is_reported_by_every_command() {
-        let state = AppState::default();
-        let session = signed_in(&state, "ada", 1).await;
-        state.store().set_unavailable(true);
-
-        let replies = [
-            resolve(
-                &session,
-                state.friends(),
-                &request(),
-                &ResolveHandleRequest {
-                    handle: "grace#ABCDE".to_owned(),
-                },
-                NOW,
-            )
-            .await,
-            command(
-                &session,
-                state.friends(),
-                &request(),
-                &FriendCommand {
-                    action: 1,
-                    peer_user_id: vec![2; 16],
-                },
-                NOW,
-            )
-            .await,
-            list(&session, state.friends(), &request(), NOW).await,
-        ];
-
-        for reply in replies {
-            let (code, message) = refusal(&reply).expect("a refusal");
-            assert_eq!(code, ProtocolErrorCode::Internal);
-            assert_eq!(message, "the friend store is unavailable");
-        }
-    }
-
-    #[tokio::test]
     async fn a_signed_in_connection_can_command_list_and_resolve() {
         let state = AppState::default();
         let session = signed_in(&state, "ada", 1).await;
