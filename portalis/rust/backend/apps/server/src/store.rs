@@ -12,7 +12,6 @@ use portalis_nexus_server_core::{
 };
 
 use portalis_nexus_storage::embedded::Embedded;
-use portalis_nexus_storage::mongo::MongoStore;
 
 /// Where durable identity and friend state lives.
 #[derive(Debug)]
@@ -20,10 +19,8 @@ pub enum NexusStore {
     /// Held in memory and lost on restart. The default for local runs, the
     /// demo, and tests.
     Memory(Box<InMemoryIdentities>),
-    /// Durable, indexed, and transactional.
-    Mongo(Box<MongoStore>),
     /// Durable, and a directory of files rather than a server to operate.
-    /// What a self-hoster runs (D5).
+    /// The one durable engine a node runs (ADR-0002).
     Embedded(Box<Embedded>),
 }
 
@@ -34,11 +31,6 @@ impl Default for NexusStore {
 }
 
 impl NexusStore {
-    #[must_use]
-    pub fn mongo(store: MongoStore) -> Self {
-        Self::Mongo(Box::new(store))
-    }
-
     #[must_use]
     pub fn embedded(store: Embedded) -> Self {
         Self::Embedded(Box::new(store))
@@ -65,7 +57,6 @@ impl NexusStore {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::Memory(_) => "memory",
-            Self::Mongo(_) => "mongodb",
             Self::Embedded(_) => "embedded",
         }
     }
@@ -75,7 +66,6 @@ impl UserDirectory for NexusStore {
     async fn find_user(&self, user_id: UserId) -> Result<Option<UserRecord>, RepositoryError> {
         match self {
             Self::Memory(store) => store.find_user(user_id).await,
-            Self::Mongo(store) => store.find_user(user_id).await,
             Self::Embedded(store) => store.find_user(user_id).await,
         }
     }
@@ -87,11 +77,6 @@ impl UserDirectory for NexusStore {
     ) -> Result<Option<UserRecord>, RepositoryError> {
         match self {
             Self::Memory(store) => {
-                store
-                    .find_user_by_handle(normalized_username, discriminator)
-                    .await
-            }
-            Self::Mongo(store) => {
                 store
                     .find_user_by_handle(normalized_username, discriminator)
                     .await
@@ -113,7 +98,6 @@ impl IdentityRepository for NexusStore {
     ) -> Result<(), RepositoryError> {
         match self {
             Self::Memory(store) => store.insert_registration(user, device).await,
-            Self::Mongo(store) => store.insert_registration(user, device).await,
             Self::Embedded(store) => store.insert_registration(user, device).await,
         }
     }
@@ -124,7 +108,6 @@ impl IdentityRepository for NexusStore {
     ) -> Result<Option<DeviceRecord>, RepositoryError> {
         match self {
             Self::Memory(store) => store.find_device(device_id).await,
-            Self::Mongo(store) => store.find_device(device_id).await,
             Self::Embedded(store) => store.find_device(device_id).await,
         }
     }
@@ -132,7 +115,6 @@ impl IdentityRepository for NexusStore {
     async fn list_devices(&self, user: UserId) -> Result<Vec<DeviceRecord>, RepositoryError> {
         match self {
             Self::Memory(store) => store.list_devices(user).await,
-            Self::Mongo(store) => store.list_devices(user).await,
             Self::Embedded(store) => store.list_devices(user).await,
         }
     }
@@ -140,7 +122,6 @@ impl IdentityRepository for NexusStore {
     async fn link_device(&self, device: DeviceRecord) -> Result<(), RepositoryError> {
         match self {
             Self::Memory(store) => store.link_device(device).await,
-            Self::Mongo(store) => store.link_device(device).await,
             Self::Embedded(store) => store.link_device(device).await,
         }
     }
@@ -152,7 +133,6 @@ impl IdentityRepository for NexusStore {
     ) -> Result<(), RepositoryError> {
         match self {
             Self::Memory(store) => store.touch_device(device_id, at_unix_ns).await,
-            Self::Mongo(store) => store.touch_device(device_id, at_unix_ns).await,
             Self::Embedded(store) => store.touch_device(device_id, at_unix_ns).await,
         }
     }
@@ -164,7 +144,6 @@ impl IdentityRepository for NexusStore {
     ) -> Result<(), RepositoryError> {
         match self {
             Self::Memory(store) => store.revoke_device(device_id, at_unix_ns).await,
-            Self::Mongo(store) => store.revoke_device(device_id, at_unix_ns).await,
             Self::Embedded(store) => store.revoke_device(device_id, at_unix_ns).await,
         }
     }
@@ -177,7 +156,6 @@ impl FriendRepository for NexusStore {
     ) -> Result<Option<FriendshipRecord>, RepositoryError> {
         match self {
             Self::Memory(store) => store.find_friendship(edge).await,
-            Self::Mongo(store) => store.find_friendship(edge).await,
             Self::Embedded(store) => store.find_friendship(edge).await,
         }
     }
@@ -189,7 +167,6 @@ impl FriendRepository for NexusStore {
     ) -> Result<(), RepositoryError> {
         match self {
             Self::Memory(store) => store.save_friendship(record, expected_version).await,
-            Self::Mongo(store) => store.save_friendship(record, expected_version).await,
             Self::Embedded(store) => store.save_friendship(record, expected_version).await,
         }
     }
@@ -200,7 +177,6 @@ impl FriendRepository for NexusStore {
     ) -> Result<Vec<FriendshipRecord>, RepositoryError> {
         match self {
             Self::Memory(store) => store.list_friendships(user).await,
-            Self::Mongo(store) => store.list_friendships(user).await,
             Self::Embedded(store) => store.list_friendships(user).await,
         }
     }
@@ -210,7 +186,6 @@ impl EnvelopeRepository for NexusStore {
     async fn put_key_envelope(&self, envelope: KeyEnvelopeRecord) -> Result<(), RepositoryError> {
         match self {
             Self::Memory(store) => store.put_key_envelope(envelope).await,
-            Self::Mongo(store) => store.put_key_envelope(envelope).await,
             Self::Embedded(store) => store.put_key_envelope(envelope).await,
         }
     }
@@ -222,11 +197,6 @@ impl EnvelopeRepository for NexusStore {
     ) -> Result<KeyEnvelopePage, RepositoryError> {
         match self {
             Self::Memory(store) => {
-                store
-                    .list_key_envelopes(recipient_device_id, after_share_id)
-                    .await
-            }
-            Self::Mongo(store) => {
                 store
                     .list_key_envelopes(recipient_device_id, after_share_id)
                     .await
@@ -244,7 +214,6 @@ impl ShareRepository for NexusStore {
     async fn find_share(&self, share_id: ShareId) -> Result<Option<ShareRecord>, RepositoryError> {
         match self {
             Self::Memory(store) => store.find_share(share_id).await,
-            Self::Mongo(store) => store.find_share(share_id).await,
             Self::Embedded(store) => store.find_share(share_id).await,
         }
     }
@@ -257,11 +226,6 @@ impl ShareRepository for NexusStore {
     ) -> Result<(), RepositoryError> {
         match self {
             Self::Memory(store) => {
-                store
-                    .save_publication(share, snapshot, expected_revision)
-                    .await
-            }
-            Self::Mongo(store) => {
                 store
                     .save_publication(share, snapshot, expected_revision)
                     .await
@@ -281,7 +245,6 @@ impl ShareRepository for NexusStore {
     ) -> Result<Option<ShareSnapshotRecord>, RepositoryError> {
         match self {
             Self::Memory(store) => store.find_snapshot(share_id, revision).await,
-            Self::Mongo(store) => store.find_snapshot(share_id, revision).await,
             Self::Embedded(store) => store.find_snapshot(share_id, revision).await,
         }
     }
@@ -292,7 +255,6 @@ impl ShareRepository for NexusStore {
     ) -> Result<(), RepositoryError> {
         match self {
             Self::Memory(store) => store.grant_share_access(membership).await,
-            Self::Mongo(store) => store.grant_share_access(membership).await,
             Self::Embedded(store) => store.grant_share_access(membership).await,
         }
     }
@@ -304,7 +266,6 @@ impl ShareRepository for NexusStore {
     ) -> Result<(), RepositoryError> {
         match self {
             Self::Memory(store) => store.revoke_share_access(share_id, user_id).await,
-            Self::Mongo(store) => store.revoke_share_access(share_id, user_id).await,
             Self::Embedded(store) => store.revoke_share_access(share_id, user_id).await,
         }
     }
@@ -316,7 +277,6 @@ impl ShareRepository for NexusStore {
     ) -> Result<bool, RepositoryError> {
         match self {
             Self::Memory(store) => store.has_share_access(share_id, user_id).await,
-            Self::Mongo(store) => store.has_share_access(share_id, user_id).await,
             Self::Embedded(store) => store.has_share_access(share_id, user_id).await,
         }
     }
@@ -327,7 +287,6 @@ impl ShareRepository for NexusStore {
     ) -> Result<Vec<ShareRecord>, RepositoryError> {
         match self {
             Self::Memory(store) => store.list_authorized_shares(user_id).await,
-            Self::Mongo(store) => store.list_authorized_shares(user_id).await,
             Self::Embedded(store) => store.list_authorized_shares(user_id).await,
         }
     }
@@ -335,7 +294,6 @@ impl ShareRepository for NexusStore {
     async fn list_share_members(&self, share_id: ShareId) -> Result<Vec<UserId>, RepositoryError> {
         match self {
             Self::Memory(store) => store.list_share_members(share_id).await,
-            Self::Mongo(store) => store.list_share_members(share_id).await,
             Self::Embedded(store) => store.list_share_members(share_id).await,
         }
     }
@@ -370,34 +328,14 @@ mod tests {
         }
     }
 
-    fn key_envelope() -> KeyEnvelopeRecord {
-        KeyEnvelopeRecord {
-            share_id: [3; 16],
-            recipient_device_id: [1; 32],
-            ephemeral_public_key: [4; 32],
-            ciphertext: b"sealed".to_vec(),
-            created_at_unix_ns: 0,
-        }
-    }
-
     fn unavailable<T: std::fmt::Debug>(outcome: &Result<T, RepositoryError>) -> bool {
         matches!(outcome, Err(RepositoryError::Unavailable(_)))
-    }
-
-    /// Async because the driver's client spawns onto the Tokio runtime as it
-    /// is built, even though nothing here contacts a server.
-    #[tokio::test]
-    async fn each_backend_names_itself() {
-        assert_eq!(NexusStore::default().kind(), "memory");
-        assert_eq!(
-            NexusStore::mongo(MongoStore::disconnected()).kind(),
-            "mongodb"
-        );
     }
 
     #[tokio::test]
     async fn a_forced_fault_reaches_the_in_memory_backend_only() {
         let memory = NexusStore::default();
+        assert_eq!(memory.kind(), "memory");
         memory.set_unavailable(true);
         assert!(unavailable(&memory.find_user(ADA).await));
 
@@ -406,81 +344,6 @@ mod tests {
             !unavailable(&memory.find_user(ADA).await),
             "clearing the fault puts the store back in service"
         );
-
-        // The durable backend has no fault to inject; asking is a no-op
-        // rather than an error.
-        NexusStore::mongo(MongoStore::disconnected()).set_unavailable(true);
-    }
-
-    /// Every method must reach the durable backend and hand its outage back
-    /// unchanged. A missing arm would show up here as a success, or as an
-    /// answer from the wrong store.
-    #[tokio::test]
-    async fn every_method_dispatches_to_the_durable_backend() {
-        let store = NexusStore::mongo(MongoStore::disconnected());
-        let edge = FriendshipEdge::between(ADA, GRACE).expect("distinct users");
-
-        assert!(unavailable(&store.find_user(ADA).await));
-        assert!(unavailable(
-            &store.find_user_by_handle("ada", "7Q2XZ").await
-        ));
-        assert!(unavailable(
-            &store.insert_registration(user(), device()).await
-        ));
-        assert!(unavailable(&store.find_device([1; 32]).await));
-        assert!(unavailable(&store.list_devices(ADA).await));
-        assert!(unavailable(&store.link_device(device()).await));
-        assert!(unavailable(&store.touch_device([1; 32], 1).await));
-        assert!(unavailable(&store.revoke_device([1; 32], 1).await));
-        assert!(unavailable(&store.find_friendship(edge).await));
-        assert!(unavailable(
-            &store
-                .save_friendship(FriendshipRecord::requested(edge, ADA, 0), 0)
-                .await
-        ));
-        assert!(unavailable(&store.list_friendships(ADA).await));
-        assert!(unavailable(&store.put_key_envelope(key_envelope()).await));
-        assert!(unavailable(&store.list_key_envelopes([1; 32], None).await));
-        let share = ShareRecord {
-            share_id: [3; 16],
-            owner: ADA,
-            revision: 1,
-            snapshot_id: [4; 32],
-            capsule: b"sealed".to_vec(),
-            capsule_signature: vec![5; 64],
-            created_at_unix_ns: 1,
-            updated_at_unix_ns: 1,
-        };
-        let snapshot = ShareSnapshotRecord {
-            share_id: share.share_id,
-            revision: 1,
-            snapshot_id: share.snapshot_id,
-            capsule: share.capsule.clone(),
-            capsule_signature: share.capsule_signature.clone(),
-            created_at_unix_ns: 1,
-        };
-        assert!(unavailable(&store.find_share(share.share_id).await));
-        assert!(unavailable(
-            &store.save_publication(share.clone(), snapshot, None).await
-        ));
-        assert!(unavailable(&store.find_snapshot(share.share_id, 1).await));
-        assert!(unavailable(
-            &store
-                .grant_share_access(ShareMembershipRecord {
-                    share_id: share.share_id,
-                    user_id: GRACE,
-                    granted_at_unix_ns: 1,
-                })
-                .await
-        ));
-        assert!(unavailable(
-            &store.revoke_share_access(share.share_id, GRACE).await
-        ));
-        assert!(unavailable(
-            &store.has_share_access(share.share_id, ADA).await
-        ));
-        assert!(unavailable(&store.list_authorized_shares(ADA).await));
-        assert!(unavailable(&store.list_share_members(share.share_id).await));
     }
 
     /// Every method dispatched to the embedded engine, against a real file.

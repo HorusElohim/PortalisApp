@@ -1,26 +1,25 @@
 //! Where the service keeps what it is given.
 //!
-//! Decision D5: storage is a trait with two engines. A self-hoster wants one
-//! file and no operational surface; an operator already running `MongoDB` wants
-//! `MongoDB`. Neither is load-bearing for correctness — the service holds signed
-//! objects it cannot read, so the worst a storage engine can do is lose them
-//! or serve an old one, and both are things a client already detects.
+//! ADR-0002: storage is a trait with exactly one wired engine. The coordination
+//! node is a coordination plane, not a data plane — it holds small signed
+//! objects it cannot read, so the worst a storage engine can do is lose one or
+//! serve an old one, and both are things a client already detects.
 //!
-//! That is what makes two engines affordable. If the store were the source of
-//! truth, having two would mean two chances to be subtly wrong. Because the
-//! chain is the source of truth, a store is a cache with durability, and the
-//! difference between engines is operational rather than semantic.
+//! That is what makes the seam a trait rather than a hard-coded type, and what
+//! makes a *second* engine unaffordable: two implementations for zero shipped
+//! deployments is the parallel-variation trap. One strategy is chosen and
+//! wired; the scale successor, when a node genuinely saturates, is `PostgreSQL`.
 //!
 //! - [`store`]: the machinery every endpoint's file shares.
 //! - [`identity`], [`collections`], [`friends`], [`envelopes`], [`mailbox`],
 //!   [`directory`]: one endpoint each, one file each, autonomous.
 //! - [`embedded`]: the four of them together, as one engine.
-//! - [`mongo`]: the engine an operator already running `MongoDB` wants.
 //! - [`repositories`]: the engine wearing the service's own vocabulary.
 //! - [`service`]: answering a peer that happens to be a service.
 //!
-//! Both answer to one conformance suite, which is the only way "either engine"
-//! means anything: two implementations nobody compares are two behaviours.
+//! The engine answers to a conformance suite it shares with the in-memory
+//! double, which is the only way the seam means anything: implementations
+//! nobody compares are separate behaviours.
 
 pub mod collections;
 pub mod directory;
@@ -29,7 +28,6 @@ pub mod envelopes;
 pub mod friends;
 pub mod identity;
 pub mod mailbox;
-pub mod mongo;
 mod repositories;
 pub mod service;
 pub mod store;

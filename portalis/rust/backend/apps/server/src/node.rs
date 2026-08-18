@@ -22,8 +22,8 @@ pub enum NodeSecretError {
         "PORTALIS_NEXUS_NODE_SECRET must be exactly 64 lowercase or uppercase hexadecimal characters"
     )]
     InvalidEnvironment,
-    #[error("MongoDB deployments must set PORTALIS_NEXUS_NODE_SECRET")]
-    MissingForMongo,
+    #[error("set PORTALIS_NEXUS_DATA_DIR, or supply PORTALIS_NEXUS_NODE_SECRET")]
+    MissingDataDir,
     #[error("could not read the Nexus node secret at {path}")]
     Read {
         path: PathBuf,
@@ -47,14 +47,14 @@ pub enum NodeSecretError {
 /// # Errors
 ///
 /// Returns [`NodeSecretError`] when the configured value is malformed, a
-/// durable secret cannot be read or created, or `MongoDB` has no private-key
-/// location configured.
+/// durable secret cannot be read or created, or no private-key location was
+/// configured.
 pub fn load_node_secret(config: &ServerConfig) -> Result<SecretKey, NodeSecretError> {
     if let Some(secret) = &config.node_secret {
         return parse_hex_secret(secret).map(|bytes| SecretKey::from_bytes(&bytes));
     }
     let Some(data_dir) = &config.data_dir else {
-        return Err(NodeSecretError::MissingForMongo);
+        return Err(NodeSecretError::MissingDataDir);
     };
     load_or_create(&data_dir.join(NODE_SECRET_FILE)).map(|bytes| SecretKey::from_bytes(&bytes))
 }

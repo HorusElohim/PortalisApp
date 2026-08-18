@@ -3,8 +3,7 @@ use std::error::Error;
 use iroh::{Endpoint, RelayMode};
 use portalis_nexus_protocol::NEXUS_ALPN;
 use portalis_nexus_server::{
-    AppState, GRACEFUL_DRAIN_TIMEOUT, MongoStore, NexusStore, ServerConfig, Storage,
-    load_node_secret,
+    AppState, GRACEFUL_DRAIN_TIMEOUT, NexusStore, ServerConfig, Storage, load_node_secret,
 };
 use portalis_nexus_storage::embedded::Embedded;
 use tokio::sync::watch;
@@ -61,18 +60,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = ServerConfig::from_environment()?;
     let node_secret = load_node_secret(&config)?;
-    // One binary, and the engine is whichever was configured (D5). Logged
-    // because a service running on storage nobody expected is otherwise
-    // diagnosed by guesswork.
-    let store = match config.storage()? {
-        Storage::Embedded { data_dir } => {
-            info!(path = %data_dir.display(), "opening the embedded store");
-            NexusStore::embedded(Embedded::open(&data_dir)?)
-        }
-        Storage::Mongo { uri, database } => {
-            info!(database = %database, "connecting to MongoDB");
-            NexusStore::mongo(MongoStore::connect(&uri, &database).await?)
-        }
+    // One binary, one engine (ADR-0002). Logged because a service running on
+    // storage nobody expected is otherwise diagnosed by guesswork.
+    let store = {
+        let Storage::Embedded { data_dir } = config.storage()?;
+        info!(path = %data_dir.display(), "opening the embedded store");
+        NexusStore::embedded(Embedded::open(&data_dir)?)
     };
     let endpoint = match config.listen_addr {
         std::net::SocketAddr::V4(address) => Endpoint::builder().bind_addr_v4(address),
