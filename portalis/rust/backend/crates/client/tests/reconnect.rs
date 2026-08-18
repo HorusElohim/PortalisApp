@@ -162,7 +162,10 @@ async fn in_flight_requests_fail_as_soon_as_the_connection_drops() {
     let server = start_peer(
         address,
         vec![portalis_nexus_client::NEXUS_ALPN.to_vec()],
-        move |connection| closable_peer(connection, close_peer),
+        move |connection| {
+            let close_peer = close_peer.clone();
+            closable_peer(connection, close_peer)
+        },
     )
     .await;
     let config = ClientConfig {
@@ -170,7 +173,7 @@ async fn in_flight_requests_fail_as_soon_as_the_connection_drops() {
         // by timing out.
         request_timeout: Duration::from_secs(120),
         reconnect: brisk_policy(u32::MAX),
-        ..brisk_config(u32::MAX)
+        handshake_timeout: Duration::from_secs(5),
     };
     let client = NexusClient::connect_with_config(peer_endpoint(address), &config)
         .await

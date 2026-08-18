@@ -154,7 +154,7 @@ pub async fn start_peer<F, Fut>(
     serve: F,
 ) -> JoinHandle<()>
 where
-    F: FnOnce(iroh::endpoint::Connection) -> Fut + Send + 'static,
+    F: Fn(iroh::endpoint::Connection) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
     let SocketAddr::V4(address) = address else {
@@ -169,14 +169,17 @@ where
         .bind()
         .await
         .expect("bind test QUIC peer");
+    let serve = std::sync::Arc::new(serve);
     tokio::spawn(async move {
-        let Some(incoming) = endpoint.accept().await else {
-            return;
-        };
-        let Ok(connection) = incoming.await else {
-            return;
-        };
-        serve(connection).await;
+        loop {
+            let Some(incoming) = endpoint.accept().await else {
+                return;
+            };
+            let Ok(connection) = incoming.await else {
+                return;
+            };
+            std::sync::Arc::clone(&serve)(connection).await;
+        }
     })
 }
 
