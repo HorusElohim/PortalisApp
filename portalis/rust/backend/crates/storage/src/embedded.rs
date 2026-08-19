@@ -193,7 +193,6 @@ mod tests {
         store
             .collections()
             .save_publication(&share(1), &snapshot(1), None)
-            .await
             .expect("publishes");
         assert_eq!(
             store.collections().find_share([1; 16]).expect("reads"),
@@ -203,8 +202,7 @@ mod tests {
         assert!(matches!(
             store
                 .collections()
-                .save_publication(&share(2), &snapshot(2), None)
-                .await,
+                .save_publication(&share(2), &snapshot(2), None),
             Err(StorageError::Conflict)
         ));
 

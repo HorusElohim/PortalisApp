@@ -113,7 +113,6 @@ impl ShareRepository for Embedded {
     ) -> Result<(), RepositoryError> {
         self.collections()
             .save_publication(&share, &snapshot, expected_revision)
-            .await
             .map_err(RepositoryError::from)
     }
 
