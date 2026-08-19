@@ -329,7 +329,8 @@ mod tests {
                 .list_share_members(share.share_id)
                 .await
                 .expect("reads"),
-            vec![GRACE]
+            vec![ADA, GRACE],
+            "the owner is granted access automatically on first publication"
         );
         assert_eq!(
             store.list_authorized_shares(GRACE).await.expect("reads"),
