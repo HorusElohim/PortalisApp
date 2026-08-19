@@ -17,18 +17,21 @@ use thiserror::Error;
 
 use portalis_nexus_protocol::ContentKey;
 
-/// Bytes of randomness in front of every capsule.
+#[allow(dead_code)]
 const NONCE_BYTES: usize = 12;
 
 /// A cap on what one capsule may describe, so a malformed or hostile one
 /// cannot be turned into an allocation.
+#[allow(dead_code)]
 const MAX_CAPSULE_BYTES: usize = 8 * 1024 * 1024;
 
 /// Long enough for any name a person types, short enough to bound the decode.
+#[allow(dead_code)]
 const MAX_NAME_BYTES: usize = 512;
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
-pub(crate) enum CapsuleError {
+#[allow(dead_code)]
+pub enum CapsuleError {
     #[error("a capsule cannot be read without its content key")]
     NotForThisKey,
     #[error("this is not a capsule")]
@@ -41,7 +44,8 @@ pub(crate) enum CapsuleError {
 
 /// Everything a device needs to start receiving a collection it was given.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Capsule {
+#[allow(dead_code)]
+pub struct Capsule {
     /// What the collection is called, as its owner named it.
     pub name: String,
     /// The torrent describing its files, ready to hand to an engine.
@@ -58,6 +62,7 @@ impl Capsule {
     /// # Errors
     ///
     /// Returns [`CapsuleError`] when the capsule is larger than one may be.
+    #[allow(dead_code)]
     pub(crate) fn seal(
         &self,
         key: &ContentKey,
@@ -94,6 +99,7 @@ impl Capsule {
     /// revision is not the one it was sealed under — the three are
     /// indistinguishable on purpose, since a caller learning which part was
     /// wrong learns something about a collection it cannot read.
+    #[allow(dead_code)]
     pub(crate) fn open(
         key: &ContentKey,
         share_id: &[u8],
@@ -118,6 +124,7 @@ impl Capsule {
         Self::decode(&plaintext)
     }
 
+    #[allow(dead_code)]
     fn encode(&self) -> Result<Vec<u8>, CapsuleError> {
         let name = self.name.as_bytes();
         if name.len() > MAX_NAME_BYTES {
@@ -138,6 +145,7 @@ impl Capsule {
         Ok(bytes)
     }
 
+    #[allow(dead_code)]
     fn decode(bytes: &[u8]) -> Result<Self, CapsuleError> {
         let name_length = usize::from(u16::from_le_bytes(
             bytes
@@ -170,6 +178,7 @@ impl Capsule {
 }
 
 /// A fresh nonce, from the same randomness every other secret here uses.
+#[allow(dead_code)]
 fn nonce() -> [u8; NONCE_BYTES] {
     let mut nonce = [0_u8; NONCE_BYTES];
     nonce.copy_from_slice(&portalis_nexus_protocol::new_challenge()[..NONCE_BYTES]);
@@ -177,6 +186,7 @@ fn nonce() -> [u8; NONCE_BYTES] {
 }
 
 /// What a capsule is bound to, and therefore cannot be moved away from.
+#[allow(dead_code)]
 fn associated_data(share_id: &[u8], revision: u64) -> Vec<u8> {
     let mut data = Vec::with_capacity(share_id.len() + 8);
     data.extend_from_slice(share_id);
