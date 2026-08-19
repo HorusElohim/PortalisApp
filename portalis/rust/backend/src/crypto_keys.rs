@@ -52,7 +52,6 @@ impl Recipient {
     /// Returns [`KeyError::Log`] when the offered entries are invalid, behind
     /// the held log, or disagree with it — each of which is a reason not to
     /// seal anything to this person yet.
-    #[allow(dead_code)]
     pub fn current(held: &DeviceLog, offered: &[LogEntry]) -> Result<Self, KeyError> {
         Ok(Self {
             log: held.adopt(offered)?,

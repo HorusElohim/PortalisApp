@@ -111,10 +111,10 @@ pub(crate) async fn follow_transfers(
             .map(|(_, handle, _)| handle.as_str())
             .collect();
         for info in &reported {
-            if !claimed.contains(info.info_hash.as_str()) {
-                if let Err(error) = substrate.release(&info.info_hash).await {
-                    crate::log::clog!("nexus", "could not release an unclaimed torrent: {error}");
-                }
+            if !claimed.contains(info.info_hash.as_str())
+                && let Err(error) = substrate.release(&info.info_hash).await
+            {
+                crate::log::clog!("nexus", "could not release an unclaimed torrent: {error}");
             }
         }
 

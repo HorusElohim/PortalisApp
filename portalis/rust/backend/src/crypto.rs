@@ -13,12 +13,9 @@ mod keys;
 #[path = "crypto_verify.rs"]
 mod verify;
 
-pub use capsule::{Capsule, CapsuleError};
 pub use keys::{
     KeyError, Recipient, SealedFor, Sealing, generate_content_key, open_content_key,
     seal_content_key,
 };
-pub use verify::{
-    ChainError, ChainState, ChainStore, ChainStoreError, Continuity, MemoryChainStore,
-    verify as verify_revision,
-};
+#[allow(unused_imports)]
+pub use verify::{ChainError, ChainStore, Continuity, MemoryChainStore, verify as verify_revision};
