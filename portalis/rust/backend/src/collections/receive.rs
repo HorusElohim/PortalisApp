@@ -21,10 +21,10 @@
 //! Nothing is written to the store until all of it passes, so a rejected
 //! publication leaves no trace to reason about later.
 
-use portalis_nexus_client::{open_content_key, verify_revision, ChainStore, Continuity};
+use crate::crypto::{ChainStore, Continuity, open_content_key, verify_revision};
 use portalis_nexus_protocol::DeviceLog;
 use portalis_nexus_protocol::{
-    open_entry, open_manifest, EntryContext, ManifestContext, DEVICE_ID_BYTES, INFO_HASH_BYTES,
+    DEVICE_ID_BYTES, EntryContext, INFO_HASH_BYTES, ManifestContext, open_entry, open_manifest,
 };
 
 use super::model::{Collection, CollectionError, CollectionId};
@@ -156,11 +156,11 @@ pub async fn receive<S: ChainStore>(
 
 #[cfg(test)]
 mod tests {
-    use portalis_nexus_client::{Continuity, MemoryChainStore};
+    use crate::crypto::{Continuity, MemoryChainStore};
 
     use super::super::members::remove_members;
     use super::super::publish::publish;
-    use super::super::publish::tests::{descriptors, owned, Person, NOW};
+    use super::super::publish::tests::{NOW, Person, descriptors, owned};
     use super::*;
 
     fn device(person: &Person) -> ReceivingDevice {

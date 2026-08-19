@@ -4,6 +4,53 @@
 
 ### Removed
 
+- Removed the Iroh-based Nexus control plane (QUIC transport, server, and client crates). The product is now BitTorrent-only; peer discovery uses the BitTorrent substrate with QR-first bootstrap (ADR-0003.5, ADR-0009). The collection crypto (capsule sealing, key rotation, chain verification) was extracted into `backend::crypto` and no longer depends on Iroh. The `portalis-nexus-client`, `portalis-nexus-server`, `portalis-nexus-server-core`, `portalis-nexus-storage`, `demo`, and `iroh` dependencies are gone.
+- Removed the MongoDB storage backend (ADR-0002). The coordination node persists to the embedded redb engine only; PostgreSQL is the scale successor if a node ever saturates. `PORTALIS_NEXUS_MONGODB_URI` and `PORTALIS_NEXUS_DATABASE` are gone — set `PORTALIS_NEXUS_DATA_DIR` instead. `docker/compose.yaml` now runs the server against a named volume rather than a replica set, and the test suite no longer needs Docker.
+
+### Fixed
+
+- Fixed the staged Nexus migration opening `portalis.redb` twice on app start. The active legacy collection path and Nexus runtime now share one process-owned database handle until the legacy path is removed.
+
+- Restored the headless Nexus demo's explicit device fingerprint configuration, so the complete Rust workspace builds and tests after the Nexus state projection began exposing device fingerprints.
+
+- Nexus signatures now bind to the authenticated QUIC Node ID rather than a configurable host and port. `PORTALIS_NEXUS_SERVER_AUTHORITY` has been removed: direct addresses, relays, and DNS names are routing hints, while the stable Node ID is the server identity.
+
+- Removed the obsolete Nexus WebSocket endpoint and client dependencies. The service now has one authenticated QUIC transport, while its HTTP surface is limited to liveness and readiness checks.
+
+- Completed the Nexus client QUIC migration: connection and fault tests now exercise real Iroh peers, reconnecting clients release failed in-flight registrations, and swarm leases use only Iroh-verified direct UDP source addresses rather than internal transport addresses.
+
+### Added
+
+<!-- New user-visible features go here before the next release. -->
+
+- Restored Home's prominent **Share files** action and the complete existing New Share flow on top of Nexus. Selected native files retain their names, measured sizes, and stable locations inside the collection aggregate; Nexus hashes and seeds them through the existing zero-copy substrate, persists the initial signed descriptor/revision, resumes preparation after restart, and streams honest file totals and detail without legacy polling.
+
+- Nexus collection detail now supports renaming and safe collection-only deletion through the same command boundary as the Home library.
+
+- Home now renders its collection library directly from the app-owned Nexus state stream. Its cards, filters, summaries, and collection routes no longer project or observe legacy collection records.
+
+- Dropping or choosing a local `.torrent` now enters Nexus directly and opens its preparation screen. The file list is streamed from the resolved descriptor, can be narrowed before confirmation, and requests no payload bytes while the Nexus torrent substrate is still being connected.
+
+- Imported `.torrent` files now retain their per-file selection in Nexus. Every file starts selected; confirming a narrower selection persists it across restart, while an empty selection is rejected before any download.
+
+- Transfer panels now make download progress, byte totals, speeds, and ETA easier to scan. Peer sections show the collection's real local transfer progress without inventing a split per anonymous swarm address. The People screen replaces individual removals with a visible "Forget all remembered peers" action, undoable from its toast or `Ctrl+Z` (`⌘Z` on macOS) for six seconds.
+
+- Local `.torrent` imports now resolve their descriptor and file metadata before a collection is shown. The persisted preparation view exposes every file and its size for later selection, while deliberately fetching no payload bytes.
+
+- Torrent imports now start as durable owner-controlled Nexus collections in a preparation state. Portalis records a magnet URI or local `.torrent` source without downloading payload bytes, ready for metadata selection in the next workflow step.
+
+- Portalis now starts one app-owned Nexus runtime and state subscription after verifying native/frontend compatibility. Backgrounding pauses its network work and shutdown drains it; generated bridge imports for this path are contained in one Dart adapter.
+
+- Nexus collections now have a durable local starting point: creating, renaming, and deleting one updates the streamed app state immediately and persists in `portalis.redb` across restarts. The initial Nexus state now includes this device's fingerprint for later contact verification.
+
+- Added the first app-facing Nexus bridge. It starts and stops one local runtime, streams complete state and on-demand collection detail, and accepts validated collection, people, lifecycle, and torrent-import commands. The new generated API uses its own stable DTOs while the old path remains temporarily available for the staged screen migration.
+
+- Nexus is now ready to operate as Portalis's control-plane service: it serves authenticated QUIC on UDP and liveness/readiness probes on TCP at the same configured address and port. The service logs the stable Node ID users put# Changelog
+
+## Unreleased
+
+### Removed
+
 - Removed the MongoDB storage backend (ADR-0002). The coordination node
   persists to the embedded redb engine only; PostgreSQL is the scale successor
   if a node ever saturates. `PORTALIS_NEXUS_MONGODB_URI` and

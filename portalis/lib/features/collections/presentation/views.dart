@@ -77,7 +77,8 @@ class _CollectionRowState extends State<CollectionRow> {
     final collection = widget.collection;
     final torrent = !collection.isShared;
     final accent = torrent ? AppColors.ember : AppColors.signal;
-    final live = collection.downBytesPerSecond > 0 || collection.upBytesPerSecond > 0;
+    final live =
+        collection.downBytesPerSecond > 0 || collection.upBytesPerSecond > 0;
     final downloading = collection.state == 'downloading';
     // No metadata has arrived, so there is no total to measure against — an
     // indeterminate bar is the honest shape for "reaching out to a peer".

@@ -123,8 +123,7 @@ class SurfaceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final energy =
-        Glow.of(glow, color: glowColor, intensity: glowIntensity);
+    final energy = Glow.of(glow, color: glowColor, intensity: glowIntensity);
     final fill = gradient ?? energy.gradient;
     final content = Container(
       padding: padding,

@@ -34,7 +34,7 @@ use thiserror::Error;
 /// Holding it is what makes a rollback detectable: without it, an older
 /// revision is indistinguishable from a current one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ChainState {
+pub(crate) struct ChainState {
     pub collection_id: [u8; SHARE_ID_BYTES],
     pub number: u64,
     /// The revision's own hash, so a second revision at the same number is
@@ -48,7 +48,7 @@ pub struct ChainState {
 /// implementation with the local database and nothing here should change when
 /// it does. Reads return `None` for a collection never seen, which is how a
 /// first revision is told apart from a rollback.
-pub trait ChainStore: Send + Sync {
+pub(crate) trait ChainStore: Send + Sync {
     /// The highest verified revision of `collection`, if any.
     fn highest(
         &self,
@@ -69,12 +69,12 @@ pub trait ChainStore: Send + Sync {
 /// decided, so a caller retries rather than treating the revision as hostile.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 #[error("the chain store is unavailable: {reason}")]
-pub struct ChainStoreError {
+pub(crate) struct ChainStoreError {
     pub reason: String,
 }
 
 impl ChainStoreError {
-    pub fn new(reason: impl Into<String>) -> Self {
+    pub(crate) fn new(reason: impl Into<String>) -> Self {
         Self {
             reason: reason.into(),
         }
@@ -87,7 +87,7 @@ impl ChainStoreError {
 /// promises, because a single "invalid revision" would let a rollback and a
 /// forged signature look alike to a user and to a test.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
-pub enum ChainError {
+pub(crate) enum ChainError {
     /// Shown as "Cannot verify".
     #[error("the revision is not well-formed: {0}")]
     Malformed(#[from] RevisionError),
@@ -147,7 +147,7 @@ pub enum ChainError {
 /// So the caller says which, because it is a trust decision and hiding it
 /// inside a default would make joining silently accept a rollback.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Continuity {
+pub(crate) enum Continuity {
     /// Follow the chain: the first revision seen must be revision 1, and each
     /// one after it must follow the last.
     Strict,
@@ -158,7 +158,7 @@ pub enum Continuity {
 
 /// A revision that verified, and what the caller should do about it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Accepted {
+pub(crate) struct Accepted {
     /// The new highest state, already recorded.
     pub state: ChainState,
     /// Members whose device log has moved since the owner sealed to them.
@@ -184,7 +184,7 @@ pub struct Accepted {
 /// # Errors
 ///
 /// Returns the first [`ChainError`] the revision breaks, in §7.3's order.
-pub async fn verify<S: ChainStore>(
+pub(crate) async fn verify<S: ChainStore>(
     revision: &Revision,
     owner_log: &DeviceLog,
     store: &S,
@@ -325,7 +325,7 @@ fn reseal_owed(
 /// A [`ChainStore`] in memory, for tests, demos, and any caller that has not
 /// got a database yet. Step 6 replaces it without changing a signature.
 #[derive(Debug, Default)]
-pub struct MemoryChainStore {
+pub(crate) struct MemoryChainStore {
     highest: std::sync::Mutex<std::collections::HashMap<[u8; SHARE_ID_BYTES], ChainState>>,
 }
 

@@ -126,12 +126,11 @@ class Collection {
     return from == null || to == null ? null : to.difference(from);
   }
 
-  static DateTime? _moment(BigInt? unixNanoseconds) =>
-      unixNanoseconds == null
-          ? null
-          : DateTime.fromMicrosecondsSinceEpoch(
-              (unixNanoseconds ~/ BigInt.from(1000)).toInt(),
-            );
+  static DateTime? _moment(BigInt? unixNanoseconds) => unixNanoseconds == null
+      ? null
+      : DateTime.fromMicrosecondsSinceEpoch(
+          (unixNanoseconds ~/ BigInt.from(1000)).toInt(),
+        );
 
   /// Entries wanted but not yet here.
   int get pendingMedia => detail == null

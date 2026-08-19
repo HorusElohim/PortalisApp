@@ -24,7 +24,8 @@ Future<void> sendSetPaused(
   required bool paused,
 }) =>
     controller.send(
-      EngineCommand(kind: 'setPaused', collection: collectionId, paused: paused),
+      EngineCommand(
+          kind: 'setPaused', collection: collectionId, paused: paused),
     );
 
 /// Deletes one collection, optionally taking its downloaded files with it.
@@ -57,10 +58,10 @@ Future<void> sendDeleteCollection(
 /// contract every [CollectionSource] makes is that its owner calls `dispose`
 /// exactly once, so this source does not also call it on itself.
 class EngineCollectionSource extends CollectionSource with ChangeNotifier {
-  EngineCollectionSource({required this.controller, required this.collectionId}) {
+  EngineCollectionSource(
+      {required this.controller, required this.collectionId}) {
     controller.addListener(notifyListeners);
-    _detailSubscription =
-        controller.watchDetail(collectionId).listen((detail) {
+    _detailSubscription = controller.watchDetail(collectionId).listen((detail) {
       _detail = detail;
       notifyListeners();
     });

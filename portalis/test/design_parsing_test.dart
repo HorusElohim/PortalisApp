@@ -26,8 +26,7 @@ void main() {
       expect(PasteKind.of('  ${'a' * 40}  '), PasteKind.magnet);
     });
 
-    test('an invite code is anything that decodes to secret:name', () {
-    });
+    test('an invite code is anything that decodes to secret:name', () {});
 
     test('hex that decodes to nothing shaped like an invite is a search', () {
       // Without the colon check, any even-length hex string decodes to

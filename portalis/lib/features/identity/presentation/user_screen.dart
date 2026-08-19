@@ -89,8 +89,7 @@ class _UserScreenState extends State<UserScreen> {
               sentBytes: _totalUploaded,
               receivedBytes: _totalOnDisk,
               people: AppControllers.engine.state?.contacts.length ?? 0,
-              collections:
-                  AppControllers.engine.state?.collections.length ?? 0,
+              collections: AppControllers.engine.state?.collections.length ?? 0,
               onRename: identity.info == null ? null : _rename,
               onOpenPeople: () =>
                   AppNavigation.tab.value = AppNavigation.peopleTab,

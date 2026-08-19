@@ -13,16 +13,16 @@ pub mod collections;
 mod content_location;
 /// The running core: state, workers, and the command boundary.
 pub mod core;
+/// Iroh-free crypto and revision verification, used by collection publish
+/// and receive workflows. Extracted from the former Iroh-based Nexus client
+/// crate when its transport was removed.
+mod crypto;
 pub mod device;
-/// This device's Nexus identity.
+/// This device's signing identity.
 mod domain;
 /// Durable no-copy gallery source descriptors for seeding after restart.
 mod linked_source_store;
 mod log;
-/// The signing identity every publication is authored by.
-mod nexus;
-/// The trusted Nexus service address persisted for the app connection.
-pub mod nexus_settings;
 /// Where persisted state lives — one place, so tests can move it.
 mod paths;
 /// The single app-facing Nexus lifecycle, streams, and command boundary.

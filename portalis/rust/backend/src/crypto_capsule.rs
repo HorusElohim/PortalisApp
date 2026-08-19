@@ -28,7 +28,7 @@ const MAX_CAPSULE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_NAME_BYTES: usize = 512;
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
-pub enum CapsuleError {
+pub(crate) enum CapsuleError {
     #[error("a capsule cannot be read without its content key")]
     NotForThisKey,
     #[error("this is not a capsule")]
@@ -41,7 +41,7 @@ pub enum CapsuleError {
 
 /// Everything a device needs to start receiving a collection it was given.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Capsule {
+pub(crate) struct Capsule {
     /// What the collection is called, as its owner named it.
     pub name: String,
     /// The torrent describing its files, ready to hand to an engine.
@@ -58,7 +58,7 @@ impl Capsule {
     /// # Errors
     ///
     /// Returns [`CapsuleError`] when the capsule is larger than one may be.
-    pub fn seal(
+    pub(crate) fn seal(
         &self,
         key: &ContentKey,
         share_id: &[u8],
@@ -94,7 +94,7 @@ impl Capsule {
     /// revision is not the one it was sealed under — the three are
     /// indistinguishable on purpose, since a caller learning which part was
     /// wrong learns something about a collection it cannot read.
-    pub fn open(
+    pub(crate) fn open(
         key: &ContentKey,
         share_id: &[u8],
         revision: u64,
@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn a_capsule_survives_the_round_trip() {
-        let key = crate::generate_content_key();
+        let key = crate::crypto::generate_content_key();
         let sealed = capsule().seal(&key, b"share", 1).expect("seals");
 
         assert_eq!(
@@ -210,11 +210,11 @@ mod tests {
     #[test]
     fn a_capsule_is_unreadable_without_its_key() {
         let sealed = capsule()
-            .seal(&crate::generate_content_key(), b"share", 1)
+            .seal(&crate::crypto::generate_content_key(), b"share", 1)
             .expect("seals");
 
         assert_eq!(
-            Capsule::open(&crate::generate_content_key(), b"share", 1, &sealed),
+            Capsule::open(&crate::crypto::generate_content_key(), b"share", 1, &sealed),
             Err(CapsuleError::NotForThisKey)
         );
         assert!(
@@ -227,7 +227,7 @@ mod tests {
     /// previous contents of a collection while claiming they are current.
     #[test]
     fn a_capsule_cannot_be_moved_to_another_revision_or_collection() {
-        let key = crate::generate_content_key();
+        let key = crate::crypto::generate_content_key();
         let sealed = capsule().seal(&key, b"share", 1).expect("seals");
 
         assert_eq!(
@@ -246,7 +246,7 @@ mod tests {
     /// reason each carries its own.
     #[test]
     fn sealing_twice_never_produces_the_same_bytes() {
-        let key = crate::generate_content_key();
+        let key = crate::crypto::generate_content_key();
 
         let once = capsule().seal(&key, b"share", 1).expect("seals");
         let twice = capsule().seal(&key, b"share", 1).expect("seals");
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn nonsense_is_refused_rather_than_allocated() {
-        let key = crate::generate_content_key();
+        let key = crate::crypto::generate_content_key();
 
         assert_eq!(
             Capsule::open(&key, b"share", 1, &[]),
@@ -283,7 +283,7 @@ mod tests {
         };
 
         assert_eq!(
-            oversized.seal(&crate::generate_content_key(), b"share", 1),
+            oversized.seal(&crate::crypto::generate_content_key(), b"share", 1),
             Err(CapsuleError::TooLarge)
         );
     }
@@ -311,7 +311,7 @@ mod tests {
         };
 
         assert_eq!(
-            oversized.seal(&crate::generate_content_key(), b"share", 1),
+            oversized.seal(&crate::crypto::generate_content_key(), b"share", 1),
             Err(CapsuleError::NameTooLong)
         );
     }

@@ -35,10 +35,12 @@ class _DesktopIdentityChipState extends State<DesktopIdentityChip> {
         builder: (context, _) {
           final name = AppControllers.identity.info?.nickname;
           final peers = AppControllers.engine.activity.peers;
-          final initials = name == null || name.isEmpty ? '-' : name[0].toUpperCase();
+          final initials =
+              name == null || name.isEmpty ? '-' : name[0].toUpperCase();
 
           return Material(
-            color: widget.selected ? AppColors.surfaceRaised : Colors.transparent,
+            color:
+                widget.selected ? AppColors.surfaceRaised : Colors.transparent,
             borderRadius: BorderRadius.circular(AppRadius.inner),
             child: InkWell(
               key: const Key('identityChip'),
@@ -62,10 +64,14 @@ class _DesktopIdentityChipState extends State<DesktopIdentityChip> {
                             style: AppText.body(weight: FontWeight.w600),
                           ),
                           Text(
-                            peers == 0 ? 'NO PEERS' : plural(peers, 'PEER').toUpperCase(),
+                            peers == 0
+                                ? 'NO PEERS'
+                                : plural(peers, 'PEER').toUpperCase(),
                             style: monoLabel(
                               size: 9.5,
-                              color: peers > 0 ? AppColors.signal : AppColors.textFaint,
+                              color: peers > 0
+                                  ? AppColors.signal
+                                  : AppColors.textFaint,
                             ),
                           ),
                         ],

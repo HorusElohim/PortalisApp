@@ -10,7 +10,6 @@ import '../features/settings/application/controller.dart';
 /// sole place that chooses their production implementations and lifetime.
 abstract final class AppControllers {
   static final identity = IdentityController.production();
-  static final nexus = ServiceController.production();
   static final engine = AppController.production();
   static final settings = SettingsController.production();
   static final theme = ThemeController.instance;

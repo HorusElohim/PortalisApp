@@ -429,16 +429,10 @@ impl Nexus {
         // recorded whether or not anybody is looking at it, which is the whole
         // difference between a chart that survives a restart and one that
         // begins when a person happens to navigate.
-        supervisor.start_now("service follower", {
-            let states = states.clone();
-            move |shutdown| {
-                super::service::follow_service(
-                    states,
-                    std::sync::Arc::new(super::service::Configured),
-                    shutdown,
-                )
-            }
-        });
+        // Historically this started a service-connectivity follower here too.
+        // The Iroh-based Nexus control plane it followed has been removed —
+        // this backend is BitTorrent-only now — so there is nothing left to
+        // start.
         supervisor.start_now("transfer follower", {
             let store = Arc::clone(&store);
             let states = states.clone();
@@ -524,10 +518,9 @@ impl Nexus {
             return;
         }
         self.active = active;
-        // Deliberately not touched here. Going to the background does not
-        // change what this device can reach, and coming back does not make a
-        // connection exist — `core::service` reports what a socket can do,
-        // and it is the only thing that may say.
+        // Deliberately not touched here: this device's own reachability from
+        // the network's point of view does not depend on whether the app is
+        // in the foreground.
     }
 
     /// The state stream. Always holds a complete snapshot.
@@ -769,7 +762,7 @@ impl Nexus {
         let stored = StoredCollection {
             name: name.to_owned(),
             role: StoredRole::Owner,
-            content_key: portalis_nexus_client::generate_content_key(),
+            content_key: crate::crypto::generate_content_key(),
             media_path: String::new(),
             sources: sources.clone(),
             paused: false,
@@ -830,7 +823,7 @@ impl Nexus {
             // the source itself so the row is never nameless on screen.
             name: torrent_name(source),
             role: StoredRole::Owner,
-            content_key: portalis_nexus_client::generate_content_key(),
+            content_key: crate::crypto::generate_content_key(),
             media_path: String::new(),
             sources: Vec::new(),
             paused: false,
@@ -1291,7 +1284,7 @@ async fn publish_collection_sources(
     let descriptor = published_torrent.descriptor;
     let collection_id = <[u8; portalis_nexus_protocol::SHARE_ID_BYTES]>::try_from(key)
         .map_err(|_| anyhow::anyhow!("stored collection key has the wrong length"))?;
-    let author = crate::device::current_nexus_identity()?;
+    let author = crate::device::current_signing_identity()?;
     let mut collection = crate::collections::model::Collection {
         id: crate::collections::model::CollectionId(collection_id),
         name: stored.name.clone(),
@@ -2455,8 +2448,7 @@ mod tests {
     /// and coming back does not make a connection exist. Connectivity used to
     /// be derived from this flag alone, so an app in the foreground reported
     /// itself as connecting to a service nobody had configured — forever, and
-    /// without a socket ever being opened. `core::service` answers it now, by
-    /// having tried.
+    /// without a socket ever being opened.
     #[tokio::test]
     async fn foregrounding_does_not_invent_a_connection() {
         let scratch = Scratch::new("activity");

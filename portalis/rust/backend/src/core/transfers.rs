@@ -19,8 +19,8 @@ use std::time::Duration;
 use tokio::sync::watch;
 
 use crate::projection::state::{Handle, PortalisState, Status, Transfer};
-use crate::store::records::{StoredCollection, StoredSample};
 use crate::store::Store;
+use crate::store::records::{StoredCollection, StoredSample};
 use crate::substrate::Substrate;
 use crate::torrent::TorrentInfo;
 

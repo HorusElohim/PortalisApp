@@ -16,10 +16,10 @@
 //! they are being given deliberately, and the revisions they could not read
 //! before remain unreadable only in the sense that they were never sent them.
 
-use portalis_nexus_client::{generate_content_key, Recipient};
+use crate::crypto::{Recipient, generate_content_key};
 
 use super::model::{Collection, CollectionError};
-use super::publish::{publish, Author, Publication};
+use super::publish::{Author, Publication, publish};
 
 /// Publishes a revision whose membership is exactly `members`.
 ///
@@ -67,7 +67,7 @@ pub fn remove_members(
 
 #[cfg(test)]
 mod tests {
-    use super::super::publish::tests::{descriptors, owned, Person, NOW};
+    use super::super::publish::tests::{NOW, Person, descriptors, owned};
     use super::*;
 
     #[test]

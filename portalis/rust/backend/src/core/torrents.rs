@@ -30,8 +30,8 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, watch};
 
 use crate::projection::state::{Handle, PortalisState};
-use crate::store::records::{StoredCollection, StoredImportEntry};
 use crate::store::Store;
+use crate::store::records::{StoredCollection, StoredImportEntry};
 use crate::substrate::{PeerHints, Substrate};
 
 /// One collection this worker has something to do for.

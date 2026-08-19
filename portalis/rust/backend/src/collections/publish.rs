@@ -12,10 +12,10 @@
 //! device. A service that holds all of it learns the collection's identifier,
 //! its size, and who its members are — and nothing about what is in it.
 
-use portalis_nexus_client::{seal_content_key, Recipient, Sealing};
+use crate::crypto::{Recipient, Sealing, seal_content_key};
 use portalis_nexus_protocol::{
-    seal_entry, seal_manifest, EntryContext, Manifest, ManifestEntry, Revision, RevisionHash,
-    DEVICE_KEY_BYTES, INFO_HASH_BYTES, NO_PREVIOUS_REVISION, SIGNATURE_BYTES,
+    DEVICE_KEY_BYTES, EntryContext, INFO_HASH_BYTES, Manifest, ManifestEntry, NO_PREVIOUS_REVISION,
+    Revision, RevisionHash, SIGNATURE_BYTES, seal_entry, seal_manifest,
 };
 
 use super::model::{Collection, CollectionError, CollectionId};
@@ -33,13 +33,13 @@ pub trait Author {
     fn sign(&self, payload: &[u8]) -> [u8; SIGNATURE_BYTES];
 }
 
-impl Author for crate::nexus::NexusIdentity {
+impl Author for crate::domain::identity::DeviceIdentity {
     fn public_key(&self) -> [u8; DEVICE_KEY_BYTES] {
-        self.signing_identity().public_key()
+        self.public_key()
     }
 
     fn sign(&self, payload: &[u8]) -> [u8; SIGNATURE_BYTES] {
-        self.signing_identity().sign(payload).to_bytes()
+        self.sign(payload).to_bytes()
     }
 }
 
@@ -60,7 +60,7 @@ pub struct Publication {
     /// Each entry's descriptor, encrypted under the same key.
     pub entries: Vec<SealedEntryPayload>,
     /// The content key, sealed once per device the members' logs authorize.
-    pub keys: Vec<portalis_nexus_client::SealedFor>,
+    pub keys: Vec<crate::crypto::SealedFor>,
 }
 
 /// Starts a collection this device owns.
@@ -228,7 +228,7 @@ pub fn head(collection: &Collection) -> Option<RevisionHash> {
 pub(crate) mod tests {
     use ed25519_dalek::{Signer, SigningKey};
     use portalis_nexus_protocol::{
-        derive_device_id, Action, DeviceLog, LogEntry, ENCRYPTION_KEY_BYTES, NO_PREVIOUS_ENTRY,
+        Action, DeviceLog, ENCRYPTION_KEY_BYTES, LogEntry, NO_PREVIOUS_ENTRY, derive_device_id,
     };
     use x25519_dalek::{PublicKey, StaticSecret};
 

@@ -330,6 +330,7 @@ class _TransferGraphState {
 
   int get maxRate => math.max(peakDownload, peakUpload);
   bool get hasUpload => peakUpload > 0 || upBytesPerSecond > 0;
+
   /// How long it took, as the core recorded it.
   ///
   /// [end] is stretched to cover the last reading so the axis holds every

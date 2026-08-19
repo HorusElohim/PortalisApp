@@ -207,8 +207,8 @@ impl PublishProgress {
 #[cfg(test)]
 mod validation_tests {
     use super::{
-        is_magnet, is_remote_source, is_torrent_path, make_source_names_unique,
-        native::sanitize_component, SourceFile,
+        SourceFile, is_magnet, is_remote_source, is_torrent_path, make_source_names_unique,
+        native::sanitize_component,
     };
 
     /// The magnet that broke this: its `xs=` web-seed hint ends in
@@ -509,16 +509,16 @@ mod native {
         AddTorrent, AddTorrentOptions, AddTorrentResponse, Api, CreateTorrentOptions,
         ManagedTorrentShared, Session, TorrentMetadata,
     };
+    use librqbit_core::Id20;
     use librqbit_core::torrent_metainfo::{
         TorrentMetaV1File, TorrentMetaV1Info, TorrentMetaV1Owned,
     };
-    use librqbit_core::Id20;
     use sha1w::{ISha1, Sha1};
     use tokio::sync::OnceCell;
 
     use super::{
-        PieceRun, PublishProgress, RawStorageEntry, SourceFile, TorrentFile, TorrentInfo,
-        TORRENT_PIECE_LENGTH,
+        PieceRun, PublishProgress, RawStorageEntry, SourceFile, TORRENT_PIECE_LENGTH, TorrentFile,
+        TorrentInfo,
     };
 
     static SESSION: OnceCell<Arc<Session>> = OnceCell::const_new();
@@ -755,7 +755,6 @@ mod native {
         }
     }
 
-    #[cfg(test)]
     fn peer_hints_from_source(source: &str) -> anyhow::Result<crate::substrate::PeerHints> {
         if !super::is_magnet(source) {
             return Ok(crate::substrate::PeerHints::default());
@@ -1852,7 +1851,7 @@ mod native {
 
     #[cfg(test)]
     mod link_tests {
-        use super::{link_sources, PublishProgress, SourceFile};
+        use super::{PublishProgress, SourceFile, link_sources};
 
         #[test]
         fn source_layout_is_a_link_not_a_second_file() {
@@ -1961,9 +1960,11 @@ mod native {
             // refuses a link, so this asserts the fallback ran and failed the
             // same honest way, not that it silently produced a file.
             let error = result.expect_err("neither a link nor a clone can land here");
-            assert!(error
-                .to_string()
-                .contains("Portalis will not copy source bytes"));
+            assert!(
+                error
+                    .to_string()
+                    .contains("Portalis will not copy source bytes")
+            );
         }
     }
 }

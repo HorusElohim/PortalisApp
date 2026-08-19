@@ -170,5 +170,4 @@ class _Wash extends StatelessWidget {
       ),
     );
   }
-
 }

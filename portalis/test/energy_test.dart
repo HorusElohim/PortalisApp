@@ -71,8 +71,10 @@ void main() {
           .map(Glow.of)
           .toList();
       for (var i = 1; i < levels.length; i++) {
-        expect(levels[i].borderOpacity, greaterThan(levels[i - 1].borderOpacity));
-        expect(levels[i].shadowOpacity, greaterThan(levels[i - 1].shadowOpacity));
+        expect(
+            levels[i].borderOpacity, greaterThan(levels[i - 1].borderOpacity));
+        expect(
+            levels[i].shadowOpacity, greaterThan(levels[i - 1].shadowOpacity));
         expect(levels[i].blur, greaterThan(levels[i - 1].blur));
       }
     });
@@ -107,7 +109,8 @@ void main() {
 
     test('brightens with real throughput within a level', () {
       // The dynamic half: same state, more bytes moving, more colour.
-      expect(top(GlowLevel.active), lessThan(top(GlowLevel.active, intensity: 1)));
+      expect(
+          top(GlowLevel.active), lessThan(top(GlowLevel.active, intensity: 1)));
     });
 
     test('speed alone never lights a surface that is doing nothing', () {
@@ -119,7 +122,8 @@ void main() {
       final wash = Glow.of(GlowLevel.active, color: AppColors.ember).gradient!
           as LinearGradient;
       for (final c in wash.colors) {
-        expect(c.toARGB32() & 0x00FFFFFF, AppColors.ember.toARGB32() & 0x00FFFFFF);
+        expect(
+            c.toARGB32() & 0x00FFFFFF, AppColors.ember.toARGB32() & 0x00FFFFFF);
       }
     });
 
@@ -137,7 +141,8 @@ void main() {
       expect(_c(status: 'Downloading', down: 200000).liveIntensity,
           lessThan(_c(status: 'Downloading', down: 750000).liveIntensity));
       // Both directions count, the same way glow counts them.
-      expect(_c(status: 'Available', up: 500000, down: 500000).liveIntensity, 1.0);
+      expect(
+          _c(status: 'Available', up: 500000, down: 500000).liveIntensity, 1.0);
     });
   });
 }

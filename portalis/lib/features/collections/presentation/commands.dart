@@ -85,5 +85,3 @@ class CollectionCommandBar extends StatelessWidget {
         ],
       );
 }
-
-

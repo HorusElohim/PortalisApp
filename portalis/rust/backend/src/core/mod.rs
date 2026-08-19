@@ -11,8 +11,6 @@
 
 pub mod events;
 pub mod nexus;
-/// Whether this device is actually reaching a Nexus service.
-pub mod service;
 pub mod supervisor;
 pub mod torrents;
 pub mod transfers;

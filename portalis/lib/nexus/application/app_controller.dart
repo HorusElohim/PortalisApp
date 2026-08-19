@@ -7,8 +7,7 @@ import '../domain/app_state.dart';
 
 /// Owns Portalis's one app-level Nexus state subscription.
 class AppController extends ChangeNotifier {
-  AppController({required AppRepository repository})
-      : _repository = repository;
+  AppController({required AppRepository repository}) : _repository = repository;
 
   factory AppController.production() => AppController(
         repository: const FrbAppRepository(),
@@ -48,6 +47,7 @@ class AppController extends ChangeNotifier {
       peers: peers,
     );
   }
+
   String? lastError;
   bool get started => _starting != null;
 

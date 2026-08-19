@@ -68,8 +68,7 @@ class _StorageScreenState extends State<StorageScreen> {
     }
   }
 
-  int get _totalBytes =>
-      _entries?.fold<int>(0, (sum, e) => sum + e.bytes) ?? 0;
+  int get _totalBytes => _entries?.fold<int>(0, (sum, e) => sum + e.bytes) ?? 0;
 
   @override
   Widget build(BuildContext context) {
@@ -153,8 +152,7 @@ class _EntryRow extends StatelessWidget {
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            routeFor(collection, AppControllers.engine),
+        builder: (_) => routeFor(collection, AppControllers.engine),
       ),
     );
   }
@@ -183,8 +181,7 @@ class _EntryRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.folder_outlined,
-                  size: 17, color: AppColors.textDim),
+              Icon(Icons.folder_outlined, size: 17, color: AppColors.textDim),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -210,8 +207,7 @@ class _EntryRow extends StatelessWidget {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.link,
-                                size: 12, color: AppColors.signal),
+                            Icon(Icons.link, size: 12, color: AppColors.signal),
                             const SizedBox(width: 5),
                             Flexible(
                               child: Text(

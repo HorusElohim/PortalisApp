@@ -89,7 +89,6 @@ class _HomeState extends State<Home> {
     return accepted.collection;
   }
 
-
   void _openCollection(AppCollection collection) =>
       _openCollectionById(collection.id);
 
@@ -120,9 +119,11 @@ class _HomeState extends State<Home> {
     try {
       switch (command) {
         case CollectionCommand.restart:
-          await sendSetPaused(AppControllers.engine, collection.id, paused: false);
+          await sendSetPaused(AppControllers.engine, collection.id,
+              paused: false);
         case CollectionCommand.pause:
-          await sendSetPaused(AppControllers.engine, collection.id, paused: true);
+          await sendSetPaused(AppControllers.engine, collection.id,
+              paused: true);
         case CollectionCommand.delete:
         // Editing needs the collection's own page; a row has nowhere to put
         // a name field, so the row simply opens it instead.

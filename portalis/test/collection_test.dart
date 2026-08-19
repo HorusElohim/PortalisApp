@@ -6,7 +6,6 @@ import 'package:portalis/features/collections/domain/picked_file.dart';
 import 'package:portalis/features/collections/domain/transfer_history.dart';
 import 'package:portalis/features/collections/presentation/source.dart';
 
-
 import 'package:portalis/features/collections/domain/peer_observation.dart';
 import 'package:portalis/features/collections/presentation/peers.dart';
 import 'package:portalis/features/collections/presentation/peer_color.dart';
@@ -35,7 +34,8 @@ class _FixedSource extends CollectionSource with ChangeNotifier {
   List<PeerObservation> peerHistoryFor(String id) => const [];
 
   @override
-  Future<void> addMedia(String id, String label, List<PickedFile> files) async =>
+  Future<void> addMedia(
+          String id, String label, List<PickedFile> files) async =>
       commands.add('addMedia');
 
   @override
@@ -54,7 +54,8 @@ class _FixedSource extends CollectionSource with ChangeNotifier {
   Future<void> delete(String id) async => commands.add('delete');
 
   @override
-  Future<void> deleteWithFiles(String id) async => commands.add('deleteWithFiles');
+  Future<void> deleteWithFiles(String id) async =>
+      commands.add('deleteWithFiles');
 }
 
 void main() {
@@ -144,7 +145,9 @@ void main() {
       await tester.binding.setSurfaceSize(phoneSize);
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
-        MaterialApp(home: CollectionScreen(collection: collection, source: _FixedSource(collection))),
+        MaterialApp(
+            home: CollectionScreen(
+                collection: collection, source: _FixedSource(collection))),
       );
       await tester.pump();
 
@@ -161,7 +164,9 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(390, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
-        MaterialApp(home: CollectionScreen(collection: collection, source: _FixedSource(collection))),
+        MaterialApp(
+            home: CollectionScreen(
+                collection: collection, source: _FixedSource(collection))),
       );
       await tester.pump();
 
@@ -264,7 +269,8 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(390, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(MaterialApp(
-        home: CollectionScreen(collection: collection, source: _FixedSource(collection)),
+        home: CollectionScreen(
+            collection: collection, source: _FixedSource(collection)),
       ));
       await tester.pump();
 
@@ -284,7 +290,9 @@ void main() {
       await tester.binding.setSurfaceSize(phoneSize);
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
-        MaterialApp(home: CollectionScreen(collection: collection, source: _FixedSource(collection))),
+        MaterialApp(
+            home: CollectionScreen(
+                collection: collection, source: _FixedSource(collection))),
       );
       await tester.pump();
 
