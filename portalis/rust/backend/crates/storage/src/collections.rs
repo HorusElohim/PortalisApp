@@ -73,7 +73,7 @@ impl Collections {
     ///
     /// Returns [`StorageError::Conflict`] when the head moved underneath, or
     /// the snapshot already exists — history does not get rewritten.
-    pub async fn save_publication(
+    pub fn save_publication(
         &self,
         head: &ShareRecord,
         snapshot: &ShareSnapshotRecord,
@@ -106,10 +106,7 @@ impl Collections {
             // Automatically grant the owner access to their own share on first publication.
             if expected.is_none() {
                 let mut membership = write.open_table(MEMBERSHIP)?;
-                membership.insert(
-                    pair(&head.share_id, &head.owner).as_slice(),
-                    now,
-                )?;
+                membership.insert(pair(&head.share_id, &head.owner).as_slice(), now)?;
             }
 
             Ok(())
@@ -227,7 +224,7 @@ impl Collections {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use portalis_nexus_server_core::{MAX_SHARE_CAPSULE_BYTES, SHARE_ID_BYTES, SNAPSHOT_ID_BYTES};
+    use portalis_nexus_protocol::{MAX_SHARE_CAPSULE_BYTES, SHARE_ID_BYTES, SNAPSHOT_ID_BYTES};
 
     struct Scratch(std::path::PathBuf);
 
@@ -254,7 +251,10 @@ mod tests {
             owner: [1; 16],
             revision,
             snapshot_id: [2; SNAPSHOT_ID_BYTES],
-            capsule: vec![revision as u8; MAX_SHARE_CAPSULE_BYTES.min(32)],
+            capsule: vec![
+                u8::try_from(revision).unwrap_or(u8::MAX);
+                MAX_SHARE_CAPSULE_BYTES.min(32)
+            ],
             capsule_signature: vec![3; 64],
             created_at_unix_ns: 1000,
             updated_at_unix_ns: 2000,
@@ -266,80 +266,86 @@ mod tests {
             share_id,
             revision,
             snapshot_id: [2; SNAPSHOT_ID_BYTES],
-            capsule: vec![revision as u8; MAX_SHARE_CAPSULE_BYTES.min(32)],
+            capsule: vec![
+                u8::try_from(revision).unwrap_or(u8::MAX);
+                MAX_SHARE_CAPSULE_BYTES.min(32)
+            ],
             capsule_signature: vec![3; 64],
             created_at_unix_ns: 2000,
         }
     }
 
-    #[tokio::test]
-    async fn publishing_is_a_compare_and_set_over_immutable_history() {
+    #[test]
+    fn publishing_is_a_compare_and_set_over_immutable_history() {
         let scratch = Scratch::new("cas");
         let store = scratch.open();
 
         let s1 = share([1; SHARE_ID_BYTES], 1);
         let ss1 = snapshot([1; SHARE_ID_BYTES], 1);
-        store.save_publication(&s1, &ss1, None).await.expect("first publish");
+        store
+            .save_publication(&s1, &ss1, None)
+            .expect("first publish");
 
         let s2 = share([1; SHARE_ID_BYTES], 2);
         let ss2 = snapshot([1; SHARE_ID_BYTES], 2);
-        store.save_publication(&s2, &ss2, Some(1)).await.expect("second publish");
+        store
+            .save_publication(&s2, &ss2, Some(1))
+            .expect("second publish");
 
         let s3 = share([1; SHARE_ID_BYTES], 3);
         let ss3 = snapshot([1; SHARE_ID_BYTES], 3);
         store
             .save_publication(&s3, &ss3, Some(1))
-            .await
             .expect_err("rewriting revision 1 after 2 is conflict");
 
         let other = share([2; SHARE_ID_BYTES], 1);
         let ss_other = snapshot([2; SHARE_ID_BYTES], 1);
         store
             .save_publication(&other, &ss_other, Some(2))
-            .await
             .expect_err("expecting revision 2 on other share is conflict");
 
         let s3 = share([1; SHARE_ID_BYTES], 3);
         let ss3 = snapshot([1; SHARE_ID_BYTES], 3);
         store
             .save_publication(&s3, &ss3, Some(2))
-            .await
             .expect("third publish succeeds");
 
         let stored = store
             .find_share([1; SHARE_ID_BYTES])
-            .await
             .expect("reads")
             .expect("exists");
         assert_eq!(stored.revision, 3);
     }
 
-    #[tokio::test]
-    async fn publishing_is_a_compare_and_set() {
+    #[test]
+    fn publishing_is_a_compare_and_set() {
         let scratch = Scratch::new("cas-async");
         let store = scratch.open();
 
         let s1 = share([1; SHARE_ID_BYTES], 1);
         let ss1 = snapshot([1; SHARE_ID_BYTES], 1);
-        store.save_publication(&s1, &ss1, None).await.expect("first publish");
+        store
+            .save_publication(&s1, &ss1, None)
+            .expect("first publish");
 
         let s2 = share([1; SHARE_ID_BYTES], 2);
         let ss2 = snapshot([1; SHARE_ID_BYTES], 2);
         store
             .save_publication(&s2, &ss2, Some(1))
-            .await
             .expect("second publish");
     }
 
-    #[tokio::test]
-    async fn publishing_produces_one_sealed_key_per_authorized_device() {
+    #[test]
+    fn publishing_produces_one_sealed_key_per_authorized_device() {
         let scratch = Scratch::new("key-per-device");
         let store = scratch.open();
 
         let share_id = [1; SHARE_ID_BYTES];
         let s1 = share(share_id, 1);
         let ss1 = snapshot(share_id, 1);
-        store.save_publication(&s1, &ss1, None).await.expect("first publish");
+        store
+            .save_publication(&s1, &ss1, None)
+            .expect("first publish");
 
         // Owner should have access automatically
         assert!(store.has_access(share_id, [1; 16]).expect("reads"));
