@@ -19,9 +19,13 @@ instead of a living SPEC.
 | [0005](0005-decision-records-adrs.md) | Decision records: ADRs only + index, no living SPEC | proposed | — |
 | [0006](0006-frontend-thin-seam.md) | Frontend shape: one thin seam layer | proposed | — |
 | [0007](0007-symmetric-peer-topology.md) | Symmetric peer topology (the organizing principle) | proposed | — |
+| [0008](0008-single-bittorrent-substrate-discovery-strategies.md) | One BitTorrent substrate, pluggable peer discovery | proposed | — |
+| [0009](0009-qr-peer-bootstrap.md) | QR-first peer bootstrap for offline sharing | proposed | — |
+| [0010](0010-frb-generated-glue-single-app-contract.md) | Generated FRB glue behind one app-facing contract | proposed | — |
 
-> **Note:** ADRs 0001–0007 record decisions already agreed in the 2026-08-16
-> decision session (see `.hermes/plans/`). They are `proposed` pending owner
-> validation at PR merge; the corresponding code changes (delete the second API
-> surface, delete the Mongo backend, redesign Substrate, etc.) are **not yet in
-> the tree** and will be sequenced per the plan.
+> **Note:** ADRs record decisions agreed during design sessions and remain
+> `proposed` pending owner validation at PR merge. ADR-0002 and the one-engine
+> portion of ADR-0008 are already reflected in the tree; the remaining records
+> describe direction and are sequenced with the code changes they motivate.
+> A new ADR declares what it supersedes; older records remain unchanged as
+> append-only history until the owner accepts the successor.
