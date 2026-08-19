@@ -2,7 +2,7 @@
 
 **Status:** proposed  
 **Date:** 2026-08-19  
-**Related:** [ADR-0008](0008-single-bittorrent-substrate-discovery-strategies.md), [ADR-0007](0007-symmetric-peer-topology.md)
+**Related:** [ADR-0003.5](0003.5-single-bittorrent-substrate-discovery-strategies.md), [ADR-0007](0007-symmetric-peer-topology.md)
 
 ## Context
 
@@ -31,7 +31,7 @@ The envelope may contain:
   intentionally an authorization grant.
 
 The receiver validates the version, bounds, identifier, and peer-hint fields,
-then supplies the hints to the single BitTorrent substrate from ADR-0008.
+then supplies the hints to the single BitTorrent substrate from ADR-0003.5.
 
 The first UX is QR-first and in-person. Encryption of the entire URI is not a
 requirement for an in-person scan: the scan itself is the deliberate channel.
