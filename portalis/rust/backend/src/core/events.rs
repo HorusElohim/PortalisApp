@@ -26,7 +26,7 @@
 
 use std::collections::HashMap;
 
-use tokio::sync::{mpsc, watch, Mutex};
+use tokio::sync::{Mutex, mpsc, watch};
 
 /// How many durable events one subscriber may fall behind before emitters
 /// start waiting for it.
@@ -540,11 +540,13 @@ mod tests {
         for event in durable {
             assert!(event.is_durable(), "{event:?} must never be dropped");
         }
-        assert!(!Event::TransferProgress {
-            collection: COLLECTION,
-            progress: progress(1),
-        }
-        .is_durable());
+        assert!(
+            !Event::TransferProgress {
+                collection: COLLECTION,
+                progress: progress(1),
+            }
+            .is_durable()
+        );
     }
 
     /// Every subject and failure a security event can name, so adding one

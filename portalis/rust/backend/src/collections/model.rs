@@ -19,7 +19,7 @@
 //! disagree with it.
 
 use portalis_nexus_protocol::{
-    new_message_id, ContentKey, Manifest, Revision, DEVICE_KEY_BYTES, SHARE_ID_BYTES,
+    ContentKey, DEVICE_KEY_BYTES, Manifest, Revision, SHARE_ID_BYTES, new_message_id,
 };
 use thiserror::Error;
 
@@ -109,9 +109,9 @@ pub enum CollectionError {
     #[error("nothing in this publication is sealed to this device")]
     NotSealedToUs,
     #[error(transparent)]
-    Chain(#[from] portalis_nexus_client::ChainError),
+    Chain(#[from] crate::crypto::ChainError),
     #[error(transparent)]
-    Keys(#[from] portalis_nexus_client::KeyError),
+    Keys(#[from] crate::crypto::KeyError),
     #[error(transparent)]
     Manifest(#[from] portalis_nexus_protocol::ManifestError),
     #[error(transparent)]

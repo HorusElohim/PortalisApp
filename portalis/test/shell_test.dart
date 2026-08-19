@@ -164,7 +164,6 @@ void main() {
       expect(find.byKey(const Key('addTorrentButton')), findsNothing);
       expect(tester.takeException(), isNull);
     });
-
   });
 
   group('home tab', () {

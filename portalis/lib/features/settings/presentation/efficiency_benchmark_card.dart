@@ -58,7 +58,8 @@ class EfficiencyBenchmarkCard extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('EFFICIENCY CHECK', style: monoLabel(size: 10, letterSpacing: 0.7)),
+          Text('EFFICIENCY CHECK',
+              style: monoLabel(size: 10, letterSpacing: 0.7)),
           const SizedBox(height: 5),
           Text(
             'Measuring local responsiveness…',

@@ -38,7 +38,8 @@ extension CollectionPresentation on Collection {
     return isSharing ? GlowLevel.calm : GlowLevel.none;
   }
 
-  double get liveIntensity => Glow.intensityForRate(downBytesPerSecond + upBytesPerSecond);
+  double get liveIntensity =>
+      Glow.intensityForRate(downBytesPerSecond + upBytesPerSecond);
 
   Color get hue => AppColors.hueAt(id.hashCode.abs());
 

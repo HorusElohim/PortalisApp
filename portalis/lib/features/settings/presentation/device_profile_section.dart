@@ -21,6 +21,7 @@ class DeviceProfileSection extends StatelessWidget {
 
   final DeviceProfile? profile;
   final String? identityError;
+
   /// Totals, already summed. The screen above owns where they come from —
   /// this only renders them.
   final int sentBytes;

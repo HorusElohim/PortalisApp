@@ -38,8 +38,8 @@ use records::{
 };
 use schema::{
     COLLECTIONS, CONTACTS, DEVICE_LOG, ENTRIES, IDENTITY, MANIFESTS, META, OUTBOX, REVISIONS,
-    SAMPLES, SCHEMA_VERSION, SCHEMA_VERSION_KEY, TORRENT_IMPORTS, TORRENT_IMPORT_DESCRIPTORS,
-    TORRENT_IMPORT_ENTRIES,
+    SAMPLES, SCHEMA_VERSION, SCHEMA_VERSION_KEY, TORRENT_IMPORT_DESCRIPTORS,
+    TORRENT_IMPORT_ENTRIES, TORRENT_IMPORTS,
 };
 
 /// Why the store could not answer.
@@ -930,10 +930,12 @@ mod tests {
         // already seen returns nothing rather than repeating it.
         let after = store.samples_after(&COLLECTION, 20).expect("reads");
         assert_eq!(after.iter().map(|(at, _)| *at).collect::<Vec<_>>(), [30]);
-        assert!(store
-            .samples_after(&COLLECTION, 30)
-            .expect("reads")
-            .is_empty());
+        assert!(
+            store
+                .samples_after(&COLLECTION, 30)
+                .expect("reads")
+                .is_empty()
+        );
 
         // And a neighbour's readings are not somebody else's news.
         assert_eq!(store.samples_after(&OTHER, 0).expect("reads").len(), 1);
@@ -1109,10 +1111,12 @@ mod tests {
 
         store.forget_torrent_import(&COLLECTION).expect("forgets");
         assert_eq!(store.torrent_import(&COLLECTION).expect("reads"), None);
-        assert!(store
-            .torrent_import_entries(&COLLECTION)
-            .expect("reads metadata")
-            .is_empty());
+        assert!(
+            store
+                .torrent_import_entries(&COLLECTION)
+                .expect("reads metadata")
+                .is_empty()
+        );
         assert_eq!(
             store
                 .torrent_import_descriptor(&COLLECTION)

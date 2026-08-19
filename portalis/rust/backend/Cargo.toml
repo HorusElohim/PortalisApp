@@ -1,17 +1,12 @@
 [package]
 name = "backend"
-version = "0.1.27"
-edition = "2021"
+version = "0.1.28"
+edition = "2024"
 
 [workspace]
 resolver = "3"
 members = [
-    "apps/server",
-    "demo",
-    "crates/client",
     "crates/protocol",
-    "crates/server-core",
-    "crates/storage",
 ]
 
 [workspace.package]
@@ -28,13 +23,6 @@ ed25519-dalek = "2.2.0"
 x25519-dalek = { version = "3.0.0", features = ["static_secrets", "getrandom"] }
 chacha20poly1305 = "0.11.0"
 hkdf = "0.13.0"
-# `discovery-local-network` is mDNS: it is what lets two devices on the same
-# wifi find each other by Node ID with nothing configured and no internet,
-# which is the case Portalis exists for — a large collection moving between
-# people in one room should never leave it.
-iroh = { version = "0.92.0", default-features = false, features = [
-    "discovery-local-network",
-] }
 sha2 = "0.11.0"
 axum = { version = "0.8.9", features = ["http1", "json", "tokio"] }
 prost = "0.14.4"
@@ -50,11 +38,7 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 uuid = { version = "1.24.0", features = ["v4", "v7"] }
 
-portalis-nexus-client = { path = "crates/client" }
-portalis-nexus-server = { path = "apps/server" }
 portalis-nexus-protocol = { path = "crates/protocol" }
-portalis-nexus-server-core = { path = "crates/server-core" }
-portalis-nexus-storage = { path = "crates/storage" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -78,11 +62,11 @@ anyhow = "1.0"
 # swap it. See docs/torrent-engine.md.
 async-trait = "0.1"
 
-# The canonical online-share wire client. Keep protobufs and transport types
-# behind the native backend boundary; the Flutter bridge will expose only
-# domain operations once the app integration is ready.
-portalis-nexus-client.workspace = true
 portalis-nexus-protocol.workspace = true
+
+# Iroh-free crypto extracted from the former Nexus client crate: sealing,
+# opening, and chain verification for collections (see src/crypto.rs).
+chacha20poly1305.workspace = true
 
 # The local store (SPEC 13): one transactional file in the platform data
 # directory. Pure Rust, so it cross-compiles to iOS and Android without a C
@@ -94,10 +78,12 @@ thiserror.workspace = true
 # keys, manifest entry ids). Pure Rust, no OS-specific bits — safe on every
 # target including wasm32.
 ed25519-dalek = { version = "2", features = ["rand_core"] }
-x25519-dalek = { version = "3", features = ["static_secrets"] }
 rand = "0.8"
 hex = "0.4"
 uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+x25519-dalek = { version = "3", features = ["static_secrets"] }
 
 # librqbit (BitTorrent engine) needs real OS sockets (via tokio/mio), which
 # don't exist on wasm32 — Web is a viewer, not a swarm participant, so it's

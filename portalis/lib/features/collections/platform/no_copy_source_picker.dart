@@ -15,7 +15,8 @@ class NoCopySourcePicker {
 
   static Future<List<PickedFile>> pickFiles() async {
     if (defaultTargetPlatform != TargetPlatform.iOS) {
-      throw UnsupportedError('The native Files picker is only available on iOS');
+      throw UnsupportedError(
+          'The native Files picker is only available on iOS');
     }
     final values = await _channel.invokeListMethod<dynamic>('pickFiles') ?? [];
     return values.map(_fromNative).toList(growable: false);
@@ -23,14 +24,16 @@ class NoCopySourcePicker {
 
   static PickedFile _fromNative(dynamic value) {
     if (value is! Map) {
-      throw const FormatException('Native Files picker returned an invalid item');
+      throw const FormatException(
+          'Native Files picker returned an invalid item');
     }
     final item = Map<Object?, Object?>.from(value);
     final name = item['name'];
     final path = item['path'];
     final length = item['lengthBytes'];
     if (name is! String || path is! String || length is! int) {
-      throw const FormatException('Native Files picker returned invalid metadata');
+      throw const FormatException(
+          'Native Files picker returned invalid metadata');
     }
     return PickedFile(name: name, path: path, lengthBytes: length);
   }

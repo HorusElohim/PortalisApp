@@ -11,6 +11,7 @@ class StorageEntry {
   final String name;
   final int bytes;
   final String path;
+
   /// The owning collection's Nexus handle, when one claims this directory.
   final int? collection;
   final String? collectionName;

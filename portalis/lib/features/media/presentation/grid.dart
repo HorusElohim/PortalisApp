@@ -77,7 +77,8 @@ class MediaGrid extends StatelessWidget {
                             AnimatedOpacity(
                               duration: const Duration(milliseconds: 160),
                               opacity: skipped ? 0.3 : 1,
-                              child: MediaThumbnail(media: item, borderRadius: 6),
+                              child:
+                                  MediaThumbnail(media: item, borderRadius: 6),
                             ),
                             if (!item.fetched && !skipped)
                               Container(

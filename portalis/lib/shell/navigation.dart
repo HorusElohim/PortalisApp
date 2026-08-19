@@ -35,8 +35,7 @@ class AppNavigation {
 
   /// True when the user is anywhere other than the Collections tab of the
   /// shell — i.e. when "go home" would actually do something.
-  static bool get isAwayFromHome =>
-      depth.value > 0 || tab.value != homeTab;
+  static bool get isAwayFromHome => depth.value > 0 || tab.value != homeTab;
 
   /// Pops back to the shell and selects Collections.
   static void goHome() {

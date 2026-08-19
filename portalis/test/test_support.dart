@@ -146,8 +146,7 @@ AppCollection buildNexusCollection({
       pending: null,
     );
 
-AppSnapshot buildNexusState(List<AppCollection> collections) =>
-    AppSnapshot(
+AppSnapshot buildNexusState(List<AppCollection> collections) => AppSnapshot(
       device: const AppDevice(
         name: 'Portalis',
         handle: null,
@@ -193,7 +192,6 @@ Future<void> pumpTransition(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
 }
-
 
 void resetTestState() {
   AppControllers.engine.debugSeed(null);

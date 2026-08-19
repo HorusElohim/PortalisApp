@@ -35,7 +35,6 @@ class _RootShellState extends AdaptiveShellState<RootShell> {
         content: _desktopContent(),
       );
 
-
   Widget _desktopContent() => switch (pane) {
         DesktopPane.people => const PeopleScreen(embedded: true),
         DesktopPane.user => const UserScreen(embedded: true),

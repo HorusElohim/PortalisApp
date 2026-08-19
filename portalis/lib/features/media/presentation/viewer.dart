@@ -110,7 +110,8 @@ class CollectionMediaViewer extends StatelessWidget {
                                 progress: media.progress,
                                 downloadedBytes: media.downloadedBytes,
                                 totalBytes: media.sizeBytes,
-                                downBytesPerSecond: collection.downBytesPerSecond,
+                                downBytesPerSecond:
+                                    collection.downBytesPerSecond,
                                 upBytesPerSecond: collection.upBytesPerSecond,
                                 livePeers: collection.livePeers,
                                 etaLabel: collection.etaLabel,

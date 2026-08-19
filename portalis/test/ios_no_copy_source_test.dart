@@ -68,7 +68,8 @@ void main() {
     expect(photos.single.lengthBytes, 6000000000);
   });
 
-  test('Android keeps gallery media disabled until it can be linked directly', () {
+  test('Android keeps gallery media disabled until it can be linked directly',
+      () {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
 
     expect(supportsDirectPathSources, isFalse);

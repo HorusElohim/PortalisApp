@@ -14,7 +14,8 @@ enum CollectionDeletionChoice { collectionOnly, withFiles }
 Future<CollectionDeletionChoice?> confirmCollectionDeletion(
   BuildContext context, {
   required String collectionName,
-}) => showDialog<CollectionDeletionChoice>(
+}) =>
+    showDialog<CollectionDeletionChoice>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.surface,

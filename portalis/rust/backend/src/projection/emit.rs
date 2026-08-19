@@ -373,9 +373,11 @@ mod tests {
         );
         // Re-subscribing to what is already subscribed changes nothing.
         projector.watch_detail(Some(COLLECTION));
-        assert!(projector
-            .tick(&state, Some(&detail(1)), Duration::from_secs(2))
-            .is_empty());
+        assert!(
+            projector
+                .tick(&state, Some(&detail(1)), Duration::from_secs(2))
+                .is_empty()
+        );
     }
 
     #[test]

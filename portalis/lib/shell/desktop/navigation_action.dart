@@ -40,7 +40,8 @@ class DesktopNavigationAction extends StatelessWidget {
                   ),
                   if (badge != null) ...[
                     const SizedBox(width: 5),
-                    Text(badge!, style: monoLabel(size: 10.5, letterSpacing: 0)),
+                    Text(badge!,
+                        style: monoLabel(size: 10.5, letterSpacing: 0)),
                   ],
                 ],
               ),

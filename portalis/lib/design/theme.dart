@@ -459,46 +459,46 @@ class Glow {
   }) {
     final resolvedColor = color ?? AppColors.signal;
     return switch (level) {
-        GlowLevel.none => Glow(
-            level: level,
-            color: resolvedColor,
-            borderOpacity: 0,
-            blur: 0,
-            spread: 0,
-            shadowOpacity: 0,
-            washOpacity: 0,
-          ),
-        GlowLevel.calm => Glow(
-            level: level,
-            color: resolvedColor,
-            intensity: intensity,
-            borderOpacity: 0.12,
-            blur: 6,
-            spread: -5,
-            shadowOpacity: 0.02,
-            washOpacity: 0.02,
-          ),
-        GlowLevel.active => Glow(
-            level: level,
-            color: resolvedColor,
-            intensity: intensity,
-            borderOpacity: 0.18,
-            blur: 8,
-            spread: -5,
-            shadowOpacity: 0.04,
-            washOpacity: 0.03,
-          ),
-        GlowLevel.vivid => Glow(
-            level: level,
-            color: resolvedColor,
-            intensity: intensity,
-            borderOpacity: 0.24,
-            blur: 10,
-            spread: -4,
-            shadowOpacity: 0.06,
-            washOpacity: 0.04,
-          ),
-      };
+      GlowLevel.none => Glow(
+          level: level,
+          color: resolvedColor,
+          borderOpacity: 0,
+          blur: 0,
+          spread: 0,
+          shadowOpacity: 0,
+          washOpacity: 0,
+        ),
+      GlowLevel.calm => Glow(
+          level: level,
+          color: resolvedColor,
+          intensity: intensity,
+          borderOpacity: 0.12,
+          blur: 6,
+          spread: -5,
+          shadowOpacity: 0.02,
+          washOpacity: 0.02,
+        ),
+      GlowLevel.active => Glow(
+          level: level,
+          color: resolvedColor,
+          intensity: intensity,
+          borderOpacity: 0.18,
+          blur: 8,
+          spread: -5,
+          shadowOpacity: 0.04,
+          washOpacity: 0.03,
+        ),
+      GlowLevel.vivid => Glow(
+          level: level,
+          color: resolvedColor,
+          intensity: intensity,
+          borderOpacity: 0.24,
+          blur: 10,
+          spread: -4,
+          shadowOpacity: 0.06,
+          washOpacity: 0.04,
+        ),
+    };
   }
 }
 

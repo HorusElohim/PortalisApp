@@ -638,13 +638,17 @@ mod tests {
             CommandError::Invalid("a collection needs a name".to_owned()).to_string(),
             "a collection needs a name"
         );
-        assert!(CommandError::QuotaReached("collection")
-            .to_string()
-            .contains("collection"));
+        assert!(
+            CommandError::QuotaReached("collection")
+                .to_string()
+                .contains("collection")
+        );
         assert!(CommandError::NotPermitted.to_string().contains("may do"));
-        assert!(CommandError::Unavailable
-            .to_string()
-            .contains("cannot wait"));
+        assert!(
+            CommandError::Unavailable
+                .to_string()
+                .contains("cannot wait")
+        );
     }
 
     /// The interface renders one line per collection, so its state is one

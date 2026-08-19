@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../../../app/app_controllers.dart';
 import '../../../design/design.dart';
 import '../domain/engine.dart';
-import 'service_section.dart';
 import '../domain/listen_port_range.dart';
 import '../application/efficiency_benchmark.dart';
 import 'efficiency_benchmark_card.dart';
@@ -40,7 +39,6 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _settings = AppControllers.settings;
-  final _nexus = AppControllers.nexus;
   final _scrollController = ScrollController();
   static const _benchmark = EfficiencyBenchmark();
   Timer? _storagePoll;
@@ -286,7 +284,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // The engine too: this screen now shows what it can reach, and a
           // status that only repaints when a setting changes is a status
           // that is wrong for as long as nobody touches one.
-          listenable: Listenable.merge([_settings, _nexus, AppControllers.engine]),
+          listenable:
+              Listenable.merge([_settings, _nexus, AppControllers.engine]),
           builder: (context, _) {
             final s = _settings.settings;
             final error = _settings.lastError ?? _nexus.lastError;
@@ -341,12 +340,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsSection(
         label: 'APPEARANCE',
         children: const [ThemePickerRow()],
-      ),
-      ServiceSection(
-        config: _nexus.config,
-        // What the engine reaches. The service itself is not configurable —
-        // it is the same one for everybody, compiled into the build.
-        connectivity: AppControllers.engine.state?.connectivity ?? '',
       ),
       SettingsSection(
         label: 'SPEED · APPLIES IMMEDIATELY',

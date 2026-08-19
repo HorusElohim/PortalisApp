@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'test_support.dart';
 
-
 void main() {
   tearDown(resetTestState);
 
@@ -37,7 +36,10 @@ void main() {
             ),
           ],
           collections: [
-            buildNexusCollection(id: 1, name: 'Iceland trip', members: Uint32List.fromList(const [7])),
+            buildNexusCollection(
+                id: 1,
+                name: 'Iceland trip',
+                members: Uint32List.fromList(const [7])),
           ],
           alerts: const [],
         ),

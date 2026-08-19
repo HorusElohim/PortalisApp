@@ -72,9 +72,9 @@ class CollectionOverview extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-          _CollectionControls(
-            collection: collection,
-          ),
+        _CollectionControls(
+          collection: collection,
+        ),
         if (showTitle) ...[
           Text(
             collection.name,
@@ -141,8 +141,7 @@ class _CollectionControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final admins =
-        0;
+    final admins = 0;
     return Row(
       children: [
         if (admins > 0)

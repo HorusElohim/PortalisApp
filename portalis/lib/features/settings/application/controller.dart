@@ -65,7 +65,8 @@ class SettingsController extends ChangeNotifier {
     }
   }
 
-  Future<List<StorageEntry>> storageBreakdown() => _repository.storageBreakdown();
+  Future<List<StorageEntry>> storageBreakdown() =>
+      _repository.storageBreakdown();
 
   @visibleForTesting
   void debugSeed(EngineSettings settings) {

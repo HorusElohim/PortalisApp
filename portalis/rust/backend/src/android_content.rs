@@ -7,9 +7,9 @@
 
 use std::sync::OnceLock;
 
+use jni::EnvUnowned;
 use jni::objects::{Global, JClass, JObject};
 use jni::vm::JavaVM;
-use jni::EnvUnowned;
 
 static JVM: OnceLock<JavaVM> = OnceLock::new();
 static APPLICATION_CONTEXT: OnceLock<Global<JObject<'static>>> = OnceLock::new();

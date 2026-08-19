@@ -239,8 +239,8 @@ impl Supervisor {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
 
@@ -274,9 +274,11 @@ mod tests {
         let outcomes = supervisor.shutdown().await;
 
         assert_eq!(outcomes.len(), 3);
-        assert!(outcomes
-            .iter()
-            .all(|(_, outcome)| *outcome == Outcome::Stopped));
+        assert!(
+            outcomes
+                .iter()
+                .all(|(_, outcome)| *outcome == Outcome::Stopped)
+        );
         // Startup order is a dependency statement, so it is the order started
         // rather than the order they happened to be scheduled.
         assert_eq!(
@@ -498,9 +500,11 @@ mod tests {
         let outcomes = supervisor.shutdown().await;
 
         assert_eq!(outcomes.len(), 2);
-        assert!(outcomes
-            .iter()
-            .all(|(_, outcome)| *outcome == Outcome::Panicked));
+        assert!(
+            outcomes
+                .iter()
+                .all(|(_, outcome)| *outcome == Outcome::Panicked)
+        );
         let mut named: Vec<_> = outcomes.iter().map(|(name, _)| *name).collect();
         named.sort_unstable();
         assert_eq!(named, ["first", "second"]);

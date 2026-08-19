@@ -241,5 +241,3 @@ Future<ChosenSources?> _pickFolder() async {
     throw PickerFailure("Couldn't read that folder: $error");
   }
 }
-
-

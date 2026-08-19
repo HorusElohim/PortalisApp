@@ -61,5 +61,3 @@ List<PeerObservation> peerObservations({
       ),
   ];
 }
-
-

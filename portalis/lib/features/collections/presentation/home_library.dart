@@ -50,8 +50,7 @@ class HomeLibrary extends StatelessWidget {
       .where((collection) => _matchesQuery(collection))
       .toList(growable: false);
 
-  bool _matchesQuery(AppCollection collection) =>
-      true;
+  bool _matchesQuery(AppCollection collection) => true;
 
   /// The row summary for one collection — cheap, and never a subscription:
   /// see [collectionView]'s own doc for what a missing detail costs it.
@@ -111,8 +110,7 @@ class HomeLibrary extends StatelessWidget {
     return CollectionsList(
       collections: [for (final collection in _shown) _rowView(collection)],
       onOpen: (row) => onOpen(byRowId[row.id]!),
-      onCommand: (action) =>
-          onCommand((byRowId[action.$1.id]!, action.$2)),
+      onCommand: (action) => onCommand((byRowId[action.$1.id]!, action.$2)),
       // Every row expands now. A torrent waiting to be chosen from used to be
       // the exception, because choosing happened on a screen of its own; it
       // happens on the collection itself, so there is nothing left that a row
@@ -237,4 +235,3 @@ class HomeLibrary extends StatelessWidget {
         '↓ ${formatRate(down)} · ↑ ${formatRate(up)}';
   }
 }
-

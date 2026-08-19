@@ -36,7 +36,8 @@ void main() {
       nanoseconds,
       greaterThanOrEqualTo(stopwatch.elapsed.inMicroseconds * 1000),
     );
-    expect(nanoseconds, lessThan((stopwatch.elapsed.inMicroseconds + 1) * 1000));
+    expect(
+        nanoseconds, lessThan((stopwatch.elapsed.inMicroseconds + 1) * 1000));
   });
 
   group('durationLabel scales to the run', () {

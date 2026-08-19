@@ -84,10 +84,6 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     );
   }
 
-
-
-
-
   @protected
   Widget buildCompactLayout(BuildContext context);
 

@@ -157,6 +157,7 @@ void main() {
 
     expect(repository.commands, isEmpty);
   });
+
   /// A draft opens ready to be changed, because it exists only because
   /// somebody is halfway through assembling it. The name is a suggestion
   /// already in the field rather than a question asked of an empty screen.
@@ -217,7 +218,6 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-
   testWidgets(
       'Home renders Nexus collections through the shared legacy row, '
       'translated rather than reimplemented', (tester) async {
@@ -273,6 +273,7 @@ void main() {
     await tester.tap(find.byKey(const Key('shareCollectionAction')));
     expect(created, isTrue);
   });
+
   /// Pasting a torrent link is asking for what is in it, not making
   /// something of your own — the name is the torrent's, and offering a field
   /// for it invites a person to answer a question nobody asked. Re-open it
@@ -339,7 +340,6 @@ void main() {
     expect(find.text('Share this collection'), findsNothing);
     expect(tester.takeException(), isNull);
   });
-
 
   /// The bug this exists to prevent: the shell reported "1 ACTIVE TRANSFER"
   /// above a Home showing no collections, because the chrome counted from the
@@ -447,7 +447,6 @@ void main() {
     expect(opened, isNotNull);
     expect(tester.takeException(), isNull);
   });
-
 
   testWidgets(
       'collection detail deletes through the same command bar and dialog '

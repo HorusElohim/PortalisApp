@@ -11,7 +11,7 @@
 //! derived one would be a format nobody chose and nobody could read from
 //! another language.
 
-use portalis_nexus_protocol::{ContentKey, CONTENT_KEY_BYTES, DEVICE_KEY_BYTES};
+use portalis_nexus_protocol::{CONTENT_KEY_BYTES, ContentKey, DEVICE_KEY_BYTES};
 use thiserror::Error;
 
 /// A row that does not decode. Always a bug or a damaged file, never input
