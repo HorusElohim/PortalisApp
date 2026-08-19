@@ -39,7 +39,7 @@ use thiserror::Error;
 /// or belonging to someone else cannot become a recipient, so sealing to a
 /// device that was revoked in the meantime is not an error a caller can make.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Recipient {
+pub struct Recipient {
     log: DeviceLog,
 }
 
@@ -52,6 +52,7 @@ impl Recipient {
     /// Returns [`KeyError::Log`] when the offered entries are invalid, behind
     /// the held log, or disagree with it — each of which is a reason not to
     /// seal anything to this person yet.
+    #[allow(dead_code)]
     pub fn current(held: &DeviceLog, offered: &[LogEntry]) -> Result<Self, KeyError> {
         Ok(Self {
             log: held.adopt(offered)?,
@@ -80,7 +81,7 @@ impl Recipient {
 
 /// One sealed copy of a content key, addressed to one device.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct SealedFor {
+pub struct SealedFor {
     pub member_root_key: [u8; DEVICE_KEY_BYTES],
     pub recipient_device_id: [u8; DEVICE_ID_BYTES],
     pub envelope: SealedEnvelope,
@@ -88,7 +89,7 @@ pub(crate) struct SealedFor {
 
 /// Everything one sealing produced.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Sealing {
+pub struct Sealing {
     /// One envelope per authorized device across every recipient.
     pub envelopes: Vec<SealedFor>,
     /// The membership to put in the revision, ascending by root key.
@@ -101,7 +102,7 @@ pub(crate) struct Sealing {
 
 /// Why a content key was not sealed or opened.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
-pub(crate) enum KeyError {
+pub enum KeyError {
     /// The offered log is invalid, stale, or forked. Reported before any
     /// sealing happens, because a log that cannot be trusted names devices
     /// that cannot be sealed to.
@@ -127,7 +128,7 @@ pub(crate) enum KeyError {
 /// One per collection, and a new one on every rotation: reusing a key across
 /// revisions would mean a removed member could still read the next one.
 #[must_use]
-pub(crate) fn generate_content_key() -> ContentKey {
+pub fn generate_content_key() -> ContentKey {
     let mut key = [0_u8; CONTENT_KEY_BYTES];
     key.copy_from_slice(&new_challenge()[..CONTENT_KEY_BYTES]);
     key
@@ -139,7 +140,7 @@ pub(crate) fn generate_content_key() -> ContentKey {
 ///
 /// Returns [`KeyError`] when a recipient appears twice, has no authorized
 /// device, or its encryption key is one X25519 refuses.
-pub(crate) fn seal_content_key(
+pub fn seal_content_key(
     key: &ContentKey,
     collection_id: [u8; SHARE_ID_BYTES],
     recipients: &[Recipient],
@@ -196,7 +197,8 @@ pub(crate) fn seal_content_key(
 /// # Errors
 ///
 /// Returns [`KeyError`] for the same reasons [`seal_content_key`] does.
-pub(crate) fn rotate_content_key(
+#[allow(dead_code)]
+pub fn rotate_content_key(
     collection_id: [u8; SHARE_ID_BYTES],
     remaining: &[Recipient],
 ) -> Result<(ContentKey, Sealing), KeyError> {
@@ -211,7 +213,7 @@ pub(crate) fn rotate_content_key(
 ///
 /// Returns [`KeyError`] when the envelope was not sealed to this device and
 /// collection, or holds something that is not a content key.
-pub(crate) fn open_content_key(
+pub fn open_content_key(
     device_secret_key: &[u8; DEVICE_ID_BYTES],
     collection_id: [u8; SHARE_ID_BYTES],
     recipient_device_id: [u8; DEVICE_ID_BYTES],
