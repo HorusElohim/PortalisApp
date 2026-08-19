@@ -2,9 +2,9 @@
 
 **Status:** superseded
 **Date:** 2026-08-16
-**Superseded by:** [ADR-0008](0008-single-bittorrent-substrate-discovery-strategies.md)
+**Superseded by:** [ADR-0003.5](0003.5-single-bittorrent-substrate-discovery-strategies.md)
 
-> Superseded by ADR-0008: the online/offline goal remains, but it is served by
+> Superseded by ADR-0003.5: the online/offline goal remains, but it is served by
 > one BitTorrent substrate with pluggable peer discovery rather than two
 > payload engines.
 
