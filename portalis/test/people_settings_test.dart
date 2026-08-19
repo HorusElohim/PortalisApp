@@ -67,31 +67,6 @@ void main() {
   });
 
   group('settings', () {
-    testWidgets('the Nexus service is reported but not configurable',
-        (tester) async {
-      await tester.binding.setSurfaceSize(const Size(390, 2400));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      AppControllers.settings.debugSeed(buildEngineSettings());
-      await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-
-      expect(find.text('NEXUS SERVICE'), findsOneWidget);
-      expect(find.text('Connection'), findsOneWidget);
-
-      // The service is the same one for everybody and is compiled in, so
-      // there is nothing here to set — and nothing to leave pointing at an
-      // address that stopped being right.
-      expect(find.text('Direct address'), findsNothing);
-      expect(find.text('Forget Nexus service'), findsNothing);
-
-      // Tapping the row opens nothing, because it reports rather than edits.
-      await tester.tap(find.text('Connection'));
-      await tester.pumpAndSettle();
-      expect(find.byType(AlertDialog), findsNothing);
-      expect(tester.takeException(), isNull);
-    });
-
     testWidgets('hides engine internals behind Network & engine',
         (tester) async {
       await tester.binding.setSurfaceSize(phoneSize);

@@ -59,7 +59,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     if (!_settings.loaded) _settings.load();
-    if (!_nexus.loaded) _nexus.load();
     // Storage grows as downloads finish in the background.
     _storagePoll = Timer.periodic(
       const Duration(seconds: 2),
@@ -284,11 +283,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // The engine too: this screen now shows what it can reach, and a
           // status that only repaints when a setting changes is a status
           // that is wrong for as long as nobody touches one.
-          listenable:
-              Listenable.merge([_settings, _nexus, AppControllers.engine]),
+          listenable: Listenable.merge([_settings, AppControllers.engine]),
           builder: (context, _) {
             final s = _settings.settings;
-            final error = _settings.lastError ?? _nexus.lastError;
+            final error = _settings.lastError;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
