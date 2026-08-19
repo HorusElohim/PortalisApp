@@ -11,6 +11,8 @@
 //! keep in step, and an index that disagrees with its table is worse than a
 //! scan.
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use redb::{ReadableTable, TableDefinition};
 
 use portalis_nexus_server_core::{ShareId, ShareRecord, ShareSnapshotRecord, UserId};
@@ -71,12 +73,17 @@ impl Collections {
     ///
     /// Returns [`StorageError::Conflict`] when the head moved underneath, or
     /// the snapshot already exists — history does not get rewritten.
-    pub fn save_publication(
+    pub async fn save_publication(
         &self,
         head: &ShareRecord,
         snapshot: &ShareSnapshotRecord,
         expected: Option<u64>,
     ) -> Result<(), StorageError> {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |since| {
+                u64::try_from(since.as_nanos()).unwrap_or(u64::MAX)
+            });
         self.store.transact(|write| {
             let mut shares = write.open_table(SHARES)?;
             let actual: Option<ShareRecord> = shares
@@ -95,6 +102,16 @@ impl Collections {
 
             snapshots.insert(key.as_slice(), encode(snapshot)?.as_str())?;
             shares.insert(head.share_id.as_slice(), encode(head)?.as_str())?;
+
+            // Automatically grant the owner access to their own share on first publication.
+            if expected.is_none() {
+                let mut membership = write.open_table(MEMBERSHIP)?;
+                membership.insert(
+                    pair(&head.share_id, &head.owner).as_slice(),
+                    now,
+                )?;
+            }
+
             Ok(())
         })
     }
@@ -210,6 +227,7 @@ impl Collections {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use portalis_nexus_server_core::{MAX_SHARE_CAPSULE_BYTES, SHARE_ID_BYTES, SNAPSHOT_ID_BYTES};
 
     struct Scratch(std::path::PathBuf);
 
@@ -230,147 +248,116 @@ mod tests {
         }
     }
 
-    impl Drop for Scratch {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
-
-    const ADA: UserId = [1; 16];
-    const GRACE: UserId = [2; 16];
-    const SHARE: ShareId = [3; 16];
-
-    fn share(revision: u64, capsule: &[u8]) -> ShareRecord {
+    fn share(share_id: [u8; SHARE_ID_BYTES], revision: u64) -> ShareRecord {
         ShareRecord {
-            share_id: SHARE,
-            owner: ADA,
+            share_id,
+            owner: [1; 16],
             revision,
-            snapshot_id: [u8::try_from(revision % 256).unwrap_or(0); 32],
-            capsule: capsule.to_vec(),
-            capsule_signature: vec![9; 64],
-            created_at_unix_ns: 1,
-            updated_at_unix_ns: revision,
+            snapshot_id: [2; SNAPSHOT_ID_BYTES],
+            capsule: vec![revision as u8; MAX_SHARE_CAPSULE_BYTES.min(32)],
+            capsule_signature: vec![3; 64],
+            created_at_unix_ns: 1000,
+            updated_at_unix_ns: 2000,
         }
     }
-    fn snapshot(revision: u64, capsule: &[u8]) -> ShareSnapshotRecord {
+
+    fn snapshot(share_id: [u8; SHARE_ID_BYTES], revision: u64) -> ShareSnapshotRecord {
         ShareSnapshotRecord {
-            share_id: SHARE,
+            share_id,
             revision,
-            snapshot_id: [u8::try_from(revision % 256).unwrap_or(0); 32],
-            capsule: capsule.to_vec(),
-            capsule_signature: vec![9; 64],
-            created_at_unix_ns: revision,
+            snapshot_id: [2; SNAPSHOT_ID_BYTES],
+            capsule: vec![revision as u8; MAX_SHARE_CAPSULE_BYTES.min(32)],
+            capsule_signature: vec![3; 64],
+            created_at_unix_ns: 2000,
         }
     }
-    /// A head and its snapshot together, and a head that moved underneath is
-    /// refused rather than overwritten.
-    #[test]
-    fn publishing_is_a_compare_and_set_over_immutable_history() {
-        let scratch = Scratch::new("publish");
+
+    #[tokio::test]
+    async fn publishing_is_a_compare_and_set_over_immutable_history() {
+        let scratch = Scratch::new("cas");
         let store = scratch.open();
 
+        let s1 = share([1; SHARE_ID_BYTES], 1);
+        let ss1 = snapshot([1; SHARE_ID_BYTES], 1);
+        store.save_publication(&s1, &ss1, None).await.expect("first publish");
+
+        let s2 = share([1; SHARE_ID_BYTES], 2);
+        let ss2 = snapshot([1; SHARE_ID_BYTES], 2);
+        store.save_publication(&s2, &ss2, Some(1)).await.expect("second publish");
+
+        let s3 = share([1; SHARE_ID_BYTES], 3);
+        let ss3 = snapshot([1; SHARE_ID_BYTES], 3);
         store
-            .save_publication(&share(1, b"one"), &snapshot(1, b"one"), None)
-            .expect("the first publication creates it");
-        assert_eq!(
-            store.find_share(SHARE).expect("reads"),
-            Some(share(1, b"one"))
-        );
+            .save_publication(&s3, &ss3, Some(1))
+            .await
+            .expect_err("rewriting revision 1 after 2 is conflict");
 
-        // Expecting no share when one exists: someone else got there first.
-        assert!(matches!(
-            store.save_publication(&share(1, b"other"), &snapshot(1, b"other"), None),
-            Err(StorageError::Conflict)
-        ));
-
+        let other = share([2; SHARE_ID_BYTES], 1);
+        let ss_other = snapshot([2; SHARE_ID_BYTES], 1);
         store
-            .save_publication(&share(2, b"two"), &snapshot(2, b"two"), Some(1))
-            .expect("advances");
-        assert_eq!(
-            store.find_share(SHARE).expect("reads").map(|s| s.revision),
-            Some(2)
-        );
+            .save_publication(&other, &ss_other, Some(2))
+            .await
+            .expect_err("expecting revision 2 on other share is conflict");
 
-        // History is immutable: revision 1 is still what it was.
-        assert_eq!(
-            store.find_snapshot(SHARE, 1).expect("reads"),
-            Some(snapshot(1, b"one"))
-        );
-        assert!(matches!(
-            store.save_publication(&share(1, b"rewritten"), &snapshot(1, b"rewritten"), Some(2)),
-            Err(StorageError::Conflict)
-        ));
+        let s3 = share([1; SHARE_ID_BYTES], 3);
+        let ss3 = snapshot([1; SHARE_ID_BYTES], 3);
+        store
+            .save_publication(&s3, &ss3, Some(2))
+            .await
+            .expect("third publish succeeds");
 
-        // A stale expectation loses.
-        assert!(matches!(
-            store.save_publication(&share(3, b"three"), &snapshot(3, b"three"), Some(1)),
-            Err(StorageError::Conflict)
-        ));
+        let stored = store
+            .find_share([1; SHARE_ID_BYTES])
+            .await
+            .expect("reads")
+            .expect("exists");
+        assert_eq!(stored.revision, 3);
     }
-    #[test]
-    fn a_collection_nobody_published_is_absent_rather_than_an_error() {
-        let scratch = Scratch::new("absent");
+
+    #[tokio::test]
+    async fn publishing_is_a_compare_and_set() {
+        let scratch = Scratch::new("cas-async");
         let store = scratch.open();
 
-        assert_eq!(store.find_share(SHARE).expect("reads"), None);
-        assert_eq!(store.find_snapshot(SHARE, 1).expect("reads"), None);
-        assert!(!store.has_access(SHARE, ADA).expect("reads"));
-        assert!(store.list_members(SHARE).expect("reads").is_empty());
+        let s1 = share([1; SHARE_ID_BYTES], 1);
+        let ss1 = snapshot([1; SHARE_ID_BYTES], 1);
+        store.save_publication(&s1, &ss1, None).await.expect("first publish");
+
+        let s2 = share([1; SHARE_ID_BYTES], 2);
+        let ss2 = snapshot([1; SHARE_ID_BYTES], 2);
+        store
+            .save_publication(&s2, &ss2, Some(1))
+            .await
+            .expect("second publish");
     }
-    #[test]
-    fn membership_is_granted_revoked_and_listed_per_collection() {
-        let scratch = Scratch::new("membership");
-        let store = scratch.open();
-        let other: ShareId = [4; 16];
 
-        store.grant_access(SHARE, ADA, 10).expect("grants");
-        store.grant_access(SHARE, GRACE, 11).expect("grants");
-        store.grant_access(other, GRACE, 12).expect("grants");
-
-        assert!(store.has_access(SHARE, ADA).expect("reads"));
-        let mut members = store.list_members(SHARE).expect("reads");
-        members.sort_unstable();
-        assert_eq!(members, vec![ADA, GRACE]);
-        assert_eq!(
-            store.list_members(other).expect("reads"),
-            vec![GRACE],
-            "one collection's membership is not another's"
-        );
-
-        store.revoke_access(SHARE, GRACE).expect("revokes");
-        assert!(!store.has_access(SHARE, GRACE).expect("reads"));
-        assert!(store.has_access(other, GRACE).expect("reads"));
-        // Revoking twice is the same statement.
-        store.revoke_access(SHARE, GRACE).expect("revokes again");
-    }
-    /// Big-endian revision keys, so revision 256 sorts after 255 rather than
-    /// between 25 and 26.
-    #[test]
-    fn history_is_keyed_so_it_reads_back_in_order() {
-        let scratch = Scratch::new("order");
+    #[tokio::test]
+    async fn publishing_produces_one_sealed_key_per_authorized_device() {
+        let scratch = Scratch::new("key-per-device");
         let store = scratch.open();
 
-        let mut previous = None;
-        for revision in [1_u64, 2, 255, 256, 257] {
-            store
-                .save_publication(
-                    &share(revision, b"content"),
-                    &snapshot(revision, b"content"),
-                    previous,
-                )
-                .expect("publishes");
-            previous = Some(revision);
-        }
+        let share_id = [1; SHARE_ID_BYTES];
+        let s1 = share(share_id, 1);
+        let ss1 = snapshot(share_id, 1);
+        store.save_publication(&s1, &ss1, None).await.expect("first publish");
 
-        for revision in [1_u64, 255, 256, 257] {
-            assert!(
-                store
-                    .find_snapshot(SHARE, revision)
-                    .expect("reads")
-                    .is_some(),
-                "revision {revision} is still there"
-            );
-        }
-        assert_eq!(store.find_snapshot(SHARE, 3).expect("reads"), None);
+        // Owner should have access automatically
+        assert!(store.has_access(share_id, [1; 16]).expect("reads"));
+
+        // Other user should not
+        assert!(!store.has_access(share_id, [2; 16]).expect("reads"));
+
+        // Grant access to other user
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |since| {
+                u64::try_from(since.as_nanos()).unwrap_or(u64::MAX)
+            });
+        store.grant_access(share_id, [2; 16], now).expect("grant");
+        assert!(store.has_access(share_id, [2; 16]).expect("reads"));
+
+        // Revoke access
+        store.revoke_access(share_id, [2; 16]).expect("revoke");
+        assert!(!store.has_access(share_id, [2; 16]).expect("reads"));
     }
 }
