@@ -233,9 +233,6 @@ where
             .find_share(share_id)
             .await?
             .ok_or(ShareCommandError::NotFound)?;
-            "DEBUG grant: owner={:?}, share.owner={:?}, share_id={:?}, member={:?}",
-            owner, share.owner, share_id, member
-        );
         if share.owner != owner {
             return Err(ShareCommandError::NotTheOwner);
         }
