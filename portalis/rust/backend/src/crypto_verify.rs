@@ -325,6 +325,7 @@ fn reseal_owed(
 /// A [`ChainStore`] in memory, for tests, demos, and any caller that has not
 /// got a database yet. Step 6 replaces it without changing a signature.
 #[derive(Debug, Default)]
+#[allow(dead_code)]
 pub struct MemoryChainStore {
     highest: std::sync::Mutex<std::collections::HashMap<[u8; SHARE_ID_BYTES], ChainState>>,
 }
@@ -347,6 +348,7 @@ impl ChainStore for MemoryChainStore {
     }
 }
 
+#[allow(dead_code)]
 impl MemoryChainStore {
     fn lock(
         &self,

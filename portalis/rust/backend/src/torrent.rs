@@ -1376,14 +1376,13 @@ mod native {
                 verified,
                 peers,
             };
-            if let Some(previous) = runs.last_mut() {
-                if previous.offset_bytes + previous.length_bytes == run.offset_bytes
-                    && previous.verified == run.verified
-                    && previous.peers == run.peers
-                {
-                    previous.length_bytes += run.length_bytes;
-                    continue;
-                }
+            if let Some(previous) = runs.last_mut()
+                && previous.offset_bytes + previous.length_bytes == run.offset_bytes
+                && previous.verified == run.verified
+                && previous.peers == run.peers
+            {
+                previous.length_bytes += run.length_bytes;
+                continue;
             }
             runs.push(run);
         }
@@ -1632,10 +1631,10 @@ mod native {
         // as empty) — session() creates it as a side effect.
         let _ = session().await?;
 
-        if let Some((at, cached)) = STORAGE_CACHE.lock().unwrap().as_ref() {
-            if at.elapsed() < STORAGE_TTL {
-                return Ok(cached.clone());
-            }
+        if let Some((at, cached)) = STORAGE_CACHE.lock().unwrap().as_ref()
+            && at.elapsed() < STORAGE_TTL
+        {
+            return Ok(cached.clone());
         }
         let dir = output_dir();
         // A recursive stat walk is blocking I/O; running it inline would tie

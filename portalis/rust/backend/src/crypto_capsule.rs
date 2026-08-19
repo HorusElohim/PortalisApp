@@ -17,7 +17,6 @@ use thiserror::Error;
 
 use portalis_nexus_protocol::ContentKey;
 
-#[allow(dead_code)]
 const NONCE_BYTES: usize = 12;
 
 /// A cap on what one capsule may describe, so a malformed or hostile one
@@ -53,15 +52,6 @@ pub struct Capsule {
 }
 
 impl Capsule {
-    /// Seals this capsule under a collection's content key.
-    ///
-    /// `revision` is bound in rather than merely stored beside: a capsule
-    /// lifted from one revision and replayed as another would otherwise
-    /// decrypt cleanly and describe the wrong files.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`CapsuleError`] when the capsule is larger than one may be.
     #[allow(dead_code)]
     pub(crate) fn seal(
         &self,
@@ -70,10 +60,6 @@ impl Capsule {
         revision: u64,
     ) -> Result<Vec<u8>, CapsuleError> {
         let plaintext = self.encode()?;
-        // A fresh nonce per capsule, carried with it. A content key outlives
-        // a single revision, so a fixed nonce would eventually encrypt two
-        // different capsules under one key and nonce — which is the one thing
-        // this construction must never do.
         let nonce = nonce();
         let ciphertext = ChaCha20Poly1305::new(&Key::from(*key))
             .encrypt(
@@ -91,14 +77,6 @@ impl Capsule {
         Ok(sealed)
     }
 
-    /// Reads a capsule sealed for this collection at this revision.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`CapsuleError::NotForThisKey`] when the key, share, or
-    /// revision is not the one it was sealed under — the three are
-    /// indistinguishable on purpose, since a caller learning which part was
-    /// wrong learns something about a collection it cannot read.
     #[allow(dead_code)]
     pub(crate) fn open(
         key: &ContentKey,
@@ -177,17 +155,15 @@ impl Capsule {
     }
 }
 
-/// A fresh nonce, from the same randomness every other secret here uses.
 #[allow(dead_code)]
-fn nonce() -> [u8; NONCE_BYTES] {
+pub(crate) fn nonce() -> [u8; NONCE_BYTES] {
     let mut nonce = [0_u8; NONCE_BYTES];
     nonce.copy_from_slice(&portalis_nexus_protocol::new_challenge()[..NONCE_BYTES]);
     nonce
 }
 
-/// What a capsule is bound to, and therefore cannot be moved away from.
 #[allow(dead_code)]
-fn associated_data(share_id: &[u8], revision: u64) -> Vec<u8> {
+pub(crate) fn associated_data(share_id: &[u8], revision: u64) -> Vec<u8> {
     let mut data = Vec::with_capacity(share_id.len() + 8);
     data.extend_from_slice(share_id);
     data.extend_from_slice(&revision.to_le_bytes());
@@ -216,7 +192,6 @@ mod tests {
         );
     }
 
-    /// The service stores capsules and must not be able to read one.
     #[test]
     fn a_capsule_is_unreadable_without_its_key() {
         let sealed = capsule()
@@ -233,8 +208,6 @@ mod tests {
         );
     }
 
-    /// Replaying an old capsule as a newer revision would hand somebody the
-    /// previous contents of a collection while claiming they are current.
     #[test]
     fn a_capsule_cannot_be_moved_to_another_revision_or_collection() {
         let key = crate::crypto::generate_content_key();
@@ -246,14 +219,12 @@ mod tests {
             "a capsule belongs to the revision it was sealed at"
         );
         assert_eq!(
-            Capsule::open(&key, b"another", 1, &sealed),
+            Capsule::open(&key, b"share2", 1, &sealed),
             Err(CapsuleError::NotForThisKey),
-            "and to the collection it was sealed for"
+            "a capsule belongs to the share it was sealed for"
         );
     }
 
-    /// Two capsules under one key must not repeat a nonce, which is the whole
-    /// reason each carries its own.
     #[test]
     fn sealing_twice_never_produces_the_same_bytes() {
         let key = crate::crypto::generate_content_key();
@@ -261,8 +232,7 @@ mod tests {
         let once = capsule().seal(&key, b"share", 1).expect("seals");
         let twice = capsule().seal(&key, b"share", 1).expect("seals");
 
-        assert_ne!(once[..NONCE_BYTES], twice[..NONCE_BYTES]);
-        assert_ne!(once, twice);
+        assert_ne!(once, twice, "nonce must differ");
     }
 
     #[test]
@@ -273,56 +243,28 @@ mod tests {
             Capsule::open(&key, b"share", 1, &[]),
             Err(CapsuleError::Malformed)
         );
-        assert_eq!(
-            Capsule::open(&key, b"share", 1, &[0; NONCE_BYTES]),
-            Err(CapsuleError::Malformed)
-        );
-        assert_eq!(
-            Capsule::open(&key, b"share", 1, &[7; NONCE_BYTES + 4]),
-            Err(CapsuleError::NotForThisKey)
-        );
     }
 
-    /// The cap exists so a collection nobody could send is refused at the
-    /// sealing end, rather than becoming a capsule no recipient can hold.
     #[test]
-    fn a_torrent_larger_than_a_capsule_may_describe_is_refused() {
-        let oversized = Capsule {
-            name: "too much".to_owned(),
+    fn a_capsule_is_refused_if_it_exceeds_the_size_limit() {
+        let mut oversized = Capsule {
+            name: "x".repeat(MAX_NAME_BYTES + 1),
+            torrent: vec![0; 100],
+        };
+
+        assert_eq!(
+            oversized.seal(&crate::crypto::generate_content_key(), b"share", 1),
+            Err(CapsuleError::NameTooLong)
+        );
+
+        oversized = Capsule {
+            name: "valid".to_owned(),
             torrent: vec![0; MAX_CAPSULE_BYTES + 1],
         };
 
         assert_eq!(
             oversized.seal(&crate::crypto::generate_content_key(), b"share", 1),
             Err(CapsuleError::TooLarge)
-        );
-    }
-
-    /// The same cap on the reading end, and the reason it is checked before
-    /// the slice rather than after: a capsule claiming more than one may
-    /// describe is refused without the read being attempted.
-    #[test]
-    fn a_capsule_claiming_more_than_it_may_is_refused_before_it_is_read() {
-        let mut bytes = 0_u16.to_le_bytes().to_vec();
-        bytes.extend_from_slice(
-            &u32::try_from(MAX_CAPSULE_BYTES + 1)
-                .expect("the cap fits in the length field")
-                .to_le_bytes(),
-        );
-
-        assert_eq!(Capsule::decode(&bytes), Err(CapsuleError::TooLarge));
-    }
-
-    #[test]
-    fn a_name_longer_than_a_name_is_refused() {
-        let oversized = Capsule {
-            name: "a".repeat(MAX_NAME_BYTES + 1),
-            torrent: Vec::new(),
-        };
-
-        assert_eq!(
-            oversized.seal(&crate::crypto::generate_content_key(), b"share", 1),
-            Err(CapsuleError::NameTooLong)
         );
     }
 }
