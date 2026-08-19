@@ -5,7 +5,11 @@
 //! tested at all — they are the two paths where every remaining bug can hide,
 //! and until now exercising either meant a real swarm.
 
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashSet,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 
 use async_trait::async_trait;
 
@@ -53,7 +57,7 @@ pub(crate) trait Substrate: Send + Sync {
     /// choose files they have not been shown, and for a magnet that list is
     /// only knowable from the swarm. Bounded by the caller: a magnet whose
     /// swarm never answers must not hang a command forever.
-    async fn inspect(&self, source: &str) -> anyhow::Result<Inspected>;
+    async fn inspect(&self, source: &str, peer_hints: &PeerHints) -> anyhow::Result<Inspected>;
 
     /// Start fetching exactly `files` (indices into [`Inspected::files`])
     /// into `destination`.
@@ -66,6 +70,7 @@ pub(crate) trait Substrate: Send + Sync {
         source: &str,
         files: &[usize],
         destination: &std::path::Path,
+        peer_hints: &PeerHints,
     ) -> anyhow::Result<TorrentInfo>;
 
     /// Stop or resume moving bytes for this handle.
@@ -97,6 +102,69 @@ pub(crate) trait Substrate: Send + Sync {
 /// The real one.
 pub(crate) struct Torrents;
 
+/// Validated, bounded peer addresses supplied by a discovery/bootstrap source.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct PeerHints(Vec<SocketAddr>);
+
+impl PeerHints {
+    const MAX: usize = 64;
+
+    pub(crate) fn new<I>(addresses: I) -> anyhow::Result<Self>
+    where
+        I: IntoIterator<Item = SocketAddr>,
+    {
+        let mut seen = HashSet::new();
+        let mut unique = Vec::new();
+        for address in addresses {
+            anyhow::ensure!(
+                address.port() != 0
+                    && !address.ip().is_unspecified()
+                    && !address.ip().is_multicast(),
+                "invalid peer hint {address}"
+            );
+            if seen.insert(address) {
+                unique.push(address);
+            }
+        }
+        anyhow::ensure!(
+            unique.len() <= Self::MAX,
+            "too many peer hints: maximum is 64"
+        );
+        Ok(Self(unique))
+    }
+
+    pub(crate) fn as_slice(&self) -> &[SocketAddr] {
+        &self.0
+    }
+}
+
+#[cfg(test)]
+mod peer_hint_tests {
+    use std::net::SocketAddr;
+
+    use super::PeerHints;
+
+    #[test]
+    fn peer_hints_are_deduplicated_and_bounded() {
+        let first: SocketAddr = "192.0.2.10:6881".parse().unwrap();
+        let second: SocketAddr = "192.0.2.11:6881".parse().unwrap();
+        let hints = PeerHints::new([first, second, first]).expect("valid hints");
+
+        assert_eq!(hints.as_slice(), [first, second]);
+    }
+
+    #[test]
+    fn unusable_peer_hints_are_rejected() {
+        for address in [
+            "0.0.0.0:6881".parse().unwrap(),
+            "239.0.0.1:6881".parse().unwrap(),
+            "192.0.2.10:0".parse().unwrap(),
+        ] {
+            assert!(PeerHints::new([address]).is_err());
+        }
+    }
+}
+
 #[async_trait]
 impl Substrate for Torrents {
     async fn publish(
@@ -110,8 +178,8 @@ impl Substrate for Torrents {
         Ok(Published { info, descriptor })
     }
 
-    async fn inspect(&self, source: &str) -> anyhow::Result<Inspected> {
-        crate::torrent::inspect_source(source).await
+    async fn inspect(&self, source: &str, peer_hints: &PeerHints) -> anyhow::Result<Inspected> {
+        crate::torrent::inspect_source(source, peer_hints).await
     }
 
     async fn acquire_selection(
@@ -119,8 +187,9 @@ impl Substrate for Torrents {
         source: &str,
         files: &[usize],
         destination: &std::path::Path,
+        peer_hints: &PeerHints,
     ) -> anyhow::Result<TorrentInfo> {
-        crate::torrent::acquire_selection(source, files, destination).await
+        crate::torrent::acquire_selection(source, files, destination, peer_hints).await
     }
 
     async fn set_paused(&self, handle: &str, paused: bool) -> anyhow::Result<()> {
@@ -231,7 +300,7 @@ impl Substrate for Recorded {
         })
     }
 
-    async fn inspect(&self, source: &str) -> anyhow::Result<Inspected> {
+    async fn inspect(&self, source: &str, _peer_hints: &PeerHints) -> anyhow::Result<Inspected> {
         self.inspected.lock().unwrap().push(source.to_string());
         let inspection = self.inspection.lock().unwrap().clone();
         inspection.ok_or_else(|| anyhow::anyhow!("inspect is not configured for this double"))
@@ -242,6 +311,7 @@ impl Substrate for Recorded {
         source: &str,
         files: &[usize],
         destination: &std::path::Path,
+        _peer_hints: &PeerHints,
     ) -> anyhow::Result<TorrentInfo> {
         self.selections.lock().unwrap().push((
             source.to_string(),

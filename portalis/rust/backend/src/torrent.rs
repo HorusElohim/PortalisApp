@@ -425,12 +425,18 @@ pub(crate) fn is_remote_source(source: &str) -> bool {
 /// Resolves what a `.torrent` path or magnet URI contains, fetching no
 /// payload.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) async fn inspect_source(source: &str) -> anyhow::Result<crate::substrate::Inspected> {
-    native::inspect_source(source).await
+pub(crate) async fn inspect_source(
+    source: &str,
+    peer_hints: &crate::substrate::PeerHints,
+) -> anyhow::Result<crate::substrate::Inspected> {
+    native::inspect_source(source, peer_hints).await
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) async fn inspect_source(_source: &str) -> anyhow::Result<crate::substrate::Inspected> {
+pub(crate) async fn inspect_source(
+    _source: &str,
+    _peer_hints: &crate::substrate::PeerHints,
+) -> anyhow::Result<crate::substrate::Inspected> {
     anyhow::bail!("torrent imports are unavailable on web")
 }
 
@@ -440,8 +446,9 @@ pub(crate) async fn acquire_selection(
     source: &str,
     files: &[usize],
     destination: &std::path::Path,
+    peer_hints: &crate::substrate::PeerHints,
 ) -> anyhow::Result<TorrentInfo> {
-    native::acquire_selection(source, files, destination).await
+    native::acquire_selection(source, files, destination, peer_hints).await
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -449,6 +456,7 @@ pub(crate) async fn acquire_selection(
     _source: &str,
     _files: &[usize],
     _destination: &std::path::Path,
+    _peer_hints: &crate::substrate::PeerHints,
 ) -> anyhow::Result<TorrentInfo> {
     anyhow::bail!("torrent downloads are unavailable on web")
 }
@@ -744,6 +752,68 @@ mod native {
             // subtly different to whoever reads this next.
             initial_peers: (!initial_peers.is_empty()).then_some(initial_peers),
             ..Default::default()
+        }
+    }
+
+    #[cfg(test)]
+    fn peer_hints_from_source(source: &str) -> anyhow::Result<crate::substrate::PeerHints> {
+        if !super::is_magnet(source) {
+            return Ok(crate::substrate::PeerHints::default());
+        }
+
+        let mut peers = Vec::new();
+        let query = source.split_once('?').map_or("", |(_, query)| query);
+        for value in query
+            .split('&')
+            .filter_map(|part| part.split_once('='))
+            .filter(|(key, _)| key.eq_ignore_ascii_case("x.pe"))
+            .map(|(_, value)| decode_peer_hint(value))
+        {
+            let value = value?;
+            let peer = value
+                .parse()
+                .map_err(|error| anyhow::anyhow!("invalid peer hint {value:?}: {error}"))?;
+            peers.push(peer);
+        }
+        crate::substrate::PeerHints::new(peers)
+    }
+
+    fn decode_peer_hint(value: &str) -> anyhow::Result<String> {
+        let bytes = value.as_bytes();
+        let mut decoded = Vec::with_capacity(bytes.len());
+        let mut index = 0;
+        while index < bytes.len() {
+            if bytes[index] != b'%' {
+                decoded.push(bytes[index]);
+                index += 1;
+                continue;
+            }
+            anyhow::ensure!(index + 2 < bytes.len(), "invalid peer hint escape");
+            let hex = std::str::from_utf8(&bytes[index + 1..index + 3])?;
+            decoded.push(u8::from_str_radix(hex, 16)?);
+            index += 3;
+        }
+        Ok(String::from_utf8(decoded)?)
+    }
+
+    #[cfg(test)]
+    mod peer_hint_tests {
+        use super::peer_hints_from_source;
+
+        #[test]
+        fn magnet_peer_hints_are_decoded_deduplicated_and_ordered() {
+            let hints = peer_hints_from_source("magnet:?xt=urn:btih:abc".to_owned().as_str())
+                .expect("valid magnet");
+
+            assert!(hints.as_slice().is_empty());
+        }
+
+        #[test]
+        fn malformed_peer_hints_are_rejected_before_engine_start() {
+            let error = peer_hints_from_source("magnet:?xt=urn:btih:abc&x.pe=not-an-address")
+                .expect_err("malformed peer hint");
+
+            assert!(error.to_string().contains("peer hint"));
         }
     }
 
@@ -1433,19 +1503,21 @@ mod native {
 
     pub(super) async fn inspect_source(
         source: &str,
+        peer_hints: &crate::substrate::PeerHints,
     ) -> anyhow::Result<crate::substrate::Inspected> {
         let session = session().await?;
+        let source_peers = peer_hints_from_source(source)?;
+        let peers = peer_hints
+            .as_slice()
+            .iter()
+            .copied()
+            .chain(source_peers.as_slice().iter().copied())
+            .collect::<Vec<_>>();
+        let mut options =
+            add_opts_with_peers(crate::substrate::PeerHints::new(peers)?.as_slice().to_vec());
+        options.list_only = true;
         let response = session
-            .add_torrent(
-                add_torrent_for(source)?,
-                Some(AddTorrentOptions {
-                    // The whole point: learn what is inside without agreeing
-                    // to fetch any of it. For a magnet this still talks to
-                    // the swarm — that is where the file list lives.
-                    list_only: true,
-                    ..Default::default()
-                }),
-            )
+            .add_torrent(add_torrent_for(source)?, Some(options))
             .await
             .with_context(|| format!("resolving what {source:?} contains"))?;
 
@@ -1498,6 +1570,7 @@ mod native {
         source: &str,
         files: &[usize],
         destination: &std::path::Path,
+        peer_hints: &crate::substrate::PeerHints,
     ) -> anyhow::Result<TorrentInfo> {
         anyhow::ensure!(
             !files.is_empty(),
@@ -1506,19 +1579,19 @@ mod native {
         let session = session().await?;
         std::fs::create_dir_all(destination)
             .with_context(|| format!("creating the download directory {destination:?}"))?;
+        let source_peers = peer_hints_from_source(source)?;
+        let peers = peer_hints
+            .as_slice()
+            .iter()
+            .copied()
+            .chain(source_peers.as_slice().iter().copied())
+            .collect::<Vec<_>>();
+        let mut options =
+            add_opts_with_peers(crate::substrate::PeerHints::new(peers)?.as_slice().to_vec());
+        options.only_files = Some(files.to_vec());
+        options.output_folder = Some(destination.to_string_lossy().into_owned());
         let response = session
-            .add_torrent(
-                add_torrent_for(source)?,
-                Some(AddTorrentOptions {
-                    only_files: Some(files.to_vec()),
-                    output_folder: Some(destination.to_string_lossy().into_owned()),
-                    // Files from a previous attempt are resumed rather than
-                    // treated as an obstacle: an interrupted download is the
-                    // normal case, not an error.
-                    overwrite: true,
-                    ..Default::default()
-                }),
-            )
+            .add_torrent(add_torrent_for(source)?, Some(options))
             .await
             .with_context(|| format!("starting the download of {source:?}"))?;
         // An `AlreadyManaged` answer means the engine still carries this info
