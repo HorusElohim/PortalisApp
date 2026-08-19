@@ -1,7 +1,6 @@
 import '../design/theme_controller.dart';
 import '../features/identity/application/controller.dart';
 import '../nexus/application/app_controller.dart';
-import '../nexus/application/service_controller.dart';
 import '../features/settings/application/controller.dart';
 
 /// Application-owned controller instances shared by the widget tree.

@@ -5,6 +5,7 @@
 ### Removed
 
 - Removed the Iroh-based Nexus control plane (QUIC transport, server, and client crates). The product is now BitTorrent-only; peer discovery uses the BitTorrent substrate with QR-first bootstrap (ADR-0003.5, ADR-0009). The collection crypto (capsule sealing, key rotation, chain verification) was extracted into `backend::crypto` and no longer depends on Iroh. The `portalis-nexus-client`, `portalis-nexus-server`, `portalis-nexus-server-core`, `portalis-nexus-storage`, `demo`, and `iroh` dependencies are gone.
+- Removed the **Nexus service** section from Settings: with the Iroh-based service gone, there is no Node ID to report and no connectivity to observe. The Settings screen no longer loads or lists the service controller, and the service repository, endpoint config, and their controller tests are deleted.
 - Removed the MongoDB storage backend (ADR-0002). The coordination node persists to the embedded redb engine only; PostgreSQL is the scale successor if a node ever saturates. `PORTALIS_NEXUS_MONGODB_URI` and `PORTALIS_NEXUS_DATABASE` are gone — set `PORTALIS_NEXUS_DATA_DIR` instead. `docker/compose.yaml` now runs the server against a named volume rather than a replica set, and the test suite no longer needs Docker.
 
 ### Fixed
