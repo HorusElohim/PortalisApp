@@ -1,8 +1,12 @@
 # ADR-0003 — Transport: Substrate redesigned as a Strategy with two real engines
 
-**Status:** proposed
+**Status:** superseded
 **Date:** 2026-08-16
-**Superseded by:** —
+**Superseded by:** [ADR-0008](0008-single-bittorrent-substrate-discovery-strategies.md)
+
+> Superseded by ADR-0008: the online/offline goal remains, but it is served by
+> one BitTorrent substrate with pluggable peer discovery rather than two
+> payload engines.
 
 ## Context
 `src/substrate.rs` defined a `Substrate` trait ("what moves the bytes") with **one
