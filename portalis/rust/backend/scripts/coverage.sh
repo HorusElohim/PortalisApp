@@ -67,12 +67,18 @@ set -euo pipefail
 # real files, and every function in them is covered. PLAN.md's step 13 exists
 # to re-examine exactly this kind of line.
 #
+# ADR-0004 moves the former flat backend modules below `src/nexus/`. Preserve
+# the same measured scope after that namespace move: direct children of
+# `src/nexus/` are the old platform/engine adapters, while nested directories
+# (`core`, `store`, `projection`, and so on) are the v3 application core and
+# remain gated.
+#
 # `collections/legacy.rs` is the one exception to the shape rule, and it is
 # named for it. Step 7 needed the `collections/` directory, which collided
 # with the old `collections.rs`, so the Flutter-facing commands moved inside
 # and kept working. Step 9 replaces the bridge and deletes the file, and this
 # line goes with it.
-ignore='apps/server/src/(main|socket)\.rs|crates/storage/src/(identity|collections|friends|envelopes|mailbox|directory|store)\.rs|crates/client/src/transport/.*\.rs|crates/client/tests/.*\.rs|demo/src/.*\.rs|backend/src/[^/]*\.rs|backend/src/domain/.*\.rs|backend/src/collections/legacy\.rs|portalis\.protocol\.v1\.rs'
+ignore='apps/server/src/(main|socket)\.rs|crates/storage/src/(identity|collections|friends|envelopes|mailbox|directory|store)\.rs|crates/client/src/transport/.*\.rs|crates/client/tests/.*\.rs|demo/src/.*\.rs|backend/src/[^/]*\.rs|backend/src/nexus/[^/]+\.rs|backend/src/domain/.*\.rs|backend/src/collections/legacy\.rs|portalis\.protocol\.v1\.rs'
 report="$(mktemp -t nexus-coverage.XXXXXX)"
 trap 'rm -f "$report"' EXIT
 
