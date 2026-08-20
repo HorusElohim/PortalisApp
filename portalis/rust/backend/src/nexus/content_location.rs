@@ -7,9 +7,6 @@
 
 use std::path::{Path, PathBuf};
 
-#[cfg(target_os = "ios")]
-use std::ffi::CString;
-
 /// A canonical location whose bytes may be hashed, transferred, previewed,
 /// and seeded. Each collection item has one such location.
 #[derive(Debug, Clone)]
@@ -59,10 +56,10 @@ impl ContentLocation {
             #[cfg(target_os = "ios")]
             Self::PhotoAsset(identifier) => {
                 anyhow::ensure!(
-                    photo_asset_available(identifier),
+                    crate::nexus::platform::ios_photo::asset_available(identifier),
                     "Photos asset is no longer available"
                 );
-                let measured_length = photo_asset_length(identifier)?;
+                let measured_length = crate::nexus::platform::ios_photo::asset_length(identifier)?;
                 if known_length.is_some_and(|length| length != measured_length) {
                     crate::nexus::log::clog!(
                         "torrent",
@@ -101,58 +98,11 @@ impl ContentLocation {
                 }
             }
             #[cfg(target_os = "ios")]
-            Self::PhotoAsset(identifier) => photo_asset_read(identifier, offset, buffer),
+            Self::PhotoAsset(identifier) => {
+                crate::nexus::platform::ios_photo::read_asset(identifier, offset, buffer)
+            }
         }
     }
-}
-
-#[cfg(target_os = "ios")]
-fn photo_asset_available(identifier: &str) -> bool {
-    let Ok(identifier) = CString::new(identifier) else {
-        return false;
-    };
-    unsafe { portalis_photo_asset_available(identifier.as_ptr()) }
-}
-
-#[cfg(target_os = "ios")]
-fn photo_asset_read(identifier: &str, offset: u64, buffer: &mut [u8]) -> anyhow::Result<()> {
-    let identifier = CString::new(identifier)?;
-    let result = unsafe {
-        portalis_photo_asset_read(
-            identifier.as_ptr(),
-            offset,
-            buffer.as_mut_ptr(),
-            buffer.len(),
-        )
-    };
-    anyhow::ensure!(
-        result == 0,
-        "PhotoKit could not read the requested asset range ({result})"
-    );
-    Ok(())
-}
-
-#[cfg(target_os = "ios")]
-fn photo_asset_length(identifier: &str) -> anyhow::Result<u64> {
-    let identifier = CString::new(identifier)?;
-    let length = unsafe { portalis_photo_asset_length(identifier.as_ptr()) };
-    anyhow::ensure!(
-        length > 0,
-        "PhotoKit could not determine the selected asset length ({length})"
-    );
-    Ok(length as u64)
-}
-
-#[cfg(target_os = "ios")]
-extern "C" {
-    fn portalis_photo_asset_available(identifier: *const std::ffi::c_char) -> bool;
-    fn portalis_photo_asset_length(identifier: *const std::ffi::c_char) -> i64;
-    fn portalis_photo_asset_read(
-        identifier: *const std::ffi::c_char,
-        offset: u64,
-        buffer: *mut u8,
-        length: usize,
-    ) -> i32;
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 fn main() {
-    println!("cargo:rerun-if-changed=src/ios_photo_reader.m");
+    println!("cargo:rerun-if-changed=src/nexus/platform/ios_photo_reader.m");
     // The service this build talks to unless a person says otherwise, read at
     // compile time by `nexus_settings`. Declared here because `option_env!`
     // alone does not make cargo rebuild when the value changes, which would
@@ -11,7 +11,7 @@ fn main() {
     }
 
     cc::Build::new()
-        .file("src/ios_photo_reader.m")
+        .file("src/nexus/platform/ios_photo_reader.m")
         .flag("-fobjc-arc")
         .compile("portalis_photo_reader");
     println!("cargo:rustc-link-lib=framework=Photos");

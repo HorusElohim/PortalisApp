@@ -1,7 +1,4 @@
 #![cfg_attr(not(frb_expand), allow(unexpected_cfgs))]
-/// Android-only bridge used by Rust-owned MediaStore storage.
-#[cfg(target_os = "android")]
-mod android_content;
 mod api; /* AUTO INJECTED BY flutter_rust_bridge. This line may not be accurate, and you can change it according to your needs. */
 /// The Flutter-facing version handshake.
 pub mod bridge;
