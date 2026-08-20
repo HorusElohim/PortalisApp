@@ -15,10 +15,10 @@ class QrPeerHintScanner extends StatefulWidget {
   final String? title;
   
   const QrPeerHintScanner({
-    Key? key,
+    super.key,
     required this.onMagnetScanned,
     this.title,
-  }) : super(key: key);
+  });
   
   @override
   State<QrPeerHintScanner> createState() => _QrPeerHintScannerState();

@@ -29,8 +29,9 @@ class PhotoLibraryPicker {
   }
 
   static PickedFile _fromNative(dynamic value) {
-    if (value is! Map)
+    if (value is! Map) {
       throw const FormatException('Photos picker returned an invalid item');
+    }
     final item = Map<Object?, Object?>.from(value);
     final name = item['name'];
     final path = item['path'];
