@@ -1,6 +1,6 @@
 //! The five calls the interface has, and no more without a reason recorded.
 //!
-//! `SPEC.md` §16. Everything above this line is Rust deciding things;
+//! Everything above this line is Rust deciding things;
 //! everything below it is an interface rendering them. The narrowness is the
 //! design: five calls cannot grow into a second architecture, and an interface
 //! that can only subscribe and send cannot start keeping its own copy of the

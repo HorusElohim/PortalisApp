@@ -1,7 +1,7 @@
 //! What the device keeps, and how a key is built.
 //!
-//! `SPEC.md` §13's client tables. Every table is bytes to bytes, and composite
-//! keys are built here rather than by callers, because a key assembled in two
+//! Client tables. Every table is bytes to bytes, and composite keys are built
+//! here rather than by callers, because a key assembled in two
 //! places is a key that will eventually be assembled two ways.
 //!
 //! Keys with a number in them use big-endian, which is not a style choice: it

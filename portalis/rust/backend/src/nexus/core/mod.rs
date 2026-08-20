@@ -5,8 +5,8 @@
 //! convention — the coverage gate reads it, so new work is held to 100% from
 //! its first line while a module scheduled for deletion is not.
 //!
-//! - [`nexus`]: the five calls the interface has (`SPEC.md` §16).
-//! - [`events`]: the bus, and the facts that travel on it (`SPEC.md` §11).
+//! - [`nexus`]: the five calls the interface has.
+//! - [`events`]: the bus, and the facts that travel on it.
 //! - [`supervisor`]: task ownership, startup order, bounded shutdown.
 
 pub mod events;

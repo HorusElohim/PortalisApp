@@ -1,6 +1,6 @@
 //! One authoritative place for this device's own truth.
 //!
-//! `SPEC.md` §13 and §12: one file, in the platform data directory, holding
+//! One file in the platform data directory holds
 //! everything the device knows — its identity, the device logs it has
 //! verified, its collections and their revisions, and the transfer history.
 //!

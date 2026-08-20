@@ -1,6 +1,6 @@
 //! A collection's history, as a chain of signed revisions.
 //!
-//! This is `SPEC.md` §7.3, and decision D3: a collection is a chain, not a row
+//! A collection is a chain, not a row
 //! the service keeps for you. Revision *n* names the hash of revision *n − 1*,
 //! so a reader can tell whether what it was handed follows what it already
 //! verified — and the service's compare-and-set becomes an optimisation rather

@@ -1,6 +1,6 @@
 //! What the interface is told, and what it may ask for.
 //!
-//! `SPEC.md` §17. Two rules shape every type here.
+//! Two rules shape every type here.
 //!
 //! **Nothing is derived on the far side.** A field the interface would have to
 //! compute — a percentage, a status, whether something is verified — is

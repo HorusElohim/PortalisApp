@@ -1,6 +1,6 @@
 //! Deciding what crosses the bridge, and when.
 //!
-//! `SPEC.md` §18. Four rules, and each one exists because its absence has a
+//! Four rules, and each one exists because its absence has a
 //! cost somebody can feel:
 //!
 //! **An unchanged tick sends nothing.** Idle must cost zero. A projection that

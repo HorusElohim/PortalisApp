@@ -10,7 +10,7 @@ keep wire protocol, portable networking, and server rules independent of UI
 and storage adapters. The deployable server is another application of those
 same rules, not a competing application core.
 
-The architecture and migration contract live in [`SPEC.md`](SPEC.md).
+Architecture decisions live in the repository's [ADR index](../../../doc/adr/README.md); the code is the current-state map.
 
 ## Workspace
 

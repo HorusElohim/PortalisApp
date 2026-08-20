@@ -39,8 +39,8 @@ pub enum SessionError {
 /// peer that also stores: it answers the same requests, and a client that
 /// fetches a device log does not care whether the bytes came from the person
 /// who signed it or from something holding a copy. That is only safe because
-/// an object is valid on its own terms (`SPEC.md` §9) — if where it came from
-/// mattered, this enum would have to be two.
+/// an object is valid on its own terms — if where it came from mattered, this
+/// enum would have to be two.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Request {
     /// The current publication of a collection, whatever revision that is.

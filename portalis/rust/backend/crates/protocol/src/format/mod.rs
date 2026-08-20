@@ -4,7 +4,7 @@
 //! bytes are hashed, signed, or authenticated, so a change to any of them
 //! changes what every other participant computes. That is why they are
 //! hand-written and length-prefixed rather than produced by a library whose
-//! encoding is not ours to pin (`SPEC.md` D10).
+//! encoding is not ours to pin.
 //!
 //! They live in `protocol` because both sides need them — the service
 //! verifies signatures on write, and clients verify everything they read.

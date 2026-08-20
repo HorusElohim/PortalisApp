@@ -1,6 +1,6 @@
 //! The canonical manifest, and the content root taken over it.
 //!
-//! This is `SPEC.md` §11. It lives in the client crate because Nexus never
+//! It lives in the client crate because Nexus never
 //! sees it: the server stores a capsule it cannot open and a `ManifestHash` it
 //! cannot recompute, so nothing on the server side can catch two clients that
 //! disagree about a byte. One implementation, shared by every platform, is

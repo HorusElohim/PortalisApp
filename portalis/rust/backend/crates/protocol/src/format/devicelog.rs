@@ -1,6 +1,6 @@
 //! A person's devices, as a signed append-only log.
 //!
-//! This is `SPEC.md` §7.2, and decision D2: a person is a device log, not an
+//! A person is a device log, not an
 //! account row. The distinction matters for one attack. If the service holds
 //! the list, a hostile service can add a device to it, and an owner about to
 //! seal a content key will seal to that device — the theft is silent and
