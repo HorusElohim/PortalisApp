@@ -168,26 +168,28 @@ pub mod lan_discovery {
         // by checking common private IP ranges
         
         // Common private IP ranges to check
-        let ranges = vec![
-            (Ipv4Addr::new(10, 0, 0, 0), Ipv4Addr::new(10, 255, 255, 255)), // 10.0.0.0/8
-            (Ipv4Addr::new(172, 16, 0, 0), Ipv4Addr::new(172, 31, 255, 255)), // 172.16.0.0/12
-            (Ipv4Addr::new(192, 168, 0, 0), Ipv4Addr::new(192, 168, 255, 255)), // 192.168.0.0/16
-        ];
-        
-        // Get our own IP addresses from hostname -I as a fallback
-        // In a real implementation, we would use system APIs to get interface addresses
-        if let Ok(output) = std::process::Command::new("hostname")
-            .arg("-I")
-            .output() {
-            if let Ok(ips_str) = String::from_utf8(output.stdout) {
-                for ip_str in ips_str.split_whitespace() {
-                    if let Ok(ip) = IpAddr::from_str(ip_str) {
-                        if let IpAddr::V4(ipv4) = ip {
+                let ranges = [
+                    (Ipv4Addr::new(10, 0, 0, 0), Ipv4Addr::new(10, 255, 255, 255)), // 10.0.0.0/8
+                    (Ipv4Addr::new(172, 16, 0, 0), Ipv4Addr::new(172, 31, 255, 255)), // 172.16.0.0/12
+                    (Ipv4Addr::new(192, 168, 0, 0), Ipv4Addr::new(192, 168, 255, 255)), // 192.168.0.0/16
+                ];
+
+                // Get our own IP addresses from hostname -I as a fallback
+                // In a real implementation, we would use system APIs to get interface addresses
+                if let Ok(output) = std::process::Command::new("hostname")
+                    .arg("-I")
+                    .output()
+                    && let Ok(ips_str) = String::from_utf8(output.stdout)
+                {
+                    for ip_str in ips_str.split_whitespace() {
+                        if let Ok(ip) = IpAddr::from_str(ip_str)
+                            && let IpAddr::V4(ipv4) = ip
+                        {
                             // Check if it's in a private range
                             let is_private = ranges.iter().any(|&(start, end)| {
                                 ipv4 >= start && ipv4 <= end
                             });
-                            
+
                             if is_private {
                                 let addr = SocketAddr::new(ip, 6881); // Standard BitTorrent port
                                 peers.push(addr);
@@ -195,12 +197,10 @@ pub mod lan_discovery {
                         }
                     }
                 }
-            }
-        }
-        
-        // Remove duplicates while preserving order
-        peers.sort_by(|a, b| a.cmp(b));
-        peers.dedup();
+
+                // Remove duplicates while preserving order
+                peers.sort();
+                peers.dedup();
         
         // Create PeerHints (will reject invalid addresses internally)
         PeerHints::new(peers).unwrap_or_else(|_| PeerHints::default())
