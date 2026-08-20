@@ -4,6 +4,14 @@
 collections. A Flutter client runs on top of a Rust backend; devices share media
 directly over BitTorrent instead of uploading it through a central data service.
 
+## Why PortalisApp
+
+PortalisApp is the product, not a framework or starter template. Its first use
+case is private, resilient sharing of personal media between devices and people
+who already know each other. Collections remain useful when a central service is
+unavailable: peers can exchange media directly on a local network or bootstrap a
+connection from a QR code.
+
 The app is designed around one source of truth per device: Rust owns identity,
 collection state, persistence, peer discovery, and transfer orchestration;
 Flutter renders that state and sends commands through the generated
