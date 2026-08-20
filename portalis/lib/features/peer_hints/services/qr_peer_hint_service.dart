@@ -1,0 +1,62 @@
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+
+/// Service for scanning QR codes to extract peer hints from magnet links.
+/// 
+/// This service uses the mobile_scanner package to scan QR codes and
+/// extract magnet links containing x.pe parameters for peer-to-peer
+/// connection bootstrapping.
+class QrPeerHintService {
+  /// Singleton instance
+  static final QrPeerHintService _instance = QrPeerHintService._internal();
+  
+  factory QrPeerHintService() => _instance;
+  
+  QrPeerHintService._internal();
+  
+  /// Scanner controller
+  MobileScannerController? _controller;
+  
+  /// Whether the scanner is currently active
+  bool get isScanning => _controller != null && _controller!.value.isRunning;
+  
+  /// Start scanning for QR codes containing magnet links with peer hints
+  /// 
+  /// Returns a Stream that emits decoded magnet strings when QR codes are scanned
+  Stream<String> startScanning() {
+    _controller = MobileScannerController(
+      formats: [BarcodeFormat.qrCode],
+      detectionSpeed: DetectionSpeed.noDelay,
+      returnImage: false,
+    );
+    
+    return _controller!.barcodes.map((barcode) {
+      final String? barcodeValue = barcode.rawValue;
+      
+      if (barcodeValue != null && barcodeValue.startsWith('magnet:')) {
+        return barcodeValue;
+      }
+      return null;
+    }).where((value) => value != null).cast<String>();
+  }
+  
+  /// Stop the QR code scanner
+  Future<void> stopScanning() async {
+    await _controller?.stop();
+    _controller?.dispose();
+    _controller = null;
+  }
+  
+  /// Check if scanning is available on this platform
+  static Future<bool> get isAvailable async {
+    try {
+      final controller = MobileScannerController();
+      await controller.start();
+      await controller.stop();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+}
