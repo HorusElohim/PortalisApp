@@ -1,5 +1,5 @@
 import '../../../nexus/bridge/portalis_api.dart' as nexus_bridge;
-import '../../../nexus/bridge/settings.dart' as settings_bridge;
+import '../../../nexus/bridge/nexus/settings.dart' as settings_bridge;
 import '../domain/engine.dart';
 import '../domain/storage_entry.dart';
 

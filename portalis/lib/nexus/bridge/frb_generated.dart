@@ -9,8 +9,8 @@ import 'dart:convert';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
-import 'device.dart';
-import 'settings.dart';
+import 'nexus/device.dart';
+import 'nexus/settings.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'portalis_api.dart';
 

@@ -92,7 +92,7 @@ pub struct SourceFile {
 /// are requested. It is deliberately smaller than the live torrent DTO: the
 /// collection workflow needs a selection list, not an engine session.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct TorrentMetadataFile {
+pub struct TorrentMetadataFile {
     pub(crate) label: String,
     pub(crate) bytes: u64,
 }
@@ -123,7 +123,7 @@ fn numbered_source_name(name: &str, suffix: u32) -> String {
 pub(crate) const TORRENT_PIECE_LENGTH: u64 = 2 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
-pub(crate) struct PublishProgress {
+pub struct PublishProgress {
     inner: std::sync::Arc<std::sync::Mutex<PublishProgressState>>,
     cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
@@ -332,7 +332,7 @@ pub(crate) async fn list_torrents() -> anyhow::Result<Vec<TorrentInfo>> {
 /// live session, so it belongs there and not here. See that module's doc for
 /// why the join can only happen in the one layer that sees both sides.
 #[derive(Debug, Clone)]
-pub(crate) struct RawStorageEntry {
+pub struct RawStorageEntry {
     pub(crate) name: String,
     pub(crate) bytes: u64,
     pub(crate) path: String,
