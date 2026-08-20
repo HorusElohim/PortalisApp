@@ -24,6 +24,8 @@
 
 <!-- New user-visible features go here before the next release. -->
 
+- **ADR-0003.5 / ADR-0009**: Peer hint parsing and QR-first bootstrap for offline sharing. Magnet URIs can now carry `x.pe` parameters with LAN peer addresses for direct device-to-device transfers. QR code scanner extracts magnet links with peer hints. LAN/mDNS discovery returns local network peers on the standard BitTorrent port (6881). FRB API exposed: `peer_hints_create`, `peer_hints_from_magnet`, `peer_hints_validate_address`, `peer_hints_discover_local`.
+
 - Restored Home's prominent **Share files** action and the complete existing New Share flow on top of Nexus. Selected native files retain their names, measured sizes, and stable locations inside the collection aggregate; Nexus hashes and seeds them through the existing zero-copy substrate, persists the initial signed descriptor/revision, resumes preparation after restart, and streams honest file totals and detail without legacy polling.
 
 - Nexus collection detail now supports renaming and safe collection-only deletion through the same command boundary as the Home library.
