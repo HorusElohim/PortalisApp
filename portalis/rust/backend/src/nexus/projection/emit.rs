@@ -214,7 +214,7 @@ mod tests {
             completed_at: None,
             id: COLLECTION,
             name: "Iceland".to_owned(),
-            nature: crate::projection::state::Nature::Native,
+            nature: crate::nexus::projection::state::Nature::Native,
             role: Role::Owner,
             revision: 1,
             status: Status::Available,

@@ -6,7 +6,7 @@ use rand::rngs::OsRng;
 /// A device's public identity — stable across IP/network changes, used as
 /// the "who" in collaborator lists and manifest entry authorship.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct DeviceId(VerifyingKey);
+pub struct DeviceId(VerifyingKey);
 
 impl DeviceId {
     pub fn as_bytes(&self) -> [u8; 32] {
@@ -34,7 +34,7 @@ impl fmt::Display for DeviceId {
 /// everything else in the domain only ever sees a [`DeviceId`] or a
 /// `Signature`, never the signing key itself. Persistence is a `KeyStore`
 /// adapter's job, not this type's — `to_bytes`/`from_bytes` are the seam.
-pub(crate) struct DeviceIdentity {
+pub struct DeviceIdentity {
     signing_key: SigningKey,
 }
 

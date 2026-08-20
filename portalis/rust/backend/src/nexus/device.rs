@@ -5,7 +5,7 @@
 //! `rust/backend/README.md`.
 //!
 //! Unconditional signatures for the same reason as `torrent.rs`: FRB's
-//! generated glue references `crate::device::*` regardless of any `#[cfg]`
+//! generated glue references `crate::nexus::device::*` regardless of any `#[cfg]`
 //! on this module's own declaration.
 
 #[derive(Debug, Clone)]
@@ -27,8 +27,8 @@ pub fn set_nickname(nickname: String) -> anyhow::Result<DeviceIdentityInfo> {
 
 /// This device's signing identity, kept below the bridge so callers can sign
 /// and open envelopes without exposing key material.
-pub(crate) fn current_signing_identity() -> anyhow::Result<crate::domain::identity::DeviceIdentity>
-{
+pub(crate) fn current_signing_identity()
+-> anyhow::Result<crate::nexus::domain::identity::DeviceIdentity> {
     native::load_or_create().map(|(identity, _nickname)| identity)
 }
 
@@ -38,7 +38,7 @@ mod native {
     use anyhow::Context;
     use serde::{Deserialize, Serialize};
 
-    use crate::domain::identity::DeviceIdentity;
+    use crate::nexus::domain::identity::DeviceIdentity;
 
     use super::DeviceIdentityInfo;
 
@@ -56,8 +56,8 @@ mod native {
         *CACHE.lock().unwrap() = None;
     }
 
-    fn vault() -> crate::vault::Vault {
-        crate::vault::Vault::named("identity.json")
+    fn vault() -> crate::nexus::vault::Vault {
+        crate::nexus::vault::Vault::named("identity.json")
     }
 
     pub(super) fn load_or_create() -> anyhow::Result<(DeviceIdentity, String)> {
@@ -67,7 +67,7 @@ mod native {
 
         let identity = DeviceIdentity::generate();
         let nickname = "Me".to_string();
-        crate::log::clog!(
+        crate::nexus::log::clog!(
             "device",
             "no identity yet, generated one, device_id={}…",
             &identity.device_id().to_hex()[..8]
@@ -134,7 +134,7 @@ mod tests {
     /// there is no recovery, so the round trip is worth asserting on disk.
     #[test]
     fn the_identity_survives_a_reload() {
-        let _temp = crate::paths::redirect_to_temp();
+        let _temp = crate::nexus::paths::redirect_to_temp();
         let first = native::load_or_create().unwrap().0.device_id();
 
         native::forget_cache_for_test();
@@ -147,9 +147,9 @@ mod tests {
     /// for anything this backend still does.
     #[test]
     fn an_existing_signing_identity_survives_across_a_format_change() {
-        let _temp = crate::paths::redirect_to_temp();
+        let _temp = crate::nexus::paths::redirect_to_temp();
         let signing_secret = [13_u8; 32];
-        crate::vault::Vault::named("identity.json")
+        crate::nexus::vault::Vault::named("identity.json")
             .write(&LegacyPersistedIdentity {
                 secret_key_hex: hex::encode(signing_secret),
                 nickname: "Maya".into(),

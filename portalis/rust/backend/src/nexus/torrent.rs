@@ -341,8 +341,8 @@ pub(crate) struct RawStorageEntry {
 /// What's actually on disk under the download directory, one entry per
 /// top-level item, largest first — the real filesystem, where
 /// `storage_usage_bytes`'s single total can only say "this much, somewhere".
-pub(crate) async fn storage_breakdown() -> anyhow::Result<Vec<RawStorageEntry>> {
-    native::storage_breakdown().await
+pub async fn storage_breakdown() -> anyhow::Result<Vec<RawStorageEntry>> {
+    native::storage_breakdown_native().await
 }
 
 /// Caps transfer speed across every torrent at once (not per-torrent).
@@ -427,16 +427,16 @@ pub(crate) fn is_remote_source(source: &str) -> bool {
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) async fn inspect_source(
     source: &str,
-    peer_hints: &crate::substrate::PeerHints,
-) -> anyhow::Result<crate::substrate::Inspected> {
+    peer_hints: &crate::nexus::substrate::PeerHints,
+) -> anyhow::Result<crate::nexus::substrate::Inspected> {
     native::inspect_source(source, peer_hints).await
 }
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) async fn inspect_source(
     _source: &str,
-    _peer_hints: &crate::substrate::PeerHints,
-) -> anyhow::Result<crate::substrate::Inspected> {
+    _peer_hints: &crate::nexus::substrate::PeerHints,
+) -> anyhow::Result<crate::nexus::substrate::Inspected> {
     anyhow::bail!("torrent imports are unavailable on web")
 }
 
@@ -446,7 +446,7 @@ pub(crate) async fn acquire_selection(
     source: &str,
     files: &[usize],
     destination: &std::path::Path,
-    peer_hints: &crate::substrate::PeerHints,
+    peer_hints: &crate::nexus::substrate::PeerHints,
 ) -> anyhow::Result<TorrentInfo> {
     native::acquire_selection(source, files, destination, peer_hints).await
 }
@@ -456,7 +456,7 @@ pub(crate) async fn acquire_selection(
     _source: &str,
     _files: &[usize],
     _destination: &std::path::Path,
-    _peer_hints: &crate::substrate::PeerHints,
+    _peer_hints: &crate::nexus::substrate::PeerHints,
 ) -> anyhow::Result<TorrentInfo> {
     anyhow::bail!("torrent downloads are unavailable on web")
 }
@@ -467,7 +467,7 @@ pub(crate) async fn acquire_selection(
 /// `collections::delete_collection`.
 pub(crate) async fn forget_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
     native::forget_torrent(info_hash_hex).await?;
-    crate::linked_source_store::remove(info_hash_hex)?;
+    crate::nexus::linked_source_store::remove(info_hash_hex)?;
     Ok(())
 }
 
@@ -536,7 +536,7 @@ pub mod native {
 
     #[derive(Clone)]
     struct ReferencedStorageFactory {
-        sources: Vec<crate::content_location::ContentLocation>,
+        sources: Vec<crate::nexus::content_location::ContentLocation>,
         lengths: Vec<u64>,
     }
 
@@ -561,7 +561,7 @@ pub mod native {
 
     #[derive(Clone)]
     struct ReferencedStorage {
-        sources: Vec<crate::content_location::ContentLocation>,
+        sources: Vec<crate::nexus::content_location::ContentLocation>,
         lengths: Vec<u64>,
     }
 
@@ -615,7 +615,7 @@ pub mod native {
             .get_or_try_init(|| async {
                 // Read once so the configured output folder and all other
                 // session construction settings are from the same snapshot.
-                let settings = crate::settings::engine_settings().unwrap_or_default();
+                let settings = crate::nexus::settings::engine_settings().unwrap_or_default();
                 let dir = output_dir_for(&settings);
                 std::fs::create_dir_all(&dir)
                     .with_context(|| format!("creating output dir {dir:?}"))?;
@@ -639,7 +639,10 @@ pub mod native {
                     .filter_map(|t| match t.parse() {
                         Ok(url) => Some(url),
                         Err(e) => {
-                            crate::log::clog!("torrent", "ignoring unparseable tracker {t:?}: {e}");
+                            crate::nexus::log::clog!(
+                                "torrent",
+                                "ignoring unparseable tracker {t:?}: {e}"
+                            );
                             None
                         }
                     })
@@ -704,15 +707,17 @@ pub mod native {
     ///   `LSSupportsOpeningDocumentsInPlace` are set in Info.plist, which
     ///   they now are).
     pub(super) fn output_dir() -> PathBuf {
-        let settings = crate::settings::engine_settings().unwrap_or_default();
+        let settings = crate::nexus::settings::engine_settings().unwrap_or_default();
         output_dir_for(&settings)
     }
 
     fn source_link_dir(name: &str) -> PathBuf {
-        crate::paths::state_dir().join("source-links").join(name)
+        crate::nexus::paths::state_dir()
+            .join("source-links")
+            .join(name)
     }
 
-    fn output_dir_for(settings: &crate::settings::EngineSettings) -> PathBuf {
+    fn output_dir_for(settings: &crate::nexus::settings::EngineSettings) -> PathBuf {
         if let Some(dir) = settings
             .download_dir
             .as_deref()
@@ -755,9 +760,11 @@ pub mod native {
         }
     }
 
-    pub fn peer_hints_from_source(source: &str) -> anyhow::Result<crate::substrate::PeerHints> {
+    pub fn peer_hints_from_source(
+        source: &str,
+    ) -> anyhow::Result<crate::nexus::substrate::PeerHints> {
         if !super::is_magnet(source) {
-            return Ok(crate::substrate::PeerHints::default());
+            return Ok(crate::nexus::substrate::PeerHints::default());
         }
 
         let mut peers = Vec::new();
@@ -774,7 +781,7 @@ pub mod native {
                 .map_err(|error| anyhow::anyhow!("invalid peer hint {value:?}: {error}"))?;
             peers.push(peer);
         }
-        crate::substrate::PeerHints::new(peers)
+        crate::nexus::substrate::PeerHints::new(peers)
     }
 
     fn decode_peer_hint(value: &str) -> anyhow::Result<String> {
@@ -873,11 +880,13 @@ pub mod native {
         let collection_name = sanitize_component(&name);
         let sources = files
             .iter()
-            .map(|file| crate::content_location::ContentLocation::from_source_path(&file.path))
+            .map(|file| {
+                crate::nexus::content_location::ContentLocation::from_source_path(&file.path)
+            })
             .collect::<anyhow::Result<Vec<_>>>()?;
         if sources
             .iter()
-            .any(crate::content_location::ContentLocation::requires_native_storage)
+            .any(crate::nexus::content_location::ContentLocation::requires_native_storage)
         {
             return create_referenced_collection(
                 session,
@@ -889,9 +898,10 @@ pub mod native {
             .await;
         }
         let layout = if let [file] = files.as_slice() {
-            let hash_path = crate::content_location::ContentLocation::from_source_path(&file.path)?
-                .filesystem_path()
-                .to_path_buf();
+            let hash_path =
+                crate::nexus::content_location::ContentLocation::from_source_path(&file.path)?
+                    .filesystem_path()
+                    .to_path_buf();
             let output_folder = hash_path
                 .parent()
                 .context("a source file must have a parent directory")?
@@ -1004,7 +1014,7 @@ pub mod native {
         session: Arc<Session>,
         collection_name: String,
         files: Vec<SourceFile>,
-        sources: Vec<crate::content_location::ContentLocation>,
+        sources: Vec<crate::nexus::content_location::ContentLocation>,
         progress: PublishProgress,
     ) -> anyhow::Result<TorrentInfo> {
         let lengths = files
@@ -1048,18 +1058,20 @@ pub mod native {
             .await
             .context("adding gallery-linked torrent")?;
         let info = response_to_info(&api(session), response)?;
-        crate::linked_source_store::upsert(crate::linked_source_store::LinkedSourceRecord {
-            info_hash: info.info_hash.clone(),
-            torrent_bytes: persisted_bytes,
-            sources: files,
-        })?;
+        crate::nexus::linked_source_store::upsert(
+            crate::nexus::linked_source_store::LinkedSourceRecord {
+                info_hash: info.info_hash.clone(),
+                torrent_bytes: persisted_bytes,
+                sources: files,
+            },
+        )?;
         Ok(info)
     }
 
     fn create_referenced_metainfo(
         collection_name: &str,
         files: &[SourceFile],
-        sources: &[crate::content_location::ContentLocation],
+        sources: &[crate::nexus::content_location::ContentLocation],
         lengths: &[u64],
         progress: &PublishProgress,
     ) -> anyhow::Result<bytes::Bytes> {
@@ -1170,7 +1182,7 @@ pub mod native {
     fn discard_linked_sources(dir: &std::path::Path, created: &[PathBuf]) {
         for path in created.iter().rev() {
             if let Err(error) = std::fs::remove_file(path) {
-                crate::log::clog!(
+                crate::nexus::log::clog!(
                     "torrent",
                     "could not remove linked source {path:?}: {error}"
                 );
@@ -1201,9 +1213,10 @@ pub mod native {
         let mut created = Vec::with_capacity(files.len());
         for file in files {
             progress.ensure_active()?;
-            let source = crate::content_location::ContentLocation::from_source_path(&file.path)?
-                .filesystem_path()
-                .to_path_buf();
+            let source =
+                crate::nexus::content_location::ContentLocation::from_source_path(&file.path)?
+                    .filesystem_path()
+                    .to_path_buf();
             let destination = dir.join(sanitize_component(&file.name));
             let length = std::fs::metadata(&source)
                 .with_context(|| format!("reading source metadata {source:?}"))?
@@ -1437,7 +1450,7 @@ pub mod native {
             match api.api_peer_stats(TorrentIdOrHash::Id(id), Default::default()) {
                 Ok(snapshot) => snapshot.peers.into_keys().collect(),
                 Err(error) => {
-                    crate::log::clog!(
+                    crate::nexus::log::clog!(
                         "torrent",
                         "peer_stats unavailable for {}: {error:#}",
                         handle.info_hash().as_string()
@@ -1501,8 +1514,8 @@ pub mod native {
 
     pub(super) async fn inspect_source(
         source: &str,
-        peer_hints: &crate::substrate::PeerHints,
-    ) -> anyhow::Result<crate::substrate::Inspected> {
+        peer_hints: &crate::nexus::substrate::PeerHints,
+    ) -> anyhow::Result<crate::nexus::substrate::Inspected> {
         let session = session().await?;
         let source_peers = peer_hints_from_source(source)?;
         let peers = peer_hints
@@ -1511,8 +1524,11 @@ pub mod native {
             .copied()
             .chain(source_peers.as_slice().iter().copied())
             .collect::<Vec<_>>();
-        let mut options =
-            add_opts_with_peers(crate::substrate::PeerHints::new(peers)?.as_slice().to_vec());
+        let mut options = add_opts_with_peers(
+            crate::nexus::substrate::PeerHints::new(peers)?
+                .as_slice()
+                .to_vec(),
+        );
         options.list_only = true;
         let response = session
             .add_torrent(add_torrent_for(source)?, Some(options))
@@ -1553,7 +1569,7 @@ pub mod native {
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 
-        Ok(crate::substrate::Inspected {
+        Ok(crate::nexus::substrate::Inspected {
             info_hash: listed.info_hash.as_string(),
             name,
             files,
@@ -1568,7 +1584,7 @@ pub mod native {
         source: &str,
         files: &[usize],
         destination: &std::path::Path,
-        peer_hints: &crate::substrate::PeerHints,
+        peer_hints: &crate::nexus::substrate::PeerHints,
     ) -> anyhow::Result<TorrentInfo> {
         anyhow::ensure!(
             !files.is_empty(),
@@ -1584,8 +1600,11 @@ pub mod native {
             .copied()
             .chain(source_peers.as_slice().iter().copied())
             .collect::<Vec<_>>();
-        let mut options =
-            add_opts_with_peers(crate::substrate::PeerHints::new(peers)?.as_slice().to_vec());
+        let mut options = add_opts_with_peers(
+            crate::nexus::substrate::PeerHints::new(peers)?
+                .as_slice()
+                .to_vec(),
+        );
         options.only_files = Some(files.to_vec());
         options.output_folder = Some(destination.to_string_lossy().into_owned());
         let response = session
@@ -1625,7 +1644,7 @@ pub mod native {
     static STORAGE_CACHE: std::sync::Mutex<Option<(std::time::Instant, Vec<RawStorageEntry>)>> =
         std::sync::Mutex::new(None);
 
-    pub(super) async fn storage_breakdown() -> anyhow::Result<Vec<RawStorageEntry>> {
+    pub(super) async fn storage_breakdown_native() -> anyhow::Result<Vec<RawStorageEntry>> {
         // Ensures output_dir() actually exists before walking it (a fresh
         // install with nothing downloaded yet shouldn't error, just read
         // as empty) — session() creates it as a side effect.
@@ -1699,7 +1718,7 @@ pub mod native {
         // (see `session()`), and starting a whole BitTorrent session as a
         // side effect of saving a preference would be a surprising cost.
         if !session_started() {
-            crate::log::clog!(
+            crate::nexus::log::clog!(
                 "torrent",
                 "set_rate_limits: session not started yet — the saved values \
                  will be applied when it is"
@@ -1713,14 +1732,14 @@ pub mod native {
         session
             .ratelimits
             .set_download_bps(download_bps.and_then(std::num::NonZeroU32::new));
-        crate::log::clog!(
+        crate::nexus::log::clog!(
             "torrent",
             "set_rate_limits: upload={upload_bps:?} download={download_bps:?} bytes/sec"
         );
         Ok(())
     }
     pub(super) async fn forget_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
-        crate::log::clog!("torrent", "forget_torrent: info_hash={info_hash_hex}");
+        crate::nexus::log::clog!("torrent", "forget_torrent: info_hash={info_hash_hex}");
         let session = session().await?;
         let id = TorrentIdOrHash::try_from(info_hash_hex)
             .map_err(|e| anyhow::anyhow!("{info_hash_hex} isn't a valid info hash: {e}"))?;

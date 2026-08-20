@@ -183,7 +183,7 @@ mod tests {
 
     #[test]
     fn a_capsule_survives_the_round_trip() {
-        let key = crate::crypto::generate_content_key();
+        let key = crate::nexus::crypto::generate_content_key();
         let sealed = capsule().seal(&key, b"share", 1).expect("seals");
 
         assert_eq!(
@@ -195,11 +195,16 @@ mod tests {
     #[test]
     fn a_capsule_is_unreadable_without_its_key() {
         let sealed = capsule()
-            .seal(&crate::crypto::generate_content_key(), b"share", 1)
+            .seal(&crate::nexus::crypto::generate_content_key(), b"share", 1)
             .expect("seals");
 
         assert_eq!(
-            Capsule::open(&crate::crypto::generate_content_key(), b"share", 1, &sealed),
+            Capsule::open(
+                &crate::nexus::crypto::generate_content_key(),
+                b"share",
+                1,
+                &sealed
+            ),
             Err(CapsuleError::NotForThisKey)
         );
         assert!(
@@ -210,7 +215,7 @@ mod tests {
 
     #[test]
     fn a_capsule_cannot_be_moved_to_another_revision_or_collection() {
-        let key = crate::crypto::generate_content_key();
+        let key = crate::nexus::crypto::generate_content_key();
         let sealed = capsule().seal(&key, b"share", 1).expect("seals");
 
         assert_eq!(
@@ -227,7 +232,7 @@ mod tests {
 
     #[test]
     fn sealing_twice_never_produces_the_same_bytes() {
-        let key = crate::crypto::generate_content_key();
+        let key = crate::nexus::crypto::generate_content_key();
 
         let once = capsule().seal(&key, b"share", 1).expect("seals");
         let twice = capsule().seal(&key, b"share", 1).expect("seals");
@@ -237,7 +242,7 @@ mod tests {
 
     #[test]
     fn nonsense_is_refused_rather_than_allocated() {
-        let key = crate::crypto::generate_content_key();
+        let key = crate::nexus::crypto::generate_content_key();
 
         assert_eq!(
             Capsule::open(&key, b"share", 1, &[]),
@@ -253,7 +258,7 @@ mod tests {
         };
 
         assert_eq!(
-            oversized.seal(&crate::crypto::generate_content_key(), b"share", 1),
+            oversized.seal(&crate::nexus::crypto::generate_content_key(), b"share", 1),
             Err(CapsuleError::NameTooLong)
         );
 
@@ -263,7 +268,7 @@ mod tests {
         };
 
         assert_eq!(
-            oversized.seal(&crate::crypto::generate_content_key(), b"share", 1),
+            oversized.seal(&crate::nexus::crypto::generate_content_key(), b"share", 1),
             Err(CapsuleError::TooLarge)
         );
     }

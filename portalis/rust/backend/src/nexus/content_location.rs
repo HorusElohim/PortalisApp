@@ -64,7 +64,7 @@ impl ContentLocation {
                 );
                 let measured_length = photo_asset_length(identifier)?;
                 if known_length.is_some_and(|length| length != measured_length) {
-                    crate::log::clog!(
+                    crate::nexus::log::clog!(
                         "torrent",
                         "Photos asset length changed from picker metadata; using native resource length"
                     );

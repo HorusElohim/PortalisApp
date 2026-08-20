@@ -29,13 +29,13 @@ use thiserror::Error;
 use tokio::sync::{mpsc, watch};
 
 use super::supervisor::Supervisor;
-use crate::projection::emit::Projector;
-use crate::projection::state::{
+use crate::nexus::projection::emit::Projector;
+use crate::nexus::projection::state::{
     Accepted, CollectionState, Command, CommandError, Connectivity, Detail, DeviceState, Handle,
     LocalFile, Nature, PortalisState, Role, Status,
 };
-use crate::store::records::{Role as StoredRole, StoredCollection, StoredSourceFile};
-use crate::store::{Store, StoreError};
+use crate::nexus::store::records::{Role as StoredRole, StoredCollection, StoredSourceFile};
+use crate::nexus::store::{Store, StoreError};
 
 /// Where the core keeps its file, and who it is.
 #[derive(Clone, Debug)]
@@ -204,7 +204,7 @@ impl DetailSources {
                     let carried = held
                         .as_ref()
                         .and_then(|info| info.files.iter().find(|file| file.name == label));
-                    crate::projection::state::EntryState {
+                    crate::nexus::projection::state::EntryState {
                         id: Handle(u32::try_from(index).unwrap_or(u32::MAX).saturating_add(1)),
                         label,
                         bytes,
@@ -265,15 +265,16 @@ impl LocalCollections {
             // No live reading yet: hydration happens at open, before the
             // first poll. `status_for` knows that, and the poller refines it
             // within a second.
-            let status =
-                crate::projection::state::status_for(crate::projection::state::StatusFacts {
+            let status = crate::nexus::projection::state::status_for(
+                crate::nexus::projection::state::StatusFacts {
                     draft: stored.draft,
                     paused: stored.paused,
                     carried: stored.substrate_handle.is_some(),
                     publishing: !local_sources.is_empty() && revision == 0,
                     importing: torrent_import,
                     live: None,
-                });
+                },
+            );
             let (entries, total_bytes) = if local_sources.is_empty() {
                 (
                     imported_entries.len(),
@@ -371,13 +372,13 @@ impl Nexus {
     }
 
     fn open_with_store(config: &Config, store: Arc<Store>) -> Result<Self, OpenError> {
-        Self::open_with_store_and_substrate(config, store, crate::substrate::current())
+        Self::open_with_store_and_substrate(config, store, crate::nexus::substrate::current())
     }
 
     fn open_with_store_and_substrate(
         config: &Config,
         store: Arc<Store>,
-        substrate: Arc<dyn crate::substrate::Substrate>,
+        substrate: Arc<dyn crate::nexus::substrate::Substrate>,
     ) -> Result<Self, OpenError> {
         let (collections, collection_states) = LocalCollections::hydrate(&store)?;
         let device = DeviceState {
@@ -496,14 +497,14 @@ impl Nexus {
 
     /// Opens the runtime from the one platform-owned state directory.
     pub fn open_default() -> Result<Self, OpenError> {
-        let device = crate::device::device_identity()
+        let device = crate::nexus::device::device_identity()
             .map_err(|error| OpenError::Identity(error.to_string()))?;
         let config = Config {
-            data_dir: crate::paths::state_dir(),
+            data_dir: crate::nexus::paths::state_dir(),
             device_name: device.nickname,
             fingerprint: device.device_id,
         };
-        Self::open_with_store(&config, crate::store::app_store()?)
+        Self::open_with_store(&config, crate::nexus::store::app_store()?)
     }
 
     /// The latest complete projection, without making a bridge subscription.
@@ -726,14 +727,16 @@ impl Nexus {
             .map_err(persistence)?
             .map_or(0, |(number, _)| number);
         let held = self.holdings.get(key);
-        let status = crate::projection::state::status_for(crate::projection::state::StatusFacts {
-            draft: stored.draft,
-            paused: stored.paused,
-            carried: stored.substrate_handle.is_some(),
-            publishing: !stored.sources.is_empty() && revision == 0,
-            importing,
-            live: held.as_ref(),
-        });
+        let status = crate::nexus::projection::state::status_for(
+            crate::nexus::projection::state::StatusFacts {
+                draft: stored.draft,
+                paused: stored.paused,
+                carried: stored.substrate_handle.is_some(),
+                publishing: !stored.sources.is_empty() && revision == 0,
+                importing,
+                live: held.as_ref(),
+            },
+        );
         self.update_collection(handle, |collection| collection.status = status)
     }
 
@@ -757,12 +760,12 @@ impl Nexus {
     }
 
     fn create_collection(&self, name: &str, files: &[LocalFile]) -> Result<Handle, CommandError> {
-        let id = crate::collections::model::CollectionId::generate();
+        let id = crate::nexus::collections::model::CollectionId::generate();
         let sources = prepare_sources(files)?;
         let stored = StoredCollection {
             name: name.to_owned(),
             role: StoredRole::Owner,
-            content_key: crate::crypto::generate_content_key(),
+            content_key: crate::nexus::crypto::generate_content_key(),
             media_path: String::new(),
             sources: sources.clone(),
             paused: false,
@@ -817,13 +820,13 @@ impl Nexus {
     /// well be the only case there is — and a command that promises not to
     /// wait for a network cannot resolve one inline anyway.
     fn import_torrent(&self, source: &str) -> Result<Handle, CommandError> {
-        let id = crate::collections::model::CollectionId::generate();
+        let id = crate::nexus::collections::model::CollectionId::generate();
         let stored = StoredCollection {
             // A placeholder until the source says its real name. Taken from
             // the source itself so the row is never nameless on screen.
             name: torrent_name(source),
             role: StoredRole::Owner,
-            content_key: crate::crypto::generate_content_key(),
+            content_key: crate::nexus::crypto::generate_content_key(),
             media_path: String::new(),
             sources: Vec::new(),
             paused: false,
@@ -1159,7 +1162,7 @@ async fn publish_pending_collections(
     store: Arc<Store>,
     states: watch::Sender<PortalisState>,
     collections: Arc<Mutex<LocalCollections>>,
-    substrate: Arc<dyn crate::substrate::Substrate>,
+    substrate: Arc<dyn crate::nexus::substrate::Substrate>,
     mut wakes: mpsc::Receiver<()>,
     mut shutdown: super::supervisor::Shutdown,
 ) {
@@ -1188,14 +1191,14 @@ async fn publish_pending_collections(
                 })
                 .collect::<Vec<_>>(),
             Err(error) => {
-                crate::log::clog!("nexus", "could not scan pending collections: {error}");
+                crate::nexus::log::clog!("nexus", "could not scan pending collections: {error}");
                 continue;
             }
         };
 
         for (key, collection) in pending {
             let total = collection.sources.iter().map(|source| source.bytes).sum();
-            let progress = crate::torrent::PublishProgress::new(total);
+            let progress = crate::nexus::torrent::PublishProgress::new(total);
             let publishing = publish_collection_sources(
                 &store,
                 substrate.as_ref(),
@@ -1222,8 +1225,8 @@ async fn publish_pending_collections(
                     // is paused on purpose, and declaring it Available here
                     // made the interface offer Pause on something stopped.
                     let status = store.collection(&key).ok().flatten().map(|stored| {
-                        crate::projection::state::status_for(
-                            crate::projection::state::StatusFacts {
+                        crate::nexus::projection::state::status_for(
+                            crate::nexus::projection::state::StatusFacts {
                                 draft: stored.draft,
                                 paused: stored.paused,
                                 carried: stored.substrate_handle.is_some(),
@@ -1249,7 +1252,11 @@ async fn publish_pending_collections(
                     }
                 }
                 Err(error) => {
-                    crate::log::clog!("nexus", "could not publish collection {:?}: {error:#}", key)
+                    crate::nexus::log::clog!(
+                        "nexus",
+                        "could not publish collection {:?}: {error:#}",
+                        key
+                    )
                 }
             }
         }
@@ -1258,10 +1265,10 @@ async fn publish_pending_collections(
 
 async fn publish_collection_sources(
     store: &Store,
-    substrate: &dyn crate::substrate::Substrate,
+    substrate: &dyn crate::nexus::substrate::Substrate,
     key: &[u8],
     stored: &StoredCollection,
-    progress: crate::torrent::PublishProgress,
+    progress: crate::nexus::torrent::PublishProgress,
 ) -> anyhow::Result<u64> {
     use anyhow::Context;
     use portalis_nexus_protocol::INFO_HASH_BYTES;
@@ -1269,7 +1276,7 @@ async fn publish_collection_sources(
     let files = stored
         .sources
         .iter()
-        .map(|source| crate::torrent::SourceFile {
+        .map(|source| crate::nexus::torrent::SourceFile {
             name: source.label.clone(),
             path: source.path.clone(),
             length_bytes: Some(source.bytes),
@@ -1284,16 +1291,16 @@ async fn publish_collection_sources(
     let descriptor = published_torrent.descriptor;
     let collection_id = <[u8; portalis_nexus_protocol::SHARE_ID_BYTES]>::try_from(key)
         .map_err(|_| anyhow::anyhow!("stored collection key has the wrong length"))?;
-    let author = crate::device::current_signing_identity()?;
-    let mut collection = crate::collections::model::Collection {
-        id: crate::collections::model::CollectionId(collection_id),
+    let author = crate::nexus::device::current_signing_identity()?;
+    let mut collection = crate::nexus::collections::model::Collection {
+        id: crate::nexus::collections::model::CollectionId(collection_id),
         name: stored.name.clone(),
         role: stored.role,
         content_key: stored.content_key,
         revision: None,
         manifest: portalis_nexus_protocol::Manifest::default(),
     };
-    crate::collections::publish::add_entry(
+    crate::nexus::collections::publish::add_entry(
         &mut collection,
         &author,
         info_hash,
@@ -1301,7 +1308,7 @@ async fn publish_collection_sources(
         None,
         unix_time_ns(),
     )?;
-    let (published, publication) = crate::collections::publish::publish(
+    let (published, publication) = crate::nexus::collections::publish::publish(
         &collection,
         &author,
         &[],
@@ -1315,8 +1322,8 @@ async fn publish_collection_sources(
     store
         .put_entry(
             &info_hash,
-            &crate::store::records::StoredEntry {
-                status: crate::store::records::EntryStatus::Available,
+            &crate::nexus::store::records::StoredEntry {
+                status: crate::nexus::store::records::EntryStatus::Available,
                 descriptor,
             },
         )
@@ -1353,7 +1360,7 @@ async fn publish_collection_sources(
 /// Only ever called with what a subscriber does not already hold — the
 /// history grows at the end, so re-sending the whole ring to append one row
 /// was thirty kilobytes a second for a screen already showing all of it.
-pub fn packed_samples(samples: Vec<(u64, crate::store::records::StoredSample)>) -> Vec<u8> {
+pub fn packed_samples(samples: Vec<(u64, crate::nexus::store::records::StoredSample)>) -> Vec<u8> {
     {
         {
             let mut packed = Vec::with_capacity(samples.len() * SAMPLE_ROW_BYTES);
@@ -1379,7 +1386,7 @@ pub const SAMPLE_ROW_BYTES: usize = 8 + 4 + 4 + 2;
 /// Sent as an integer rather than a float because the bridge carries bytes:
 /// a `f32` would need its own encoding and would claim a precision no progress
 /// bar has pixels for.
-fn progress_permille(sample: &crate::store::records::StoredSample) -> u16 {
+fn progress_permille(sample: &crate::nexus::store::records::StoredSample) -> u16 {
     if sample.total == 0 {
         return 0;
     }
@@ -1392,7 +1399,7 @@ fn progress_permille(sample: &crate::store::records::StoredSample) -> u16 {
 /// The substrate speaks in byte ranges per file; a person sees one bar for the
 /// whole collection. Verified runs become set bits and everything else stays
 /// clear, so a missing range needs no representation of its own.
-fn pieces_of(info: &crate::torrent::TorrentInfo) -> Vec<u8> {
+fn pieces_of(info: &crate::nexus::torrent::TorrentInfo) -> Vec<u8> {
     const PIECES: usize = 512;
     if info.total_bytes == 0 {
         return Vec::new();
@@ -1435,18 +1442,19 @@ fn unix_time_ns() -> u64 {
 fn prepare_sources(files: &[LocalFile]) -> Result<Vec<StoredSourceFile>, CommandError> {
     let mut sources = files
         .iter()
-        .map(|file| crate::torrent::SourceFile {
+        .map(|file| crate::nexus::torrent::SourceFile {
             name: file.name.clone(),
             path: file.path.to_string_lossy().into_owned(),
             length_bytes: Some(file.bytes),
         })
         .collect::<Vec<_>>();
-    crate::torrent::make_source_names_unique(&mut sources);
+    crate::nexus::torrent::make_source_names_unique(&mut sources);
     sources
         .into_iter()
         .map(|source| {
-            let location = crate::content_location::ContentLocation::from_source_path(&source.path)
-                .map_err(|error| CommandError::Invalid(error.to_string()))?;
+            let location =
+                crate::nexus::content_location::ContentLocation::from_source_path(&source.path)
+                    .map_err(|error| CommandError::Invalid(error.to_string()))?;
             let bytes = location
                 .length(source.length_bytes)
                 .map_err(|error| CommandError::Invalid(error.to_string()))?;
@@ -1505,7 +1513,8 @@ fn validate(command: &Command) -> Result<(), CommandError> {
             "choose a magnet URI or .torrent file"
         }
         Command::ImportTorrent { source }
-            if !crate::torrent::is_magnet(source) && !crate::torrent::is_torrent_path(source) =>
+            if !crate::nexus::torrent::is_magnet(source)
+                && !crate::nexus::torrent::is_torrent_path(source) =>
         {
             "choose a magnet URI or a .torrent file"
         }
@@ -1517,7 +1526,7 @@ fn validate(command: &Command) -> Result<(), CommandError> {
 fn torrent_name(source: &str) -> String {
     // A URL's tail is not a name: a magnet ends in whatever its last query
     // parameter happens to be, which is frequently somebody else's filename.
-    if crate::torrent::is_remote_source(source) {
+    if crate::nexus::torrent::is_remote_source(source) {
         return "Torrent import".to_owned();
     }
     std::path::Path::new(source)
@@ -1532,9 +1541,9 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use crate::core::supervisor::Shutdown;
-    use crate::core::transfers::{self as transfers, Holdings};
-    use crate::projection::state::{CollectionState, Role, Status};
+    use crate::nexus::core::supervisor::Shutdown;
+    use crate::nexus::core::transfers::{self as transfers, Holdings};
+    use crate::nexus::projection::state::{CollectionState, Role, Status};
 
     /// A directory that removes itself.
     struct Scratch(std::path::PathBuf);
@@ -1559,7 +1568,10 @@ mod tests {
     }
 
     fn open(scratch: &Scratch) -> Nexus {
-        open_with_substrate(scratch, Arc::new(crate::substrate::Recorded::default()))
+        open_with_substrate(
+            scratch,
+            Arc::new(crate::nexus::substrate::Recorded::default()),
+        )
     }
 
     /// Waits for a background worker to reach `done`, or fails the test.
@@ -1589,7 +1601,7 @@ mod tests {
 
     fn open_with_substrate(
         scratch: &Scratch,
-        substrate: Arc<dyn crate::substrate::Substrate>,
+        substrate: Arc<dyn crate::nexus::substrate::Substrate>,
     ) -> Nexus {
         let config = Config {
             data_dir: scratch.0.clone(),
@@ -1671,11 +1683,11 @@ mod tests {
     /// whole reason choosing files does not publish them.
     #[tokio::test]
     async fn a_draft_is_not_published_until_it_is_confirmed() {
-        let _state = crate::paths::redirect_to_temp();
+        let _state = crate::nexus::paths::redirect_to_temp();
         let scratch = Scratch::new("draft-waits");
         let source = scratch.0.join("clip.mp4");
         std::fs::write(&source, b"clip").expect("writes source");
-        let substrate = Arc::new(crate::substrate::Recorded::publishing(
+        let substrate = Arc::new(crate::nexus::substrate::Recorded::publishing(
             "22".repeat(20),
             b"descriptor".to_vec(),
         ));
@@ -1734,13 +1746,13 @@ mod tests {
     /// the transfer carried on underneath it.
     #[tokio::test]
     async fn pausing_wakes_the_worker_that_tells_the_engine() {
-        let _state = crate::paths::redirect_to_temp();
+        let _state = crate::nexus::paths::redirect_to_temp();
         let scratch = Scratch::new("pause-reaches");
-        let substrate = Arc::new(crate::substrate::Recorded::inspecting(
-            crate::substrate::Inspected {
+        let substrate = Arc::new(crate::nexus::substrate::Recorded::inspecting(
+            crate::nexus::substrate::Inspected {
                 info_hash: "33".repeat(20),
                 name: "Episode".to_owned(),
-                files: vec![crate::torrent::TorrentMetadataFile {
+                files: vec![crate::nexus::torrent::TorrentMetadataFile {
                     label: "episode.mkv".to_owned(),
                     bytes: 10,
                 }],
@@ -1914,8 +1926,8 @@ mod tests {
         nexus.close().await;
     }
 
-    fn stored_sample(done: u64, total: u64) -> crate::store::records::StoredSample {
-        crate::store::records::StoredSample {
+    fn stored_sample(done: u64, total: u64) -> crate::nexus::store::records::StoredSample {
+        crate::nexus::store::records::StoredSample {
             done,
             total,
             down_bytes_per_second: 1,
@@ -1946,7 +1958,7 @@ mod tests {
     /// bars rather than sent as they arrive.
     #[test]
     fn verified_runs_become_set_bits_and_everything_else_stays_clear() {
-        let mut info = crate::torrent::TorrentInfo {
+        let mut info = crate::nexus::torrent::TorrentInfo {
             id: 1,
             info_hash: "a1".to_owned(),
             name: "Iceland".to_owned(),
@@ -1956,12 +1968,12 @@ mod tests {
             uploaded_bytes: 0,
             finished: false,
             error: None,
-            files: vec![crate::torrent::TorrentFile {
+            files: vec![crate::nexus::torrent::TorrentFile {
                 name: "one.jpg".to_owned(),
                 absolute_path: "/tmp/one.jpg".to_owned(),
                 length_bytes: 100,
                 downloaded_bytes: 50,
-                piece_runs: vec![crate::torrent::PieceRun {
+                piece_runs: vec![crate::nexus::torrent::PieceRun {
                     offset_bytes: 0,
                     length_bytes: 50,
                     verified: true,
@@ -2243,11 +2255,11 @@ mod tests {
 
     #[tokio::test]
     async fn a_native_collection_publishes_through_the_injected_zero_copy_substrate() {
-        let _state = crate::paths::redirect_to_temp();
+        let _state = crate::nexus::paths::redirect_to_temp();
         let scratch = Scratch::new("publish-sources");
         let source = scratch.0.join("episode.mp4");
         std::fs::write(&source, b"episode").expect("writes source");
-        let substrate = Arc::new(crate::substrate::Recorded::publishing(
+        let substrate = Arc::new(crate::nexus::substrate::Recorded::publishing(
             "11".repeat(20),
             b"torrent descriptor".to_vec(),
         ));
@@ -2515,16 +2527,16 @@ mod tests {
     #[tokio::test]
     async fn a_torrent_source_resolves_into_a_selection_then_downloads_it() {
         let scratch = Scratch::new("torrent-import");
-        let substrate = Arc::new(crate::substrate::Recorded::inspecting(
-            crate::substrate::Inspected {
+        let substrate = Arc::new(crate::nexus::substrate::Recorded::inspecting(
+            crate::nexus::substrate::Inspected {
                 info_hash: "abc123".to_owned(),
                 name: "Bundle".to_owned(),
                 files: vec![
-                    crate::torrent::TorrentMetadataFile {
+                    crate::nexus::torrent::TorrentMetadataFile {
                         label: "a.txt".to_owned(),
                         bytes: 5,
                     },
-                    crate::torrent::TorrentMetadataFile {
+                    crate::nexus::torrent::TorrentMetadataFile {
                         label: "b.txt".to_owned(),
                         bytes: 7,
                     },
@@ -2625,9 +2637,9 @@ mod tests {
         let write = database.begin_write().expect("writes");
         {
             write
-                .open_table(crate::store::schema::META)
+                .open_table(crate::nexus::store::schema::META)
                 .expect("meta")
-                .insert(crate::store::schema::SCHEMA_VERSION_KEY, 99_u64)
+                .insert(crate::nexus::store::schema::SCHEMA_VERSION_KEY, 99_u64)
                 .expect("bumps");
         }
         write.commit().expect("commits");
@@ -2690,8 +2702,12 @@ mod tests {
         // Two readings, in order: a download in progress, then the engine
         // saying it is done. A second torrent in the first reading that no
         // collection claims is the orphan the poller is meant to release.
-        fn reading(info_hash: &str, progress: u64, finished: bool) -> crate::torrent::TorrentInfo {
-            crate::torrent::TorrentInfo {
+        fn reading(
+            info_hash: &str,
+            progress: u64,
+            finished: bool,
+        ) -> crate::nexus::torrent::TorrentInfo {
+            crate::nexus::torrent::TorrentInfo {
                 id: 1,
                 info_hash: info_hash.to_owned(),
                 name: "Iceland".to_owned(),
@@ -2709,7 +2725,7 @@ mod tests {
         let moving = reading("a1b2", 10, false);
         let done = reading("a1b2", 100, true);
         let orphan = reading("deadbeef", 10, false);
-        let substrate = Arc::new(crate::substrate::Recorded::reading(vec![
+        let substrate = Arc::new(crate::nexus::substrate::Recorded::reading(vec![
             vec![moving, orphan],
             vec![done],
         ]));

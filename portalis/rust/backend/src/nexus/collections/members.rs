@@ -16,7 +16,7 @@
 //! they are being given deliberately, and the revisions they could not read
 //! before remain unreadable only in the sense that they were never sent them.
 
-use crate::crypto::{Recipient, generate_content_key};
+use crate::nexus::crypto::{Recipient, generate_content_key};
 
 use super::model::{Collection, CollectionError};
 use super::publish::{Author, Publication, publish};
@@ -155,7 +155,7 @@ mod tests {
     fn only_an_owner_may_change_the_membership() {
         let ada = Person::new(1);
         let member = Collection {
-            role: crate::store::records::Role::Member,
+            role: crate::nexus::store::records::Role::Member,
             ..owned(&ada)
         };
 

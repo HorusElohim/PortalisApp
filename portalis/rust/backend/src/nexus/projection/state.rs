@@ -27,7 +27,7 @@ use std::path::PathBuf;
 pub struct Handle(pub u32);
 
 /// Whether the bytes travel directly, and how well the peer is known.
-pub use crate::core::events::{Connectivity, Path, PeerTrust, Progress, Security};
+pub use crate::nexus::core::events::{Connectivity, Path, PeerTrust, Progress, Security};
 
 /// This device, as the interface should describe it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -83,7 +83,7 @@ pub enum Nature {
 }
 
 /// Why verification failed, in the terms §18 shows a person.
-pub use crate::core::events::VerifyFailure;
+pub use crate::nexus::core::events::VerifyFailure;
 
 /// What a collection is doing, as one answer rather than several booleans.
 ///
@@ -179,7 +179,7 @@ pub struct StatusFacts<'a> {
     /// Came from a magnet or a descriptor.
     pub importing: bool,
     /// The engine's own reading, where there is one.
-    pub live: Option<&'a crate::torrent::TorrentInfo>,
+    pub live: Option<&'a crate::nexus::torrent::TorrentInfo>,
 }
 
 /// A transfer in flight. The progress tier, coalesced.

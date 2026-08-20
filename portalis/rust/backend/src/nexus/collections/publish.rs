@@ -12,14 +12,14 @@
 //! device. A service that holds all of it learns the collection's identifier,
 //! its size, and who its members are — and nothing about what is in it.
 
-use crate::crypto::{Recipient, Sealing, seal_content_key};
+use crate::nexus::crypto::{Recipient, Sealing, seal_content_key};
 use portalis_nexus_protocol::{
     DEVICE_KEY_BYTES, EntryContext, INFO_HASH_BYTES, Manifest, ManifestEntry, NO_PREVIOUS_REVISION,
     Revision, RevisionHash, SIGNATURE_BYTES, seal_entry, seal_manifest,
 };
 
 use super::model::{Collection, CollectionError, CollectionId};
-use crate::store::records::Role;
+use crate::nexus::store::records::Role;
 
 /// Signs whatever it is given, without handing the key to the caller.
 ///
@@ -33,7 +33,7 @@ pub trait Author {
     fn sign(&self, payload: &[u8]) -> [u8; SIGNATURE_BYTES];
 }
 
-impl Author for crate::domain::identity::DeviceIdentity {
+impl Author for crate::nexus::domain::identity::DeviceIdentity {
     fn public_key(&self) -> [u8; DEVICE_KEY_BYTES] {
         self.public_key()
     }
@@ -60,7 +60,7 @@ pub struct Publication {
     /// Each entry's descriptor, encrypted under the same key.
     pub entries: Vec<SealedEntryPayload>,
     /// The content key, sealed once per device the members' logs authorize.
-    pub keys: Vec<crate::crypto::SealedFor>,
+    pub keys: Vec<crate::nexus::crypto::SealedFor>,
 }
 
 /// Starts a collection this device owns.

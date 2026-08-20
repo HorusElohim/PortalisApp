@@ -61,6 +61,8 @@ Stream<Uint8List> watchHistory({required int collection}) =>
 
 /// What is on disk under the download directory, resolved against Nexus.
 ///
+/// What is on disk under the download directory, resolved against Nexus.
+///
 /// Ownership is decided by the substrate handle a collection recorded when
 /// its download started, matched to the directory the engine reports for
 /// that torrent — not by name, which two collections may share.

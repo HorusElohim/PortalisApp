@@ -115,7 +115,7 @@ pub(crate) fn app_store() -> Result<Arc<Store>, StoreError> {
         return Ok(Arc::clone(store));
     }
 
-    let data_dir = crate::paths::state_dir();
+    let data_dir = crate::nexus::paths::state_dir();
     std::fs::create_dir_all(&data_dir).map_err(|error| StoreError::DataDir(error.to_string()))?;
     let opened = Arc::new(Store::open(data_dir.join("portalis.redb"))?);
     *store = Some(Arc::clone(&opened));
@@ -126,7 +126,7 @@ pub(crate) fn app_store() -> Result<Arc<Store>, StoreError> {
 /// not share the production process cache above.
 #[cfg(test)]
 pub(crate) fn app_store() -> Result<Arc<Store>, StoreError> {
-    let data_dir = crate::paths::state_dir();
+    let data_dir = crate::nexus::paths::state_dir();
     std::fs::create_dir_all(&data_dir).map_err(|error| StoreError::DataDir(error.to_string()))?;
     Ok(Arc::new(Store::open(data_dir.join("portalis.redb"))?))
 }

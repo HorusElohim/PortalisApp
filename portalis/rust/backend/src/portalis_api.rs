@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use crate::api::StreamSink;
-use crate::core::nexus::Nexus;
-use crate::projection::state::{Command, Detail, Handle, LocalFile, PortalisState};
+use crate::nexus::core::nexus::Nexus;
+use crate::nexus::projection::state::{Command, Detail, Handle, LocalFile, PortalisState};
 
 /// The complete, app-renderable Nexus projection.
 #[derive(Clone, Debug)]
@@ -291,7 +291,7 @@ pub async fn watch_history(collection: u32, sink: StreamSink<Vec<u8>>) -> Result
                 return Ok(());
             }
         }
-        tokio::time::sleep(crate::core::transfers::POLL_INTERVAL).await;
+        tokio::time::sleep(crate::nexus::core::transfers::POLL_INTERVAL).await;
     }
 }
 
@@ -310,6 +310,8 @@ pub struct AppStorageEntry {
 
 /// What is on disk under the download directory, resolved against Nexus.
 ///
+/// What is on disk under the download directory, resolved against Nexus.
+///
 /// Ownership is decided by the substrate handle a collection recorded when
 /// its download started, matched to the directory the engine reports for
 /// that torrent — not by name, which two collections may share.
@@ -318,10 +320,10 @@ pub struct AppStorageEntry {
 ///
 /// Returns a displayable reason when the directory cannot be walked.
 pub async fn storage_breakdown() -> Result<Vec<AppStorageEntry>, String> {
-    let raw = crate::torrent::storage_breakdown()
+    let raw = crate::nexus::torrent::storage_breakdown()
         .await
         .map_err(|error| error.to_string())?;
-    let holdings = crate::substrate::current().holdings().await;
+    let holdings = crate::nexus::substrate::current().holdings().await;
 
     // Where each carried torrent's files actually sit, so a directory can be
     // traced back to it. `starts_with` rather than equality: a multi-file
@@ -573,7 +575,7 @@ fn detail_projection(detail: &Detail) -> AppDetail {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projection::state::{Connectivity, DeviceState};
+    use crate::nexus::projection::state::{Connectivity, DeviceState};
 
     fn command(kind: &str) -> AppCommand {
         AppCommand {

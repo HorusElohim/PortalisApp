@@ -6,11 +6,8 @@
 //! `portalis_nexus_protocol` types — so they move here rather than being
 //! deleted with the transport that used to sit beside them.
 
-#[path = "crypto_capsule.rs"]
 mod capsule;
-#[path = "crypto_keys.rs"]
 mod keys;
-#[path = "crypto_verify.rs"]
 mod verify;
 
 pub use keys::{
