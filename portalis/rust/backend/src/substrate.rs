@@ -138,7 +138,6 @@ impl PeerHints {
     }
 }
 
-
 pub mod lan_discovery {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::str::FromStr;
@@ -146,67 +145,81 @@ pub mod lan_discovery {
     use crate::substrate::PeerHints;
 
     /// Discover local network peers by examining network interfaces.
-    /// 
+    ///
     /// This function returns PeerHints containing IPv4 addresses of local
     /// network interfaces on the standard BitTorrent port (6881).
-    /// 
+    ///
     /// # Returns
     /// * PeerHints containing discovered local peers
-    /// 
+    ///
     /// # Example
     /// ```no_run
     /// // let hints = lan_discovery::discover_local_peers();
     /// // hints might contain: 192.168.1.100:6881, 10.0.0.5:6881, etc.
     /// ```
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows", target_os = "macos"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "windows",
+        target_os = "macos"
+    ))]
     pub fn discover_local_peers() -> PeerHints {
         // Get list of network interfaces
         let mut peers = Vec::new();
-        
+
         // Try to get interfaces using the `getifaddrs` crate or similar
         // For now, we'll use a simple approach that works on most systems
         // by checking common private IP ranges
-        
+
         // Common private IP ranges to check
-                let ranges = [
-                    (Ipv4Addr::new(10, 0, 0, 0), Ipv4Addr::new(10, 255, 255, 255)), // 10.0.0.0/8
-                    (Ipv4Addr::new(172, 16, 0, 0), Ipv4Addr::new(172, 31, 255, 255)), // 172.16.0.0/12
-                    (Ipv4Addr::new(192, 168, 0, 0), Ipv4Addr::new(192, 168, 255, 255)), // 192.168.0.0/16
-                ];
+        let ranges = [
+            (Ipv4Addr::new(10, 0, 0, 0), Ipv4Addr::new(10, 255, 255, 255)), // 10.0.0.0/8
+            (
+                Ipv4Addr::new(172, 16, 0, 0),
+                Ipv4Addr::new(172, 31, 255, 255),
+            ), // 172.16.0.0/12
+            (
+                Ipv4Addr::new(192, 168, 0, 0),
+                Ipv4Addr::new(192, 168, 255, 255),
+            ), // 192.168.0.0/16
+        ];
 
-                // Get our own IP addresses from hostname -I as a fallback
-                // In a real implementation, we would use system APIs to get interface addresses
-                if let Ok(output) = std::process::Command::new("hostname")
-                    .arg("-I")
-                    .output()
-                    && let Ok(ips_str) = String::from_utf8(output.stdout)
+        // Get our own IP addresses from hostname -I as a fallback
+        // In a real implementation, we would use system APIs to get interface addresses
+        if let Ok(output) = std::process::Command::new("hostname").arg("-I").output()
+            && let Ok(ips_str) = String::from_utf8(output.stdout)
+        {
+            for ip_str in ips_str.split_whitespace() {
+                if let Ok(ip) = IpAddr::from_str(ip_str)
+                    && let IpAddr::V4(ipv4) = ip
                 {
-                    for ip_str in ips_str.split_whitespace() {
-                        if let Ok(ip) = IpAddr::from_str(ip_str)
-                            && let IpAddr::V4(ipv4) = ip
-                        {
-                            // Check if it's in a private range
-                            let is_private = ranges.iter().any(|&(start, end)| {
-                                ipv4 >= start && ipv4 <= end
-                            });
+                    // Check if it's in a private range
+                    let is_private = ranges
+                        .iter()
+                        .any(|&(start, end)| ipv4 >= start && ipv4 <= end);
 
-                            if is_private {
-                                let addr = SocketAddr::new(ip, 6881); // Standard BitTorrent port
-                                peers.push(addr);
-                            }
-                        }
+                    if is_private {
+                        let addr = SocketAddr::new(ip, 6881); // Standard BitTorrent port
+                        peers.push(addr);
                     }
                 }
+            }
+        }
 
-                // Remove duplicates while preserving order
-                peers.sort();
-                peers.dedup();
-        
+        // Remove duplicates while preserving order
+        peers.sort();
+        peers.dedup();
+
         // Create PeerHints (will reject invalid addresses internally)
         PeerHints::new(peers).unwrap_or_else(|_| PeerHints::default())
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "windows", target_os = "macos")))]
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "windows",
+        target_os = "macos"
+    )))]
     pub fn discover_local_peers() -> PeerHints {
         // Return empty hints on unsupported platforms
         PeerHints::default()

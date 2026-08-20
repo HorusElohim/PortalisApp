@@ -10,9 +10,9 @@
 use std::net::SocketAddr;
 use std::str::FromStr;
 
-use flutter_rust_bridge::frb;
 use crate::substrate::PeerHints;
 use crate::torrent::native::peer_hints_from_source;
+use flutter_rust_bridge::frb;
 
 // Keep web simple by making this a synchronous, non-threaded function.
 // FRB will generate a sync binding that avoids web worker/threadpool usage.
@@ -22,19 +22,19 @@ pub fn get_version() -> String {
 }
 
 /// Create a new PeerHints instance from a list of IP:port strings.
-// 
+//
 /// # Arguments
 /// * `peers` - A list of peer addresses in "ip:port" format
-/// 
+///
 /// # Returns
 /// * JSON string containing success status and any error message
-/// 
+///
 /// # Example
 /// ```javascript
 /// const result = PeerHints_create(["192.168.1.100:6881", "192.168.1.101:6881"]);
 // ```
-// 
-/// Returns: {success: true, hints: "serialized_peer_hints_data"} or 
+//
+/// Returns: {success: true, hints: "serialized_peer_hints_data"} or
 ///          {success: false, error: "error message"}
 #[frb(sync)]
 pub fn peer_hints_create(peers: Vec<String>) -> String {
@@ -42,7 +42,7 @@ pub fn peer_hints_create(peers: Vec<String>) -> String {
         .iter()
         .map(|peer| SocketAddr::from_str(peer))
         .collect();
-    
+
     match socket_addrs {
         Ok(addrs) => {
             match PeerHints::new(addrs) {
@@ -58,16 +58,19 @@ pub fn peer_hints_create(peers: Vec<String>) -> String {
             }
         }
         Err(e) => {
-            format!(r#"{{"success":false, "error":"Invalid address format: {}"}}"#, e.to_string())
+            format!(
+                r#"{{"success":false, "error":"Invalid address format: {}"}}"#,
+                e.to_string()
+            )
         }
     }
 }
 
 /// Parse peer hints from a magnet URI.
-// 
+//
 /// # Arguments
 /// * `magnet` - A magnet URI that may contain x.pe parameters
-/// 
+///
 /// # Returns
 /// * JSON string containing success status and peer count
 #[frb(sync)]
@@ -83,10 +86,10 @@ pub fn peer_hints_from_magnet(magnet: String) -> String {
 }
 
 /// Validate if a string is a valid IP:port address.
-// 
+//
 /// # Arguments
 /// * `address` - A string in "ip:port" format
-/// 
+///
 /// # Returns
 /// * JSON string with validation result
 #[frb(sync)]
@@ -108,15 +111,14 @@ pub fn peer_hints_validate_address(address: String) -> String {
     }
 }
 
-
 /// Discover local network peers on the standard BitTorrent port (6881).
-/// 
+///
 /// This function scans network interfaces and returns PeerHints containing
 /// IPv4 addresses of local network interfaces.
-// 
+//
 /// # Returns
 /// * JSON string with success status and peer count
-/// 
+///
 /// # Example
 /// ```javascript
 /// const result = PeerHints_discoverLocal();
@@ -136,20 +138,20 @@ mod tests {
     fn get_version_matches_crate_metadata() {
         assert_eq!(get_version(), env!("CARGO_PKG_VERSION"));
     }
-    
+
     #[test]
     fn test_peer_hints_create_valid() {
         let result = peer_hints_create(vec!["192.168.1.100:6881".to_string()]);
         assert!(result.contains(r#""success":true"#));
         assert!(result.contains(r#""count":1"#));
     }
-    
+
     #[test]
     fn test_peer_hints_create_invalid_ip() {
         let result = peer_hints_create(vec!["999.999.999.999:6881".to_string()]);
         assert!(result.contains(r#""success":false"#));
     }
-    
+
     #[test]
     fn test_peer_hints_from_magnet() {
         let magnet = "magnet:?xt=urn:btih:abcdefghijklmnop&x.pe=192.168.1.100:6881";
@@ -157,12 +159,12 @@ mod tests {
         assert!(result.contains(r#""success":true"#));
         assert!(result.contains(r#""count":1"#));
     }
-    
+
     #[test]
     fn test_validate_address() {
         let result = peer_hints_validate_address("192.168.1.100:6881".to_string());
         assert!(result.contains(r#""success":true"#));
-        
+
         let result2 = peer_hints_validate_address("0.0.0.0:6881".to_string());
         assert!(result2.contains(r#""success":false"#));
         assert!(result2.contains("Unspecified IP"));
