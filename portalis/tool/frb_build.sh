@@ -35,7 +35,7 @@ function maybe_codegen() {
   # bridgeable). See rust/backend/README.md's "Flutter boundary API".
   flutter_rust_bridge_codegen generate \
     --rust-root "$CRATE" \
-    --rust-input crate::bridge,crate::portalis_api,crate::device,crate::settings \
+    --rust-input crate::bridge,crate::portalis_api,crate::nexus::device,crate::nexus::settings \
     --dart-output "lib/nexus/bridge" \
     --rust-output "$CRATE/src/api.rs" \
     --no-add-mod-to-lib

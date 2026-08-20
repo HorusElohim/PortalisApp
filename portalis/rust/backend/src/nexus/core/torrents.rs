@@ -29,10 +29,10 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::{mpsc, watch};
 
-use crate::projection::state::{Handle, PortalisState};
-use crate::store::Store;
-use crate::store::records::{StoredCollection, StoredImportEntry};
-use crate::substrate::{PeerHints, Substrate};
+use crate::nexus::projection::state::{Handle, PortalisState};
+use crate::nexus::store::Store;
+use crate::nexus::store::records::{StoredCollection, StoredImportEntry};
+use crate::nexus::substrate::{PeerHints, Substrate};
 
 /// One collection this worker has something to do for.
 enum Pending {
@@ -86,7 +86,7 @@ pub(crate) async fn follow_torrent_imports(
         let pending = match pending_work(&store) {
             Ok(pending) => pending,
             Err(error) => {
-                crate::log::clog!("nexus", "could not scan torrent imports: {error}");
+                crate::nexus::log::clog!("nexus", "could not scan torrent imports: {error}");
                 continue;
             }
         };
@@ -102,7 +102,7 @@ pub(crate) async fn follow_torrent_imports(
                 | Pending::Reconcile { key, .. } => key,
             };
             if let Err(error) = done {
-                crate::log::clog!("nexus", "torrent import failed: {error:#}");
+                crate::nexus::log::clog!("nexus", "torrent import failed: {error:#}");
                 continue;
             }
             let handle = collections
@@ -121,7 +121,7 @@ pub(crate) async fn follow_torrent_imports(
 }
 
 /// Everything with a transition available, oldest collection first.
-fn pending_work(store: &Store) -> Result<Vec<Pending>, crate::store::StoreError> {
+fn pending_work(store: &Store) -> Result<Vec<Pending>, crate::nexus::store::StoreError> {
     let mut pending = Vec::new();
     for (key, stored) in store.collections()? {
         let Some(source) = store.torrent_import(&key)? else {
@@ -244,7 +244,7 @@ async fn acquire(
     source: &str,
     files: &[usize],
 ) -> anyhow::Result<()> {
-    let destination = crate::torrent::download_dir();
+    let destination = crate::nexus::torrent::download_dir();
     let info = substrate
         .acquire_selection(source, files, &destination, &PeerHints::default())
         .await?;
@@ -293,14 +293,16 @@ fn republish(store: &Store, states: &watch::Sender<PortalisState>, handle: Handl
         };
         // The transfer poller takes over from here with real numbers; this
         // only has to be right about what the store knows.
-        let status = crate::projection::state::status_for(crate::projection::state::StatusFacts {
-            draft: stored.draft,
-            paused: stored.paused,
-            carried,
-            publishing: false,
-            importing: true,
-            live: None,
-        });
+        let status = crate::nexus::projection::state::status_for(
+            crate::nexus::projection::state::StatusFacts {
+                draft: stored.draft,
+                paused: stored.paused,
+                carried,
+                publishing: false,
+                importing: true,
+                live: None,
+            },
+        );
         if collection.name == name
             && collection.entries == count
             && collection.total_bytes == total
@@ -319,7 +321,7 @@ fn republish(store: &Store, states: &watch::Sender<PortalisState>, handle: Handl
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::records::Role as StoredRole;
+    use crate::nexus::store::records::Role as StoredRole;
 
     fn store() -> (Store, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!(
@@ -466,7 +468,7 @@ mod tests {
     #[tokio::test]
     async fn reconciling_states_the_selection_and_then_the_pause() {
         let (store, dir) = store();
-        let substrate = crate::substrate::Recorded::default();
+        let substrate = crate::nexus::substrate::Recorded::default();
 
         perform(
             &store,

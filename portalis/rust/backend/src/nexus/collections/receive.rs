@@ -21,7 +21,7 @@
 //! Nothing is written to the store until all of it passes, so a rejected
 //! publication leaves no trace to reason about later.
 
-use crate::crypto::{ChainStore, Continuity, open_content_key, verify_revision};
+use crate::nexus::crypto::{ChainStore, Continuity, open_content_key, verify_revision};
 use portalis_nexus_protocol::DeviceLog;
 use portalis_nexus_protocol::{
     DEVICE_ID_BYTES, EntryContext, INFO_HASH_BYTES, ManifestContext, open_entry, open_manifest,
@@ -29,7 +29,7 @@ use portalis_nexus_protocol::{
 
 use super::model::{Collection, CollectionError, CollectionId};
 use super::publish::Publication;
-use crate::store::records::Role;
+use crate::nexus::store::records::Role;
 
 /// A publication that verified, and what came out of it.
 #[derive(Clone, Debug)]
@@ -156,7 +156,7 @@ pub async fn receive<S: ChainStore>(
 
 #[cfg(test)]
 mod tests {
-    use crate::crypto::{Continuity, MemoryChainStore};
+    use crate::nexus::crypto::{Continuity, MemoryChainStore};
 
     use super::super::members::remove_members;
     use super::super::publish::publish;

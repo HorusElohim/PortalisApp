@@ -18,11 +18,11 @@ use std::time::Duration;
 
 use tokio::sync::watch;
 
-use crate::projection::state::{Handle, PortalisState, Status, Transfer};
-use crate::store::Store;
-use crate::store::records::{StoredCollection, StoredSample};
-use crate::substrate::Substrate;
-use crate::torrent::TorrentInfo;
+use crate::nexus::projection::state::{Handle, PortalisState, Status, Transfer};
+use crate::nexus::store::Store;
+use crate::nexus::store::records::{StoredCollection, StoredSample};
+use crate::nexus::substrate::Substrate;
+use crate::nexus::torrent::TorrentInfo;
 
 /// How often the substrate is asked. Also the spacing of the history, so a
 /// chart's x axis is this constant rather than whatever the interface managed
@@ -96,7 +96,7 @@ pub(crate) async fn follow_transfers(
         let carried = match carried_collections(&store) {
             Ok(carried) => carried,
             Err(error) => {
-                crate::log::clog!("nexus", "could not read carried collections: {error}");
+                crate::nexus::log::clog!("nexus", "could not read carried collections: {error}");
                 continue;
             }
         };
@@ -114,7 +114,10 @@ pub(crate) async fn follow_transfers(
             if !claimed.contains(info.info_hash.as_str())
                 && let Err(error) = substrate.release(&info.info_hash).await
             {
-                crate::log::clog!("nexus", "could not release an unclaimed torrent: {error}");
+                crate::nexus::log::clog!(
+                    "nexus",
+                    "could not release an unclaimed torrent: {error}"
+                );
             }
         }
 
@@ -176,7 +179,7 @@ pub(crate) async fn follow_transfers(
 /// Every collection something is currently carrying, with its pause flag.
 fn carried_collections(
     store: &Store,
-) -> Result<Vec<(Vec<u8>, String, bool)>, crate::store::StoreError> {
+) -> Result<Vec<(Vec<u8>, String, bool)>, crate::nexus::store::StoreError> {
     Ok(store
         .collections()?
         .into_iter()
@@ -220,7 +223,7 @@ fn mark_moments(store: &Store, key: &[u8], info: &TorrentInfo) {
         ..stored
     };
     if let Err(error) = store.put_collection(key, &updated) {
-        crate::log::clog!("nexus", "could not record a transfer moment: {error}");
+        crate::nexus::log::clog!("nexus", "could not record a transfer moment: {error}");
     }
 }
 
@@ -253,11 +256,11 @@ fn record(
         return sample;
     }
     if let Err(error) = store.put_sample(key, unix_time_ns(), &sample) {
-        crate::log::clog!("nexus", "could not record a transfer sample: {error}");
+        crate::nexus::log::clog!("nexus", "could not record a transfer sample: {error}");
         return sample;
     }
     if let Err(error) = store.trim_samples(key, HISTORY_LENGTH) {
-        crate::log::clog!("nexus", "could not trim the transfer history: {error}");
+        crate::nexus::log::clog!("nexus", "could not trim the transfer history: {error}");
     }
     sample
 }
@@ -358,7 +361,7 @@ fn transfer_of(info: &TorrentInfo, rates: Rates) -> Option<Transfer> {
 /// The poller is the one caller with a live reading, which is what makes its
 /// answer the most informed one there is — see `status_for`.
 fn status_of(info: &TorrentInfo, paused: bool) -> Status {
-    crate::projection::state::status_for(crate::projection::state::StatusFacts {
+    crate::nexus::projection::state::status_for(crate::nexus::projection::state::StatusFacts {
         draft: false,
         paused,
         carried: true,
@@ -587,7 +590,7 @@ mod tests {
     fn collection_row() -> StoredCollection {
         StoredCollection {
             name: "Iceland".to_owned(),
-            role: crate::store::records::Role::Owner,
+            role: crate::nexus::store::records::Role::Owner,
             content_key: [0; 32],
             media_path: String::new(),
             sources: Vec::new(),

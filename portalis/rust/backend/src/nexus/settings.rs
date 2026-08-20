@@ -142,7 +142,7 @@ pub async fn set_engine_settings(settings: EngineSettings) -> anyhow::Result<boo
 mod native {
     use std::{path::Path, sync::Mutex};
 
-    use crate::log::clog;
+    use crate::nexus::log::clog;
 
     use super::EngineSettings;
 
@@ -150,8 +150,8 @@ mod native {
     /// disk on every call.
     static CACHE: Mutex<Option<EngineSettings>> = Mutex::new(None);
 
-    fn vault() -> crate::vault::Vault {
-        crate::vault::Vault::named("settings.json")
+    fn vault() -> crate::nexus::vault::Vault {
+        crate::nexus::vault::Vault::named("settings.json")
     }
 
     pub(super) fn load() -> anyhow::Result<EngineSettings> {
@@ -221,10 +221,14 @@ mod native {
         *CACHE.lock().unwrap() = Some(settings.clone());
 
         // Live half: applied now, whether or not anything else changed.
-        crate::torrent::set_rate_limits(settings.upload_limit_bps, settings.download_limit_bps)
-            .await?;
+        crate::nexus::torrent::set_rate_limits(
+            settings.upload_limit_bps,
+            settings.download_limit_bps,
+        )
+        .await?;
 
-        let restart_required = needs_restart(&old, &settings) && crate::torrent::session_started();
+        let restart_required =
+            needs_restart(&old, &settings) && crate::nexus::torrent::session_started();
         clog!(
             "settings",
             "save_and_apply: applied; restart_required={restart_required}"

@@ -7,11 +7,11 @@ import 'bridge.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
-import 'device.dart';
 import 'frb_generated.dart';
+import 'device.dart';
+import 'settings.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 import 'portalis_api.dart';
-import 'settings.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustLibApiImplPlatform({

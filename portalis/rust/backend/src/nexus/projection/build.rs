@@ -15,7 +15,7 @@ use super::state::{
     Alert, CollectionState, Connectivity, ContactState, DeviceState, Handle, PortalisState,
     Progress, Role, Status, Transfer,
 };
-use crate::store::records::Role as StoredRole;
+use crate::nexus::store::records::Role as StoredRole;
 
 /// Assigns handles and remembers them, so one collection keeps one handle for
 /// as long as the process lives.
@@ -96,7 +96,7 @@ pub fn collection(handles: &mut Handles, facts: &CollectionFacts) -> CollectionS
         started_at: None,
         completed_at: None,
         name: facts.name.clone(),
-        nature: crate::projection::state::Nature::Native,
+        nature: crate::nexus::projection::state::Nature::Native,
         role: match facts.role {
             StoredRole::Owner => Role::Owner,
             StoredRole::Member => Role::Member,

@@ -26,7 +26,7 @@
 /// exactly that on macOS. A diagnostic aid must never be able to break the
 /// thing it is diagnosing, so the write error is dropped: losing a log line
 /// is always preferable to losing the operation.
-pub(crate) fn log(tag: &str, args: std::fmt::Arguments) {
+pub fn log(tag: &str, args: std::fmt::Arguments) {
     use std::io::Write;
 
     let millis = std::time::SystemTime::now()
@@ -41,7 +41,7 @@ pub(crate) fn log(tag: &str, args: std::fmt::Arguments) {
 /// `format!`-style args.
 macro_rules! clog {
     ($tag:expr, $($arg:tt)*) => {
-        $crate::log::log($tag, format_args!($($arg)*))
+        $crate::nexus::log::log($tag, format_args!($($arg)*))
     };
 }
 pub(crate) use clog;

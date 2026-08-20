@@ -4,6 +4,8 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import 'frb_generated.dart';
+import 'device.dart';
+import 'settings.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 String getVersion() => RustLib.instance.api.crateBridgeGetVersion();
@@ -18,6 +20,7 @@ String getVersion() => RustLib.instance.api.crateBridgeGetVersion();
 /// # Example
 /// ```javascript
 /// const result = PeerHints_create(["192.168.1.100:6881", "192.168.1.101:6881"]);
+/// ```
 /// Returns: {success: true, hints: "serialized_peer_hints_data"} or
 ///          {success: false, error: "error message"}
 String peerHintsCreate({required List<String> peers}) =>
@@ -50,7 +53,17 @@ String peerHintsValidateAddress({required String address}) =>
 ///
 /// # Example
 /// ```javascript
-/// const result = PeerHints_discoverLocal();
+/// const result = peer_hints_discover_local();
+///  /// Returns: {success: true, count: 2} if two local interfaces found
 ///  ```
 String peerHintsDiscoverLocal() =>
     RustLib.instance.api.crateBridgePeerHintsDiscoverLocal();
+
+/// Loads the persisted identity, generating and saving one on first call.
+DeviceIdentityInfo deviceIdentity() =>
+    RustLib.instance.api.crateBridgeDeviceIdentity();
+
+/// Renames this device's identity (display name only — the keypair itself
+/// never changes).
+DeviceIdentityInfo setNickname({required String nickname}) =>
+    RustLib.instance.api.crateBridgeSetNickname(nickname: nickname);

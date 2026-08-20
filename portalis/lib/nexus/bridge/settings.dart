@@ -11,11 +11,11 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 /// The settings the engine is configured with, loaded from disk (defaults on
 /// first run).
 Future<EngineSettings> engineSettings() =>
-    RustLib.instance.api.crateSettingsEngineSettings();
+    RustLib.instance.api.crateNexusSettingsEngineSettings();
 
 /// The built-in defaults, for a "reset" action in the UI.
 Future<EngineSettings> defaultEngineSettings() =>
-    RustLib.instance.api.crateSettingsDefaultEngineSettings();
+    RustLib.instance.api.crateNexusSettingsDefaultEngineSettings();
 
 /// Persists `settings`, applying the live ones (rate limits) to the running
 /// session straight away.
@@ -24,7 +24,8 @@ Future<EngineSettings> defaultEngineSettings() =>
 /// already running — i.e. the UI should tell the user the change lands next
 /// launch. Returns `false` when everything asked for is already in effect.
 Future<bool> setEngineSettings({required EngineSettings settings}) =>
-    RustLib.instance.api.crateSettingsSetEngineSettings(settings: settings);
+    RustLib.instance.api
+        .crateNexusSettingsSetEngineSettings(settings: settings);
 
 /// The engine's full configuration surface. `serde(default)` throughout so a
 /// `settings.json` written by an older build still loads.
@@ -114,7 +115,7 @@ class EngineSettings {
   });
 
   static Future<EngineSettings> default_() =>
-      RustLib.instance.api.crateSettingsEngineSettingsDefault();
+      RustLib.instance.api.crateNexusSettingsEngineSettingsDefault();
 
   @override
   int get hashCode =>

@@ -11,12 +11,12 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// Loads the persisted identity, generating and saving one on first call.
 Future<DeviceIdentityInfo> deviceIdentity() =>
-    RustLib.instance.api.crateDeviceDeviceIdentity();
+    RustLib.instance.api.crateNexusDeviceDeviceIdentity();
 
 /// Renames this device's identity (display name only — the keypair itself
 /// never changes).
 Future<DeviceIdentityInfo> setNickname({required String nickname}) =>
-    RustLib.instance.api.crateDeviceSetNickname(nickname: nickname);
+    RustLib.instance.api.crateNexusDeviceSetNickname(nickname: nickname);
 
 class DeviceIdentityInfo {
   final String deviceId;

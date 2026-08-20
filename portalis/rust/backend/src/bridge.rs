@@ -10,8 +10,11 @@
 use std::net::SocketAddr;
 use std::str::FromStr;
 
-use crate::substrate::PeerHints;
-use crate::torrent::native::peer_hints_from_source;
+use crate::nexus::device::{
+    DeviceIdentityInfo, device_identity as device_identity_fn, set_nickname as set_nickname_fn,
+};
+use crate::nexus::substrate::PeerHints;
+use crate::nexus::torrent::native::peer_hints_from_source;
 use flutter_rust_bridge::frb;
 
 // Keep web simple by making this a synchronous, non-threaded function.
@@ -32,7 +35,7 @@ pub fn get_version() -> String {
 /// # Example
 /// ```javascript
 /// const result = PeerHints_create(["192.168.1.100:6881", "192.168.1.101:6881"]);
-// ```
+/// ```
 //
 /// Returns: {success: true, hints: "serialized_peer_hints_data"} or
 ///          {success: false, error: "error message"}
@@ -59,7 +62,7 @@ pub fn peer_hints_create(peers: Vec<String>) -> String {
         }
         Err(e) => {
             format!(
-                r#"{{"success":false, "error":"Invalid address format: {}"}}"#,
+                r#"{{"success":false, "error":"Invalid address format: {}}}"#,
                 e.to_string()
             )
         }
@@ -121,13 +124,26 @@ pub fn peer_hints_validate_address(address: String) -> String {
 ///
 /// # Example
 /// ```javascript
-/// const result = PeerHints_discoverLocal();
-//  /// Returns: {success: true, count: 2} if two local interfaces found
+/// const result = peer_hints_discover_local();
+///  /// Returns: {success: true, count: 2} if two local interfaces found
 ///  ```
 #[frb(sync)]
 pub fn peer_hints_discover_local() -> String {
-    let hints = crate::substrate::lan_discovery::discover_local_peers();
+    let hints = crate::nexus::substrate::lan_discovery::discover_local_peers();
     format!(r#"{{"success":true, "count":{}}}"#, hints.as_slice().len())
+}
+
+/// Loads the persisted identity, generating and saving one on first call.
+#[frb(sync)]
+pub fn device_identity() -> Result<DeviceIdentityInfo, String> {
+    device_identity_fn().map_err(|e| e.to_string())
+}
+
+/// Renames this device's identity (display name only — the keypair itself
+/// never changes).
+#[frb(sync)]
+pub fn set_nickname(nickname: String) -> Result<DeviceIdentityInfo, String> {
+    set_nickname_fn(nickname).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

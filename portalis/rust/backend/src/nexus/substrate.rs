@@ -13,14 +13,14 @@ use std::{
 
 use async_trait::async_trait;
 
-use crate::torrent::{PublishProgress, SourceFile, TorrentInfo};
+use crate::nexus::torrent::{PublishProgress, SourceFile, TorrentInfo};
 
 /// The immutable content claim produced while a set of native sources starts
 /// seeding. Keeping the descriptor with the engine result prevents collection
 /// workflows from reaching into an engine-specific side store.
-pub(crate) struct Published {
-    pub(crate) info: TorrentInfo,
-    pub(crate) descriptor: Vec<u8>,
+pub struct Published {
+    pub info: TorrentInfo,
+    pub descriptor: Vec<u8>,
 }
 
 /// What a source turns out to contain, before any payload is fetched.
@@ -30,18 +30,18 @@ pub(crate) struct Published {
 /// content. The difference is only in how long the answer takes — a
 /// descriptor is read from disk, a magnet is asked of the swarm.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Inspected {
-    pub(crate) info_hash: String,
-    pub(crate) name: String,
-    pub(crate) files: Vec<crate::torrent::TorrentMetadataFile>,
+pub struct Inspected {
+    pub info_hash: String,
+    pub name: String,
+    pub files: Vec<crate::nexus::torrent::TorrentMetadataFile>,
     /// The descriptor bytes, once known. A collection needs these to be
     /// shareable through Nexus later, and for a magnet they do not exist
     /// until the swarm supplies them.
-    pub(crate) descriptor: Vec<u8>,
+    pub descriptor: Vec<u8>,
 }
 
 #[async_trait]
-pub(crate) trait Substrate: Send + Sync {
+pub trait Substrate: Send + Sync {
     /// Make these files available, and answer with the handle others fetch by.
     async fn publish(
         &self,
@@ -100,7 +100,7 @@ pub(crate) trait Substrate: Send + Sync {
 }
 
 /// The real one.
-pub(crate) struct Torrents;
+pub struct Torrents;
 
 /// Validated, bounded peer addresses supplied by a discovery/bootstrap source.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -109,7 +109,7 @@ pub struct PeerHints(Vec<SocketAddr>);
 impl PeerHints {
     const MAX: usize = 64;
 
-    pub(crate) fn new<I>(addresses: I) -> anyhow::Result<Self>
+    pub fn new<I>(addresses: I) -> anyhow::Result<Self>
     where
         I: IntoIterator<Item = SocketAddr>,
     {
@@ -133,7 +133,7 @@ impl PeerHints {
         Ok(Self(unique))
     }
 
-    pub(crate) fn as_slice(&self) -> &[SocketAddr] {
+    pub fn as_slice(&self) -> &[SocketAddr] {
         &self.0
     }
 }
@@ -142,7 +142,7 @@ pub mod lan_discovery {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::str::FromStr;
 
-    use crate::substrate::PeerHints;
+    use crate::nexus::substrate::PeerHints;
 
     /// Discover local network peers by examining network interfaces.
     ///
@@ -273,13 +273,13 @@ impl Substrate for Torrents {
         files: Vec<SourceFile>,
         progress: PublishProgress,
     ) -> anyhow::Result<Published> {
-        let info = crate::torrent::publish(name, files, progress).await?;
-        let descriptor = crate::linked_source_store::descriptor_for(&info.info_hash)?;
+        let info = crate::nexus::torrent::publish(name, files, progress).await?;
+        let descriptor = crate::nexus::linked_source_store::descriptor_for(&info.info_hash)?;
         Ok(Published { info, descriptor })
     }
 
     async fn inspect(&self, source: &str, peer_hints: &PeerHints) -> anyhow::Result<Inspected> {
-        crate::torrent::inspect_source(source, peer_hints).await
+        crate::nexus::torrent::inspect_source(source, peer_hints).await
     }
 
     async fn acquire_selection(
@@ -289,27 +289,29 @@ impl Substrate for Torrents {
         destination: &std::path::Path,
         peer_hints: &PeerHints,
     ) -> anyhow::Result<TorrentInfo> {
-        crate::torrent::acquire_selection(source, files, destination, peer_hints).await
+        crate::nexus::torrent::acquire_selection(source, files, destination, peer_hints).await
     }
 
     async fn set_paused(&self, handle: &str, paused: bool) -> anyhow::Result<()> {
         if paused {
-            crate::torrent::pause_torrent(handle).await
+            crate::nexus::torrent::pause_torrent(handle).await
         } else {
-            crate::torrent::restart_torrent(handle).await
+            crate::nexus::torrent::restart_torrent(handle).await
         }
     }
 
     async fn set_selection(&self, handle: &str, files: &[usize]) -> anyhow::Result<()> {
-        crate::torrent::set_selection(handle, files).await
+        crate::nexus::torrent::set_selection(handle, files).await
     }
 
     async fn release(&self, handle: &str) -> anyhow::Result<()> {
-        crate::torrent::forget_torrent(handle).await
+        crate::nexus::torrent::forget_torrent(handle).await
     }
 
     async fn holdings(&self) -> Vec<TorrentInfo> {
-        crate::torrent::list_torrents().await.unwrap_or_default()
+        crate::nexus::torrent::list_torrents()
+            .await
+            .unwrap_or_default()
     }
 }
 

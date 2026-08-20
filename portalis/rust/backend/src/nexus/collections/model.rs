@@ -23,7 +23,7 @@ use portalis_nexus_protocol::{
 };
 use thiserror::Error;
 
-use crate::store::records::Role;
+use crate::nexus::store::records::Role;
 
 /// Names one collection. Sixteen bytes, generated once and never reused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -109,9 +109,9 @@ pub enum CollectionError {
     #[error("nothing in this publication is sealed to this device")]
     NotSealedToUs,
     #[error(transparent)]
-    Chain(#[from] crate::crypto::ChainError),
+    Chain(#[from] crate::nexus::crypto::ChainError),
     #[error(transparent)]
-    Keys(#[from] crate::crypto::KeyError),
+    Keys(#[from] crate::nexus::crypto::KeyError),
     #[error(transparent)]
     Manifest(#[from] portalis_nexus_protocol::ManifestError),
     #[error(transparent)]
@@ -119,7 +119,7 @@ pub enum CollectionError {
     #[error(transparent)]
     Entry(#[from] portalis_nexus_protocol::EntryError),
     #[error(transparent)]
-    Store(#[from] crate::store::StoreError),
+    Store(#[from] crate::nexus::store::StoreError),
 }
 
 #[cfg(test)]

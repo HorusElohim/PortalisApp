@@ -11,22 +11,22 @@ use std::path::PathBuf;
 use anyhow::Context;
 use serde::{Serialize, de::DeserializeOwned};
 
-pub(crate) struct Vault {
+pub struct Vault {
     path: PathBuf,
 }
 
 impl Vault {
     /// A file by name inside the state directory — see [`crate::paths`].
-    pub(crate) fn named(file: &str) -> Self {
+    pub fn named(file: &str) -> Self {
         Self {
-            path: crate::paths::state_dir().join(file),
+            path: crate::nexus::paths::state_dir().join(file),
         }
     }
 
     /// `None` when the file isn't there yet, which is a normal first run and
     /// not an error. A file that exists but won't parse *is* an error: silently
     /// treating corruption as absence would overwrite it on the next save.
-    pub(crate) fn read<T: DeserializeOwned>(&self) -> anyhow::Result<Option<T>> {
+    pub fn read<T: DeserializeOwned>(&self) -> anyhow::Result<Option<T>> {
         let bytes = match std::fs::read(&self.path) {
             Ok(bytes) => bytes,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -43,7 +43,7 @@ impl Vault {
     /// disk is only ever the last complete one. A truncating write destroys
     /// what is there the instant it opens, before it can discover it has no
     /// room to finish — which is how this project lost a store to a full disk.
-    pub(crate) fn write<T: Serialize>(&self, value: &T) -> anyhow::Result<()> {
+    pub fn write<T: Serialize>(&self, value: &T) -> anyhow::Result<()> {
         std::fs::create_dir_all(self.path.parent().context("state dir has no parent")?)?;
         let staged = self.path.with_extension("tmp");
         std::fs::write(&staged, serde_json::to_vec_pretty(value)?)
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn a_new_document_atomically_replaces_the_previous_one() {
-        let _temp = crate::paths::redirect_to_temp();
+        let _temp = crate::nexus::paths::redirect_to_temp();
         let vault = Vault::named("replace.json");
 
         vault.write(&1u32).unwrap();
@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn absent_reads_as_nothing_and_a_write_that_fails_keeps_the_last_one() {
         use std::os::unix::fs::PermissionsExt;
-        let temp = crate::paths::redirect_to_temp();
+        let temp = crate::nexus::paths::redirect_to_temp();
         let vault = Vault::named("thing.json");
 
         assert_eq!(vault.read::<u32>().unwrap(), None);
@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn an_unreadable_state_path_is_not_mistaken_for_a_first_run() {
-        let temp = crate::paths::redirect_to_temp();
+        let temp = crate::nexus::paths::redirect_to_temp();
         std::fs::create_dir(temp.path("not-a-json-file.json")).unwrap();
         let vault = Vault::named("not-a-json-file.json");
 

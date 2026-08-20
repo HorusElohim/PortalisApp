@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::torrent::SourceFile;
+use crate::nexus::torrent::SourceFile;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct LinkedSourceRecord {
@@ -16,8 +16,8 @@ struct LinkedSourceStore {
     records: Vec<LinkedSourceRecord>,
 }
 
-fn vault() -> crate::vault::Vault {
-    crate::vault::Vault::named("linked-sources.json")
+fn vault() -> crate::nexus::vault::Vault {
+    crate::nexus::vault::Vault::named("linked-sources.json")
 }
 
 pub(crate) fn load() -> anyhow::Result<Vec<LinkedSourceRecord>> {
