@@ -59,7 +59,7 @@ flutter_rust_bridge = "=2.12.0"
 tokio = { version = "1", features = ["rt"] }
 anyhow = "1.0"
 # Object-safe async methods, so a port can be an Arc<dyn Trait> and a test can
-# swap it. See docs/torrent-engine.md.
+# swap it.
 async-trait = "0.1"
 
 portalis-nexus-protocol.workspace = true

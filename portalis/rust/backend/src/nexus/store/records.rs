@@ -7,7 +7,7 @@
 //!
 //! What remains is local-only: what this device calls a collection, where it
 //! put the media, and the transfer history. Those get small hand-written
-//! encodings here, length-prefixed the way `SPEC.md` D10 asks, because a
+//! encodings here, length-prefixed, because a
 //! derived one would be a format nobody chose and nobody could read from
 //! another language.
 

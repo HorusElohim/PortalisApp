@@ -1,6 +1,6 @@
 //! Sealing a collection's content key to the devices a verified log allows.
 //!
-//! This is `SPEC.md` §7.6, and it closes the loop steps 2 and 3 opened. A
+//! This closes the device-log and revision loop. A
 //! device log says which devices a person has; a revision says who a
 //! collection's members are. Neither is worth anything until the moment a key
 //! is actually sealed, because that is the moment a mistake becomes a stolen

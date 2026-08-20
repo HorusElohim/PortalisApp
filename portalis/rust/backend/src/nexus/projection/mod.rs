@@ -1,7 +1,7 @@
 //! One stream down, commands up.
 //!
-//! `SPEC.md` §16 to §18. The interface stops asking: it subscribes once and is
-//! told, and every question it used to poll for is answered here instead —
+//! The interface stops asking: it subscribes once and is told, and every
+//! question it used to poll for is answered here instead —
 //! including the ones it answered for itself by deriving state from a list.
 //!
 //! - [`state`]: what the interface is told, and what it may ask for.

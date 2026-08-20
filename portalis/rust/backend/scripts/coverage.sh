@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Excluded as platform adapters, per SPEC.md section 18:
+# Excluded as platform adapters:
 #   apps/server/src/main.rs      process bootstrap
 #   apps/server/src/quic.rs      QUIC plumbing driven by covered decisions
 #   crates/client/src/transport  socket actor driven by covered decisions
@@ -38,10 +38,9 @@ set -euo pipefail
 # regex says which mostly by shape: every legacy module is a flat file
 # directly in `src/` or under `src/domain/`, while everything written for
 # v3 is a directory — `src/core/`, `src/store/`, `src/projection/`. So new work
-# is gated from its first line, and the exclusion shrinks on its own as
-# PLAN.md's steps 6 to 12 delete the files it names. It is not a judgement
-# that those files deserve less; they are being replaced, and holding a
-# doomed module to 100% buys nothing.
+# is gated from its first line. It is not a judgement that older adapters
+# deserve less; the gate focuses on the application core that owns current
+# behavior.
 #
 # The embedded engine's endpoint modules are excluded as platform adapters, and
 # only after trying not to. What they mostly
@@ -64,8 +63,7 @@ set -euo pipefail
 # cannot be made, a file whose tables hold another shape, and a row that will
 # not decode. Their decisions are not exempt — the conflict rules, the key
 # layout, the mailbox bounds and the membership scoping are exercised against
-# real files, and every function in them is covered. PLAN.md's step 13 exists
-# to re-examine exactly this kind of line.
+# real files, and every function in them is covered.
 #
 # ADR-0004 moves the former flat backend modules below `src/nexus/`. Preserve
 # the same measured scope after that namespace move: direct children of

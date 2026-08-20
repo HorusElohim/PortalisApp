@@ -1,6 +1,6 @@
 //! What components tell each other, and the bus that carries it.
 //!
-//! This is `SPEC.md` §11, and decision D7. Components do not call each other:
+//! Components do not call each other:
 //! the connection engine knows nothing about collections, and the projection
 //! knows nothing except events. That only holds if the bus arrives before the
 //! components do, which is why this is step 5 and not step 9 — anything
@@ -38,8 +38,8 @@ pub const DURABLE_CAPACITY: usize = 256;
 
 /// An opaque reference to something the interface can name.
 ///
-/// Deliberately not a string and not an identifier: `SPEC.md` §18 keeps hex
-/// out of every tier except the one a human reads. The projection assigns
+/// Deliberately not a string and not an identifier: hex stays out of every
+/// tier except the one a human reads. The projection assigns
 /// these; nothing here interprets them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Handle(pub u64);
@@ -63,7 +63,7 @@ pub enum PeerTrust {
 }
 
 /// What a connection actually is, reported when the handshake completes rather
-/// than inferred later (`SPEC.md` §15).
+/// than inferred later.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Security {
     pub path: Path,
@@ -88,7 +88,7 @@ pub enum Subject {
     Entry { collection: Handle, entry: Handle },
 }
 
-/// Why verification failed, in the terms `SPEC.md` §18 shows a person.
+/// Why verification failed, in terms a person can act on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VerifyFailure {
     /// A signature that is not the author's, or an author with no authority.

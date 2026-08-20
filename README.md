@@ -60,7 +60,7 @@ Detailed build instructions for every platform live in [`doc/build.md`](doc/buil
 
 [`portalis/rust/backend/`](portalis/rust/backend/) is the unified Nexus application core. It owns the Flutter boundary, local collection state, identity, application networking, and the Torrent engine that moves media directly between peers.
 
-The same workspace owns the versioned protobuf contract, portable networking crates, server domain logic, and Linux server binary. See the [Nexus README](portalis/rust/backend/README.md) and [protocol specification](portalis/rust/backend/SPEC.md).
+The same workspace owns the versioned protobuf contract, portable networking crates, server domain logic, and Linux server binary. See the [Nexus README](portalis/rust/backend/README.md) and [architecture decision records](doc/adr/README.md).
 
 ```bash
 cd portalis/rust/backend

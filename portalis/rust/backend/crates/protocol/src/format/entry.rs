@@ -1,6 +1,6 @@
 //! An entry's `.torrent`, encrypted.
 //!
-//! This is `SPEC.md` §7.5. The manifest already says what an entry is — its
+//! The manifest already says what an entry is — its
 //! label, author and info hash — so the payload carries nothing but the
 //! descriptor itself. Everything the earlier encoding repeated here is read
 //! from the manifest entry instead, which is also what stops the two

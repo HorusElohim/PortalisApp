@@ -1,6 +1,6 @@
 //! Sealing a manifest into the sealed manifest Nexus stores and cannot read.
 //!
-//! This is `SPEC.md` §11. The server holds these bytes opaquely by design,
+//! The server holds these bytes opaquely by design,
 //! which means nothing on the server side can detect a client that builds
 //! them differently — the format is a contract between clients, and this is
 //! the only implementation of it.

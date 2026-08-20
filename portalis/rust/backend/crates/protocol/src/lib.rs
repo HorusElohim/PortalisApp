@@ -1,8 +1,8 @@
 //! The authoritative Portalis Nexus protocol contract.
 //!
 //! This crate owns the generated protobuf types, the peer request vocabulary,
-//! the wire limits from `SPEC.md`, and the validation every peer applies before
-//! dispatch. It has no sockets, database drivers, or platform adapters.
+//! the wire limits, and the validation every peer applies before dispatch. It
+//! has no sockets, database drivers, or platform adapters.
 
 #[allow(clippy::doc_markdown, clippy::must_use_candidate)]
 pub mod v1 {

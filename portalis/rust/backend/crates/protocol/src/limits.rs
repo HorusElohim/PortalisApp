@@ -1,7 +1,7 @@
 //! Protocol constants shared by every crate in the workspace.
 //!
-//! These are the wire limits from `SPEC.md` section 8. Changing one is a
-//! protocol decision, not an implementation detail.
+//! These are the wire limits. Changing one is a protocol decision, not an
+//! implementation detail.
 
 pub const CURRENT_PROTOCOL_VERSION: u32 = 1;
 pub const MESSAGE_ID_BYTES: usize = 16;

@@ -13,7 +13,7 @@
 //! lives in `client` and never in the service. The service stores and
 //! forwards; a reader decides.
 //!
-//! Verification follows `SPEC.md` §7.3 in order — signature, then author
+//! Verification follows a strict order — signature, then author
 //! authority, then position in the chain, then the manifest it names — because
 //! each step is more expensive than the last and a caller should not pay for
 //! a store read to reject a forged signature.
@@ -83,8 +83,8 @@ impl ChainStoreError {
 
 /// Why a revision is not accepted.
 ///
-/// Each variant is one attack from `SPEC.md` §22 with the outcome §18
-/// promises, because a single "invalid revision" would let a rollback and a
+/// Each variant names one attack and its outcome, because a single "invalid
+/// revision" would let a rollback and a
 /// forged signature look alike to a user and to a test.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum ChainError {
