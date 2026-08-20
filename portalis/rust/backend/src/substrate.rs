@@ -104,7 +104,7 @@ pub(crate) struct Torrents;
 
 /// Validated, bounded peer addresses supplied by a discovery/bootstrap source.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct PeerHints(Vec<SocketAddr>);
+pub struct PeerHints(Vec<SocketAddr>);
 
 impl PeerHints {
     const MAX: usize = 64;
@@ -155,9 +155,8 @@ pub mod lan_discovery {
     /// 
     /// # Example
     /// ```no_run
-    /// let hints = discover_local_peers();
-    ///  /// hints might contain: 192.168.1.100:6881, 10.0.0.5:6881, etc.
-    ///  /// 
+    /// // let hints = lan_discovery::discover_local_peers();
+    /// // hints might contain: 192.168.1.100:6881, 10.0.0.5:6881, etc.
     /// ```
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows", target_os = "macos"))]
     pub fn discover_local_peers() -> PeerHints {

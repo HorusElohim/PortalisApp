@@ -71,7 +71,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 2135666519;
+  int get rustContentHash => -218846754;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -83,14 +83,6 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
-  String crateBridgePeerHintsCreate({required List<String> peers});
-
-  String crateBridgePeerHintsDiscoverLocal();
-
-  String crateBridgePeerHintsFromMagnet({required String magnet});
-
-  String crateBridgePeerHintsValidateAddress({required String address});
-
   Future<EngineSettings> crateSettingsDefaultEngineSettings();
 
   Future<DeviceIdentityInfo> crateDeviceDeviceIdentity();
@@ -100,6 +92,14 @@ abstract class RustLibApi extends BaseApi {
   Future<EngineSettings> crateSettingsEngineSettingsDefault();
 
   String crateBridgeGetVersion();
+
+  String crateBridgePeerHintsCreate({required List<String> peers});
+
+  String crateBridgePeerHintsDiscoverLocal();
+
+  String crateBridgePeerHintsFromMagnet({required String magnet});
+
+  String crateBridgePeerHintsValidateAddress({required String address});
 
   Future<AppAccepted> cratePortalisApiSend({required AppCommand command});
 
@@ -132,106 +132,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  String crateBridgePeerHintsCreate({required List<String> peers}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_list_String(peers, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_String,
-        decodeErrorData: null,
-      ),
-      constMeta: kCrateBridgePeerHintsCreateConstMeta,
-      argValues: [peers],
-      apiImpl: this,
-    ));
-  }
-
-  TaskConstMeta get kCrateBridgePeerHintsCreateConstMeta => const TaskConstMeta(
-        debugName: "PeerHints_create",
-        argNames: ["peers"],
-      );
-
-  @override
-  String crateBridgePeerHintsDiscoverLocal() {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_String,
-        decodeErrorData: null,
-      ),
-      constMeta: kCrateBridgePeerHintsDiscoverLocalConstMeta,
-      argValues: [],
-      apiImpl: this,
-    ));
-  }
-
-  TaskConstMeta get kCrateBridgePeerHintsDiscoverLocalConstMeta =>
-      const TaskConstMeta(
-        debugName: "PeerHints_discoverLocal",
-        argNames: [],
-      );
-
-  @override
-  String crateBridgePeerHintsFromMagnet({required String magnet}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_String(magnet, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_String,
-        decodeErrorData: null,
-      ),
-      constMeta: kCrateBridgePeerHintsFromMagnetConstMeta,
-      argValues: [magnet],
-      apiImpl: this,
-    ));
-  }
-
-  TaskConstMeta get kCrateBridgePeerHintsFromMagnetConstMeta =>
-      const TaskConstMeta(
-        debugName: "PeerHints_from_magnet",
-        argNames: ["magnet"],
-      );
-
-  @override
-  String crateBridgePeerHintsValidateAddress({required String address}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_String(address, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_String,
-        decodeErrorData: null,
-      ),
-      constMeta: kCrateBridgePeerHintsValidateAddressConstMeta,
-      argValues: [address],
-      apiImpl: this,
-    ));
-  }
-
-  TaskConstMeta get kCrateBridgePeerHintsValidateAddressConstMeta =>
-      const TaskConstMeta(
-        debugName: "PeerHints_validate_address",
-        argNames: ["address"],
-      );
-
-  @override
   Future<EngineSettings> crateSettingsDefaultEngineSettings() {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 5, port: port_);
+            funcId: 1, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_engine_settings,
@@ -255,7 +161,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 6, port: port_);
+            funcId: 2, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_device_identity_info,
@@ -278,7 +184,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 7, port: port_);
+            funcId: 3, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_engine_settings,
@@ -302,7 +208,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 8, port: port_);
+            funcId: 4, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_engine_settings,
@@ -325,7 +231,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -340,6 +246,100 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateBridgeGetVersionConstMeta => const TaskConstMeta(
         debugName: "get_version",
         argNames: [],
+      );
+
+  @override
+  String crateBridgePeerHintsCreate({required List<String> peers}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_list_String(peers, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateBridgePeerHintsCreateConstMeta,
+      argValues: [peers],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateBridgePeerHintsCreateConstMeta => const TaskConstMeta(
+        debugName: "peer_hints_create",
+        argNames: ["peers"],
+      );
+
+  @override
+  String crateBridgePeerHintsDiscoverLocal() {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateBridgePeerHintsDiscoverLocalConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateBridgePeerHintsDiscoverLocalConstMeta =>
+      const TaskConstMeta(
+        debugName: "peer_hints_discover_local",
+        argNames: [],
+      );
+
+  @override
+  String crateBridgePeerHintsFromMagnet({required String magnet}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(magnet, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateBridgePeerHintsFromMagnetConstMeta,
+      argValues: [magnet],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateBridgePeerHintsFromMagnetConstMeta =>
+      const TaskConstMeta(
+        debugName: "peer_hints_from_magnet",
+        argNames: ["magnet"],
+      );
+
+  @override
+  String crateBridgePeerHintsValidateAddress({required String address}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(address, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateBridgePeerHintsValidateAddressConstMeta,
+      argValues: [address],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateBridgePeerHintsValidateAddressConstMeta =>
+      const TaskConstMeta(
+        debugName: "peer_hints_validate_address",
+        argNames: ["address"],
       );
 
   @override

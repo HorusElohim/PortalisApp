@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 /// Service for scanning QR codes to extract peer hints from magnet links.
@@ -18,8 +16,11 @@ class QrPeerHintService {
   /// Scanner controller
   MobileScannerController? _controller;
   
+  /// Expose the controller for the MobileScanner widget
+  MobileScannerController? get controller => _controller;
+  
   /// Whether the scanner is currently active
-  bool get isScanning => _controller != null && _controller!.value.isRunning;
+  bool get isScanning => _controller != null;
   
   /// Start scanning for QR codes containing magnet links with peer hints
   /// 
@@ -27,15 +28,17 @@ class QrPeerHintService {
   Stream<String> startScanning() {
     _controller = MobileScannerController(
       formats: [BarcodeFormat.qrCode],
-      detectionSpeed: DetectionSpeed.noDelay,
+      detectionSpeed: DetectionSpeed.normal,
       returnImage: false,
     );
     
-    return _controller!.barcodes.map((barcode) {
-      final String? barcodeValue = barcode.rawValue;
-      
-      if (barcodeValue != null && barcodeValue.startsWith('magnet:')) {
-        return barcodeValue;
+    return _controller!.barcodes.map((barcodeCapture) {
+      if (barcodeCapture.barcodes.isNotEmpty) {
+        final String? barcodeValue = barcodeCapture.barcodes.first.rawValue;
+        
+        if (barcodeValue != null && barcodeValue.startsWith('magnet:')) {
+          return barcodeValue;
+        }
       }
       return null;
     }).where((value) => value != null).cast<String>();

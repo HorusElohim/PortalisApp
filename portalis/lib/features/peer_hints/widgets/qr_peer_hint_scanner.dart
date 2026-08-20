@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:portalis/features/peer_hints/services/qr_peer_hint_service.dart';
 
 /// Widget for scanning QR codes to obtain peer hints for magnetic xpe.
@@ -46,7 +48,7 @@ class _QrPeerHintScannerState extends State<QrPeerHintScanner> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('QR scanning not available on this device'),
-            backgroundColor: Colors.error,
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -70,7 +72,7 @@ class _QrPeerHintScannerState extends State<QrPeerHintScanner> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Peer hints scanned successfully!'),
-              backgroundColor: Colors.success,
+              backgroundColor: Colors.green,
             ),
           );
         }
@@ -81,7 +83,7 @@ class _QrPeerHintScannerState extends State<QrPeerHintScanner> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('QR scanning error: $error'),
-              backgroundColor: Colors.error,
+              backgroundColor: Colors.red,
             ),
           );
         }
@@ -111,8 +113,8 @@ class _QrPeerHintScannerState extends State<QrPeerHintScanner> {
         children: [
           // QR Scanner View
           MobileScanner(
-            controller: QrPeerHintService()._controller!,
-            onDetect: (barcode, args) {
+            controller: _qrService.controller!,
+            onDetect: (barcodeCapture) {
               // Handling is done via the stream in initState
             },
           ),
@@ -163,12 +165,12 @@ class _QRScannerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final Paint paint = Paint()
-      ..color = Colors.white.withOpacity(0.3)
+      ..color = Colors.white.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
     
     // Draw scan rectangle in the center
-    final double scanSize = min(size.width, size.height) * 0.7;
+    final double scanSize = size.shortestSide * 0.7;
     final double offset = (size.width - scanSize) / 2;
     final Rect scanRect = Rect.fromLTWH(
       offset,
