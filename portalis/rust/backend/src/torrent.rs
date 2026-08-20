@@ -495,7 +495,7 @@ pub(crate) async fn restart_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
     native::restart_torrent(info_hash_hex).await
 }
 
-mod native {
+pub mod native {
     use std::io::Write;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -755,7 +755,7 @@ mod native {
         }
     }
 
-    fn peer_hints_from_source(source: &str) -> anyhow::Result<crate::substrate::PeerHints> {
+    pub fn peer_hints_from_source(source: &str) -> anyhow::Result<crate::substrate::PeerHints> {
         if !super::is_magnet(source) {
             return Ok(crate::substrate::PeerHints::default());
         }
