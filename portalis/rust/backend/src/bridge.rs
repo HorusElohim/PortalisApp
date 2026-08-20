@@ -37,7 +37,7 @@ pub fn get_version() -> String {
 /// Returns: {success: true, hints: "serialized_peer_hints_data"} or 
 ///          {success: false, error: "error message"}
 #[frb(sync)]
-pub fn PeerHints_create(peers: Vec<String>) -> String {
+pub fn peer_hints_create(peers: Vec<String>) -> String {
     let socket_addrs: Result<Vec<SocketAddr>, _> = peers
         .iter()
         .map(|peer| SocketAddr::from_str(peer))
@@ -71,7 +71,7 @@ pub fn PeerHints_create(peers: Vec<String>) -> String {
 /// # Returns
 /// * JSON string containing success status and peer count
 #[frb(sync)]
-pub fn PeerHints_from_magnet(magnet: String) -> String {
+pub fn peer_hints_from_magnet(magnet: String) -> String {
     match peer_hints_from_source(&magnet) {
         Ok(hints) => {
             format!(r#"{{"success":true, "count":{}}}"#, hints.as_slice().len())
@@ -90,7 +90,7 @@ pub fn PeerHints_from_magnet(magnet: String) -> String {
 /// # Returns
 /// * JSON string with validation result
 #[frb(sync)]
-pub fn PeerHints_validate_address(address: String) -> String {
+pub fn peer_hints_validate_address(address: String) -> String {
     match SocketAddr::from_str(&address) {
         Ok(addr) => {
             // Additional validation: reject unspecified IPs and port 0
@@ -123,7 +123,7 @@ pub fn PeerHints_validate_address(address: String) -> String {
 //  /// Returns: {success: true, count: 2} if two local interfaces found
 ///  ```
 #[frb(sync)]
-pub fn PeerHints_discoverLocal() -> String {
+pub fn peer_hints_discover_local() -> String {
     let hints = crate::substrate::lan_discovery::discover_local_peers();
     format!(r#"{{"success":true, "count":{}}}"#, hints.as_slice().len())
 }
@@ -139,31 +139,31 @@ mod tests {
     
     #[test]
     fn test_peer_hints_create_valid() {
-        let result = PeerHints_create(vec!["192.168.1.100:6881".to_string()]);
+        let result = peer_hints_create(vec!["192.168.1.100:6881".to_string()]);
         assert!(result.contains(r#""success":true"#));
         assert!(result.contains(r#""count":1"#));
     }
     
     #[test]
     fn test_peer_hints_create_invalid_ip() {
-        let result = PeerHints_create(vec!["999.999.999.999:6881".to_string()]);
+        let result = peer_hints_create(vec!["999.999.999.999:6881".to_string()]);
         assert!(result.contains(r#""success":false"#));
     }
     
     #[test]
     fn test_peer_hints_from_magnet() {
         let magnet = "magnet:?xt=urn:btih:abcdefghijklmnop&x.pe=192.168.1.100:6881";
-        let result = PeerHints_from_magnet(magnet.to_string());
+        let result = peer_hints_from_magnet(magnet.to_string());
         assert!(result.contains(r#""success":true"#));
         assert!(result.contains(r#""count":1"#));
     }
     
     #[test]
     fn test_validate_address() {
-        let result = PeerHints_validate_address("192.168.1.100:6881".to_string());
+        let result = peer_hints_validate_address("192.168.1.100:6881".to_string());
         assert!(result.contains(r#""success":true"#));
         
-        let result2 = PeerHints_validate_address("0.0.0.0:6881".to_string());
+        let result2 = peer_hints_validate_address("0.0.0.0:6881".to_string());
         assert!(result2.contains(r#""success":false"#));
         assert!(result2.contains("Unspecified IP"));
     }
