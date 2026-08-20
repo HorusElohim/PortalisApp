@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- Kept native Android MediaStore and iOS PhotoKit adapters inside the Nexus
+  platform namespace, separating platform glue from the app-facing Rust bridge
+  and preserving a scalable backend layout.
+
 ### Removed
 
 - Removed the Iroh-based Nexus control plane (QUIC transport, server, and client crates). The product is now BitTorrent-only; peer discovery uses the BitTorrent substrate with QR-first bootstrap (ADR-0003.5, ADR-0009). The collection crypto (capsule sealing, key rotation, chain verification) was extracted into `backend::crypto` and no longer depends on Iroh. The `portalis-nexus-client`, `portalis-nexus-server`, `portalis-nexus-server-core`, `portalis-nexus-storage`, `demo`, and `iroh` dependencies are gone.

@@ -40,6 +40,7 @@ static NSURL *PortalisDirectAssetURL(PHAsset *asset, NSError **outError) {
       requestAVAssetForVideo:asset
       options:options
       resultHandler:^(AVAsset *avAsset, AVAudioMix *audioMix, NSDictionary *info) {
+        (void)audioMix;
         if ([avAsset isKindOfClass:AVURLAsset.class]) {
           url = ((AVURLAsset *)avAsset).URL;
         }

@@ -13,6 +13,8 @@ pub mod domain;
 pub mod linked_source_store;
 pub mod log;
 pub mod paths;
+/// Native Android and iOS adapters, isolated from the platform-neutral core.
+pub(crate) mod platform;
 pub mod projection;
 pub mod settings;
 pub mod store;

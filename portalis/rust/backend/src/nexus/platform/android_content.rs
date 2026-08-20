@@ -17,7 +17,7 @@ static APPLICATION_CONTEXT: OnceLock<Global<JObject<'static>>> = OnceLock::new()
 /// Called exactly once by `PortalisNative.install` during Android activity
 /// startup. Keeping the application context, not an Activity, prevents a
 /// rotation from invalidating long-lived torrent I/O.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "system" fn Java_com_example_portalis_PortalisNative_installContext(
     mut env: EnvUnowned<'_>,
     _class: JClass,

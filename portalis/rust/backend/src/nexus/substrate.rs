@@ -139,7 +139,19 @@ impl PeerHints {
 }
 
 pub mod lan_discovery {
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "windows",
+        target_os = "macos"
+    ))]
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "windows",
+        target_os = "macos"
+    ))]
     use std::str::FromStr;
 
     use crate::nexus::substrate::PeerHints;
