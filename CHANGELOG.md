@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Collection publication now uses one referenced-storage path for every
+  source. Portalis reads and hashes the original files directly; it never
+  creates hard-link, clone, or copied source layouts.
+
 - Kept native Android MediaStore and iOS PhotoKit adapters inside the Nexus
   platform namespace, separating platform glue from the app-facing Rust bridge
   and preserving a scalable backend layout.
@@ -20,9 +24,10 @@
   of leaving the collection paused after confirmation. Once publication
   persists its info hash, the collection exposes a usable share URI and QR.
 
-- Fixed gallery-linked collection publication persisting its torrent descriptor
-  before librqbit opens referenced storage, allowing iOS Photos shares to
-  create and seed their torrent instead of failing with a missing descriptor.
+- Fixed referenced collection publication persisting its torrent descriptor
+  before librqbit opens referenced storage, allowing filesystem and iOS Photos
+  shares to create and seed their torrent instead of failing with a missing
+  descriptor.
 
 - Fixed the staged Nexus migration opening `portalis.redb` twice on app start. The active legacy collection path and Nexus runtime now share one process-owned database handle until the legacy path is removed.
 

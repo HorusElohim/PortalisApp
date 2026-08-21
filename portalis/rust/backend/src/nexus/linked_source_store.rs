@@ -47,3 +47,13 @@ pub(crate) fn descriptor_for(info_hash: &str) -> anyhow::Result<Vec<u8>> {
         .map(|record| record.torrent_bytes)
         .ok_or_else(|| anyhow::anyhow!("no descriptor was persisted for {info_hash}"))
 }
+
+/// The original locations a referenced torrent reads, when this device owns
+/// them. These paths are projection data, not a staging layout: a caller uses
+/// them to preview the same source the storage adapter reads.
+pub(crate) fn sources_for(info_hash: &str) -> anyhow::Result<Option<Vec<SourceFile>>> {
+    Ok(load()?
+        .into_iter()
+        .find(|record| record.info_hash.eq_ignore_ascii_case(info_hash))
+        .map(|record| record.sources))
+}

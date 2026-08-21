@@ -160,14 +160,6 @@ impl PublishProgress {
         state.stage = stage.into();
     }
 
-    fn advance(&self, bytes: u64) {
-        let mut state = self.inner.lock().unwrap();
-        state.processed_bytes = state
-            .processed_bytes
-            .saturating_add(bytes)
-            .min(state.total_bytes);
-    }
-
     fn advance_hashing(&self, bytes: u64, completed_piece: bool) {
         let mut state = self.inner.lock().unwrap();
         state.processed_bytes = state
@@ -506,8 +498,8 @@ pub mod native {
     use librqbit::api::TorrentIdOrHash;
     use librqbit::storage::{StorageFactory, StorageFactoryExt, TorrentStorage};
     use librqbit::{
-        AddTorrent, AddTorrentOptions, AddTorrentResponse, Api, CreateTorrentOptions,
-        ManagedTorrentShared, Session, TorrentMetadata,
+        AddTorrent, AddTorrentOptions, AddTorrentResponse, Api, ManagedTorrentShared, Session,
+        TorrentMetadata,
     };
     use librqbit_core::Id20;
     use librqbit_core::torrent_metainfo::{
@@ -522,17 +514,6 @@ pub mod native {
     };
 
     static SESSION: OnceCell<Arc<Session>> = OnceCell::const_new();
-
-    /// The precise place librqbit hashes and seeds. A single selected file is
-    /// already a valid torrent root; several independent files need a shared
-    /// directory, represented by hard links rather than copied content.
-    struct SeedLayout {
-        hash_path: PathBuf,
-        output_folder: PathBuf,
-        link_directory: Option<PathBuf>,
-        linked_paths: Vec<PathBuf>,
-        torrent_name: Option<String>,
-    }
 
     #[derive(Clone)]
     struct ReferencedStorageFactory {
@@ -711,9 +692,11 @@ pub mod native {
         output_dir_for(&settings)
     }
 
-    fn source_link_dir(name: &str) -> PathBuf {
+    /// Holds librqbit's private metadata for a referenced collection, never a
+    /// second representation of the person's source media.
+    fn referenced_metadata_dir(name: &str) -> PathBuf {
         crate::nexus::paths::state_dir()
-            .join("source-links")
+            .join("referenced-torrents")
             .join(name)
     }
 
@@ -884,130 +867,7 @@ pub mod native {
                 crate::nexus::content_location::ContentLocation::from_source_path(&file.path)
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
-        if sources
-            .iter()
-            .any(crate::nexus::content_location::ContentLocation::requires_native_storage)
-        {
-            return create_referenced_collection(
-                session,
-                collection_name,
-                files,
-                sources,
-                progress,
-            )
-            .await;
-        }
-        let layout = if let [file] = files.as_slice() {
-            let hash_path =
-                crate::nexus::content_location::ContentLocation::from_source_path(&file.path)?
-                    .filesystem_path()
-                    .to_path_buf();
-            let output_folder = hash_path
-                .parent()
-                .context("a source file must have a parent directory")?
-                .to_path_buf();
-            SeedLayout {
-                hash_path,
-                output_folder,
-                link_directory: None,
-                linked_paths: Vec::new(),
-                // A single-file torrent's root name must remain its filename
-                // so librqbit finds the selected file in its original folder.
-                torrent_name: None,
-            }
-        } else {
-            // Multi-file torrents need one common filesystem root for
-            // librqbit, but this internal layout is made of hard links, not
-            // downloaded content. Keep the directory entries in Portalis'
-            // private state rather than making them look like copied files in
-            // the user's Downloads folder.
-            let dir = source_link_dir(&collection_name);
-            std::fs::create_dir_all(&dir)
-                .with_context(|| format!("creating collection dir {dir:?}"))?;
-            progress.set_stage("linking");
-            let layout_dir = dir.clone();
-            let layout_files = files.clone();
-            let layout_progress = progress.clone();
-            let linked_paths = match tokio::task::spawn_blocking(move || {
-                link_sources(&layout_dir, &layout_files, &layout_progress)
-            })
-            .await
-            .context("source linking task failed")
-            {
-                Ok(result) => result,
-                Err(error) => return Err(error),
-            }?;
-            SeedLayout {
-                hash_path: dir.clone(),
-                output_folder: dir.clone(),
-                link_directory: Some(dir),
-                linked_paths,
-                torrent_name: Some(collection_name),
-            }
-        };
-
-        if let Err(error) = progress.ensure_active() {
-            discard_seed_layout(&layout);
-            return Err(error);
-        }
-        progress.set_stage("hashing");
-        let created = match librqbit::create_torrent(
-            &layout.hash_path,
-            CreateTorrentOptions {
-                name: layout.torrent_name.as_deref(),
-                ..Default::default()
-            },
-        )
-        .await
-        .with_context(|| format!("building .torrent metadata from {:?}", layout.hash_path))
-        {
-            Ok(created) => created,
-            Err(error) => {
-                discard_seed_layout(&layout);
-                return Err(error);
-            }
-        };
-
-        if let Err(error) = progress.ensure_active() {
-            discard_seed_layout(&layout);
-            return Err(error);
-        }
-        progress.set_stage("seeding");
-        let opts = AddTorrentOptions {
-            overwrite: true,
-            // Explicit, not the session default + auto subfolder — the
-            // files are already sitting at the canonical output folder, so this must
-            // match precisely or librqbit will look for them in the wrong
-            // place and try to re-download what we just wrote.
-            output_folder: Some(layout.output_folder.to_string_lossy().into_owned()),
-            ..Default::default()
-        };
-        let torrent_bytes = match created
-            .as_bytes()
-            .context("encoding created torrent metadata")
-        {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                discard_seed_layout(&layout);
-                return Err(error);
-            }
-        };
-        let response = match session
-            .add_torrent(AddTorrent::from_bytes(torrent_bytes), Some(opts))
-            .await
-            .with_context(|| {
-                format!(
-                    "adding created torrent, output_folder={:?}",
-                    layout.output_folder
-                )
-            }) {
-            Ok(response) => response,
-            Err(error) => {
-                discard_seed_layout(&layout);
-                return Err(error);
-            }
-        };
-        response_to_info(&api(session), response)
+        create_referenced_collection(session, collection_name, files, sources, progress).await
     }
 
     async fn create_referenced_collection(
@@ -1044,7 +904,7 @@ pub mod native {
 
         progress.ensure_active()?;
         progress.set_stage("seeding");
-        let metadata_dir = source_link_dir(&collection_name);
+        let metadata_dir = referenced_metadata_dir(&collection_name);
         std::fs::create_dir_all(&metadata_dir)?;
         let options = AddTorrentOptions {
             overwrite: true,
@@ -1053,6 +913,10 @@ pub mod native {
             ..Default::default()
         };
         let persisted_bytes = torrent_bytes.to_vec();
+        let source_paths = files
+            .iter()
+            .map(|source| source.path.clone())
+            .collect::<Vec<_>>();
         // librqbit constructs the referenced storage while adding this
         // torrent. That storage resolves the descriptor through this vault,
         // so writing it after `add_torrent` is too late: the first open sees
@@ -1075,7 +939,10 @@ pub mod native {
                 return Err(error);
             }
         };
-        let info = response_to_info(&api(session), response)?;
+        let mut info = response_to_info(&api(session), response)?;
+        for (torrent_file, source_path) in info.files.iter_mut().zip(source_paths) {
+            torrent_file.absolute_path = source_path;
+        }
         anyhow::ensure!(
             info.info_hash.eq_ignore_ascii_case(&info_hash),
             "created torrent info hash disagrees with its metainfo"
@@ -1184,132 +1051,6 @@ pub mod native {
         let mut writer = DigestWriter(Sha1::new());
         bencode_serialize_to_writer(info, &mut writer)?;
         Ok(Id20::new(writer.0.finish()))
-    }
-
-    /// Only paths created by this publication may be removed on failure. The
-    /// old recursive cleanup could erase a pre-existing collection directory.
-    fn discard_seed_layout(layout: &SeedLayout) {
-        if let Some(dir) = &layout.link_directory {
-            discard_linked_sources(dir, &layout.linked_paths);
-        }
-    }
-
-    fn discard_linked_sources(dir: &std::path::Path, created: &[PathBuf]) {
-        for path in created.iter().rev() {
-            if let Err(error) = std::fs::remove_file(path) {
-                crate::nexus::log::clog!(
-                    "torrent",
-                    "could not remove linked source {path:?}: {error}"
-                );
-            }
-        }
-        let _ = std::fs::remove_dir(dir);
-    }
-
-    /// Builds the collection directory without duplicating source bytes. A
-    /// hard link is a second name for the same data; on macOS, where the App
-    /// Sandbox refuses `link(2)` across the container boundary even for a
-    /// file the person just picked, a `clonefile` is the same promise kept a
-    /// different way — a second, independent inode whose data blocks are
-    /// copy-on-write shared with the source, permitted where a hard link is
-    /// not because the sandbox accounts it as an ordinary write rather than
-    /// the specially-restricted link operation. Either way nothing is
-    /// duplicated on disk until one of the two names is edited.
-    ///
-    /// A failure of both is deliberately surfaced instead of falling back to
-    /// a real copy: callers can choose a source on the same filesystem or a
-    /// canonical Portalis destination, but Portalis must not silently violate
-    /// its one-copy contract.
-    fn link_sources(
-        dir: &std::path::Path,
-        files: &[SourceFile],
-        progress: &PublishProgress,
-    ) -> anyhow::Result<Vec<PathBuf>> {
-        let mut created = Vec::with_capacity(files.len());
-        for file in files {
-            progress.ensure_active()?;
-            let source =
-                crate::nexus::content_location::ContentLocation::from_source_path(&file.path)?
-                    .filesystem_path()
-                    .to_path_buf();
-            let destination = dir.join(sanitize_component(&file.name));
-            let length = std::fs::metadata(&source)
-                .with_context(|| format!("reading source metadata {source:?}"))?
-                .len();
-
-            if source != destination {
-                if let Err(error) = same_bytes_new_name(&source, &destination) {
-                    if !is_resumable_link(&destination, length) {
-                        discard_linked_sources(dir, &created);
-                        return Err(error).with_context(|| {
-                            format!(
-                                "linking {source:?} into {destination:?}; Portalis will not copy source bytes"
-                            )
-                        });
-                    }
-                } else {
-                    created.push(destination);
-                }
-            }
-            progress.advance(length);
-        }
-        Ok(created)
-    }
-
-    /// A hard link, or — only where and only because the OS refuses one — a
-    /// copy-on-write clone. Never a byte-for-byte copy.
-    fn same_bytes_new_name(
-        source: &std::path::Path,
-        destination: &std::path::Path,
-    ) -> std::io::Result<()> {
-        let error = match std::fs::hard_link(source, destination) {
-            Ok(()) => return Ok(()),
-            Err(error) => error,
-        };
-        #[cfg(target_os = "macos")]
-        if macos_clonefile::clone_file(source, destination).is_ok() {
-            return Ok(());
-        }
-        Err(error)
-    }
-
-    /// The one macOS-specific syscall this codebase makes, and made this way
-    /// rather than through a dependency: `clonefile(2)` has had the same
-    /// three-argument C signature since it shipped with APFS, so binding it
-    /// directly is less code than a crate whose surface exists to abstract
-    /// differences this file does not need to hide.
-    #[cfg(target_os = "macos")]
-    mod macos_clonefile {
-        use std::ffi::CString;
-        use std::os::unix::ffi::OsStrExt;
-        use std::path::Path;
-
-        unsafe extern "C" {
-            fn clonefile(source: *const i8, destination: *const i8, flags: u32) -> i32;
-        }
-
-        pub(super) fn clone_file(source: &Path, destination: &Path) -> std::io::Result<()> {
-            let source = CString::new(source.as_os_str().as_bytes())?;
-            let destination = CString::new(destination.as_os_str().as_bytes())?;
-            // SAFETY: both pointers come from `CString`s kept alive for the
-            // duration of the call, and `clonefile` writes through neither.
-            let result = unsafe { clonefile(source.as_ptr(), destination.as_ptr(), 0) };
-            if result == 0 {
-                Ok(())
-            } else {
-                Err(std::io::Error::last_os_error())
-            }
-        }
-    }
-
-    /// Import batches use a UUID in their layout directory name. If a process
-    /// was interrupted after making a link, the matching regular file and
-    /// length identify that durable batch layout without rereading gigabytes.
-    /// Torrent hashing remains the single content-verification pass.
-    fn is_resumable_link(path: &std::path::Path, length: u64) -> bool {
-        std::fs::metadata(path)
-            .map(|metadata| metadata.is_file() && metadata.len() == length)
-            .unwrap_or(false)
     }
 
     /// Real per-file paths, resolved via `Api::api_torrent_details` rather
@@ -1444,7 +1185,13 @@ pub mod native {
             .live
             .as_ref()
             .map_or(0, |live| live.snapshot.peer_stats.live as u32);
-        let files = files_for(api, id, &stats, initializing);
+        let info_hash = handle.info_hash().as_string();
+        let mut files = files_for(api, id, &stats, initializing);
+        if let Ok(Some(sources)) = crate::nexus::linked_source_store::sources_for(&info_hash) {
+            for (file, source) in files.iter_mut().zip(sources) {
+                file.absolute_path = source.path;
+            }
+        }
         // `PeerStatsFilter`/`PeerStatsSnapshot` are private-in-public on
         // `Api::api_peer_stats` (librqbit 8.1.1) — reachable through type
         // inference and field access without ever naming them, same as
@@ -1479,7 +1226,7 @@ pub mod native {
 
         TorrentInfo {
             id,
-            info_hash: handle.info_hash().as_string(),
+            info_hash,
             name: handle.name().unwrap_or_else(|| "(unnamed)".to_string()),
             state,
             progress_bytes: if initializing {
@@ -1883,38 +1630,8 @@ pub mod native {
     }
 
     #[cfg(test)]
-    mod link_tests {
-        use super::{PublishProgress, SourceFile, create_referenced_metainfo, link_sources};
-
-        #[test]
-        fn source_layout_is_a_link_not_a_second_file() {
-            let root =
-                std::env::temp_dir().join(format!("portalis-links-{}", uuid::Uuid::new_v4()));
-            let source_dir = root.join("source");
-            let layout_dir = root.join("layout");
-            std::fs::create_dir_all(&source_dir).unwrap();
-            std::fs::create_dir_all(&layout_dir).unwrap();
-            let source = source_dir.join("clip.mp4");
-            std::fs::write(&source, b"first").unwrap();
-
-            let files = [SourceFile {
-                name: "clip.mp4".into(),
-                path: source.to_string_lossy().into_owned(),
-                length_bytes: None,
-            }];
-            let created = link_sources(&layout_dir, &files, &PublishProgress::new(5)).unwrap();
-            assert_eq!(created, vec![layout_dir.join("clip.mp4")]);
-
-            // A write through the original name is visible through the
-            // collection name: this proves the layout does not contain a
-            // copied byte sequence.
-            std::fs::write(&source, b"again").unwrap();
-            assert_eq!(
-                std::fs::read(layout_dir.join("clip.mp4")).unwrap(),
-                b"again"
-            );
-            std::fs::remove_dir_all(root).unwrap();
-        }
+    mod referenced_storage_tests {
+        use super::{PublishProgress, SourceFile, create_referenced_metainfo};
 
         #[test]
         fn referenced_descriptor_is_persisted_before_session_admission() {
@@ -1955,92 +1672,13 @@ pub mod native {
                     .expect("the storage factory can read the descriptor"),
                 descriptor.as_ref()
             );
+            let persisted = crate::nexus::linked_source_store::sources_for(&info_hash)
+                .expect("reads source record")
+                .expect("record exists");
+            assert_eq!(persisted.len(), 1);
+            assert_eq!(persisted[0].path, files[0].path);
             crate::nexus::linked_source_store::remove(&info_hash).unwrap();
             std::fs::remove_dir_all(root).unwrap();
-        }
-
-        /// `clonefile` on its own — not through `link_sources`, since a test
-        /// binary is not sandboxed and `hard_link` succeeds first there,
-        /// exactly as it should. What needs proving here is `clone_file`
-        /// itself: a real, independent file, not a link wearing a new name.
-        #[cfg(target_os = "macos")]
-        #[test]
-        fn a_clone_is_a_real_file_that_stops_agreeing_once_either_side_is_written() {
-            let root =
-                std::env::temp_dir().join(format!("portalis-clone-{}", uuid::Uuid::new_v4()));
-            std::fs::create_dir_all(&root).unwrap();
-            let source = root.join("source.bin");
-            let clone = root.join("clone.bin");
-            std::fs::write(&source, b"first").unwrap();
-
-            super::macos_clonefile::clone_file(&source, &clone).expect("clones");
-            assert_eq!(std::fs::read(&clone).unwrap(), b"first");
-
-            // Unlike a hard link's shared inode, each name now owns its own
-            // future: this is what makes a clone the safer choice for a
-            // system that hashes published bytes and must not have them
-            // change out from under it if the person edits their original.
-            std::fs::write(&source, b"second").unwrap();
-            assert_eq!(std::fs::read(&clone).unwrap(), b"first");
-
-            std::fs::remove_dir_all(root).unwrap();
-        }
-
-        /// The sandboxed EPERM this fallback exists for cannot be reproduced
-        /// outside an actual sandboxed process — both a hard link and a clone
-        /// need the same "create a directory entry here" permission, so
-        /// anything that denies one portably denies both. What a read-only
-        /// directory *can* prove is that `link_sources` actually calls the
-        /// fallback and still fails cleanly when neither can land, rather
-        /// than panicking or silently reporting success.
-        #[cfg(target_os = "macos")]
-        #[test]
-        fn neither_a_link_nor_a_clone_can_land_in_a_read_only_directory() {
-            let root = std::env::temp_dir()
-                .join(format!("portalis-clone-fallback-{}", uuid::Uuid::new_v4()));
-            let source_dir = root.join("source");
-            std::fs::create_dir_all(&source_dir).unwrap();
-            let source = source_dir.join("clip.mp4");
-            std::fs::write(&source, b"bytes").unwrap();
-
-            // A read-only directory refuses the new directory entry a hard
-            // link needs, exactly as the sandbox does — chosen because it is
-            // reproducible on any machine, unlike the sandbox itself.
-            let layout_dir = root.join("layout");
-            std::fs::create_dir_all(&layout_dir).unwrap();
-            std::fs::set_permissions(
-                &layout_dir,
-                std::os::unix::fs::PermissionsExt::from_mode(0o500),
-            )
-            .unwrap();
-
-            let files = [SourceFile {
-                name: "clip.mp4".into(),
-                path: source.to_string_lossy().into_owned(),
-                length_bytes: None,
-            }];
-            let result = link_sources(&layout_dir, &files, &PublishProgress::new(5));
-
-            // Cleanup rather than assertion: `link_sources`'s own failure
-            // path already removes the empty layout directory, so whether it
-            // still exists depends on that path, not on anything this test
-            // is checking. `root`'s own permissions were never touched, so
-            // removing it removes whatever of `layout_dir` is left too.
-            let _ = std::fs::set_permissions(
-                &layout_dir,
-                std::os::unix::fs::PermissionsExt::from_mode(0o700),
-            );
-            std::fs::remove_dir_all(&root).unwrap();
-
-            // A read-only directory refuses a clone for the same reason it
-            // refuses a link, so this asserts the fallback ran and failed the
-            // same honest way, not that it silently produced a file.
-            let error = result.expect_err("neither a link nor a clone can land here");
-            assert!(
-                error
-                    .to_string()
-                    .contains("Portalis will not copy source bytes")
-            );
         }
     }
 }

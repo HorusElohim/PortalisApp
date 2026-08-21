@@ -5,7 +5,7 @@
 //! iOS. Android MediaStore URIs will add a native random-access implementation
 //! here; they must never be converted to a cache path merely to fit a path API.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// A canonical location whose bytes may be hashed, transferred, previewed,
 /// and seeded. Each collection item has one such location.
@@ -38,14 +38,6 @@ impl ContentLocation {
         Ok(Self::Filesystem(PathBuf::from(source)))
     }
 
-    pub(crate) fn filesystem_path(&self) -> &Path {
-        match self {
-            Self::Filesystem(path) => path,
-            #[cfg(target_os = "ios")]
-            Self::PhotoAsset(_) => panic!("a Photos asset has no filesystem path"),
-        }
-    }
-
     pub(crate) fn length(&self, known_length: Option<u64>) -> anyhow::Result<u64> {
         #[cfg(not(target_os = "ios"))]
         let _ = known_length;
@@ -68,14 +60,6 @@ impl ContentLocation {
                 }
                 Ok(measured_length)
             }
-        }
-    }
-
-    pub(crate) fn requires_native_storage(&self) -> bool {
-        match self {
-            Self::Filesystem(_) => false,
-            #[cfg(target_os = "ios")]
-            Self::PhotoAsset(_) => true,
         }
     }
 
@@ -115,11 +99,11 @@ mod tests {
     }
 
     #[test]
-    fn accepts_a_filesystem_location() {
+    fn keeps_a_filesystem_location_as_its_original_path() {
         let location = ContentLocation::from_source_path("C:/Media/photo.jpg").unwrap();
-        assert_eq!(
-            location.filesystem_path().to_string_lossy(),
-            "C:/Media/photo.jpg"
-        );
+        assert!(matches!(
+            location,
+            ContentLocation::Filesystem(path) if path == std::path::Path::new("C:/Media/photo.jpg")
+        ));
     }
 }
