@@ -20,6 +20,12 @@
 
 ### Fixed
 
+- Collection QR magnets now include the sender's private-LAN address and the
+  BitTorrent session's actual bound port as direct `x.pe` bootstrap hints. A
+  receiver on the same network can resolve the file list without relying on a
+  tracker, DHT, or guessed default port. Torrent views now label their
+  process-local collection number as **Local handle**, not as an info hash.
+
 - Scanning a collection QR now stays on the receiver path: Portalis imports
   the Mac's magnet, waits for its file list, and starts downloading the
   selected remote files. Incoming torrents no longer present or invoke a

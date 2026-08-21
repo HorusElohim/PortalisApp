@@ -89,6 +89,24 @@ void main() {
       );
     });
 
+    testWidgets('a torrent labels its process-local handle honestly',
+        (tester) async {
+      final collection = buildCollection(nature: 'Torrent');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CollectionScreen(
+            collection: collection,
+            source: _FixedSource(collection),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Local handle'), findsOneWidget);
+      expect(find.text('Info hash'), findsNothing);
+    });
+
     testWidgets('active and disconnected peers have honest distinct colours',
         (tester) async {
       final observedAt = DateTime.now().subtract(const Duration(seconds: 12));
