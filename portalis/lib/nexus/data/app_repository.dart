@@ -16,6 +16,7 @@ abstract interface class AppRepository {
   Future<void> setActive(bool active);
   Stream<AppSnapshot> watchStates();
   Stream<AppDetail?> watchDetail(int? collection);
+  Future<String?> shareUri(int collection);
 
   /// One collection's readings, as they are recorded.
   ///
@@ -45,6 +46,10 @@ class FrbAppRepository implements AppRepository {
   @override
   Stream<AppDetail?> watchDetail(int? collection) =>
       bridge.watchDetail(collection: collection);
+
+  @override
+  Future<String?> shareUri(int collection) =>
+      bridge.shareUri(collection: collection);
 
   @override
   Stream<Uint8List> watchHistory(int collection) =>

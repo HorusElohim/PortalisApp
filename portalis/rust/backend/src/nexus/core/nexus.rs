@@ -1082,6 +1082,28 @@ impl Nexus {
             .ok_or_else(|| missing_collection(handle))
     }
 
+    /// The import URI for a collection the local substrate is actually
+    /// carrying. A collection handle is process-local, so it cannot be shown
+    /// to another device; the persisted BitTorrent info hash is the stable
+    /// identifier that the existing import flow understands.
+    pub fn share_uri(&self, collection: Handle) -> Result<Option<String>, CommandError> {
+        let key = self.collection_key(collection)?;
+        let Some(handle) = self
+            .store
+            .collection(&key)
+            .map_err(persistence)?
+            .and_then(|stored| stored.substrate_handle)
+        else {
+            return Ok(None);
+        };
+        // Do not turn a damaged local store row into a QR code that claims to
+        // name a torrent. A valid v1 info hash is exactly forty hex digits.
+        if handle.len() != 40 || !handle.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Ok(None);
+        }
+        Ok(Some(format!("magnet:?xt=urn:btih:{handle}")))
+    }
+
     fn collection_detail(&self, collection: Handle) -> Option<Detail> {
         self.detail_sources().build(collection)
     }
@@ -1676,6 +1698,36 @@ mod tests {
         nexus.store.put_collection(&key, &stored).expect("writes");
 
         (handle, media)
+    }
+
+    #[tokio::test]
+    async fn only_a_carried_collection_has_a_share_uri() {
+        let scratch = Scratch::new("collection-share-uri");
+        let nexus = open(&scratch);
+        let accepted = nexus
+            .command(&Command::CreateCollection {
+                name: "Iceland".to_owned(),
+                files: Vec::new(),
+            })
+            .expect("creates a collection");
+        let collection = accepted.collection.expect("names the collection");
+
+        assert_eq!(nexus.share_uri(collection).expect("known collection"), None);
+
+        let key = nexus.collection_key(collection).expect("finds its key");
+        let mut stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads")
+            .expect("exists");
+        stored.substrate_handle = Some("01".repeat(20));
+        nexus.store.put_collection(&key, &stored).expect("writes");
+
+        assert_eq!(
+            nexus.share_uri(collection).expect("builds the URI"),
+            Some("magnet:?xt=urn:btih:0101010101010101010101010101010101010101".to_owned())
+        );
+        nexus.close().await;
     }
 
     /// A draft is private to this device. Nothing is hashed, nothing is

@@ -18,6 +18,7 @@ import 'add_sources.dart';
 import 'contents.dart';
 import 'commands.dart';
 import 'overview.dart';
+import 'share_qr.dart';
 import 'source.dart';
 import '../../../design/theme.dart';
 
@@ -201,6 +202,30 @@ class _CollectionDetailState extends State<CollectionDetail> {
         _toast('Fetching $started item${started == 1 ? '' : 's'}');
       });
 
+  Future<void> _shareQr() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    String? uri;
+    try {
+      uri = await widget.source.shareUri(_collection.id);
+    } catch (error) {
+      if (mounted) _toast("Couldn't prepare a QR code: $error");
+      return;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    if (uri == null) {
+      _toast('This collection is still preparing its share link');
+      return;
+    }
+    await showCollectionShareQrDialog(
+      context,
+      collectionName: _collection.name,
+      uri: uri,
+    );
+  }
+
   Future<void> _delete() async {
     final collection = _collection;
     final choice = await confirmCollectionDeletion(
@@ -353,6 +378,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
           showTitle: widget.showTitle && !_namesInHeader(collection),
           onAddMedia: _addMedia,
           onFetch: _fetchPending,
+          onShareQr: collection.isSharing ? () => unawaited(_shareQr()) : null,
           editing: _isEditing,
           paused: collection.isPaused,
         ),

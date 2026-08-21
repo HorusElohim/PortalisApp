@@ -89,6 +89,8 @@ class AppController extends ChangeNotifier {
 
   Future<AppAccepted> send(EngineCommand command) => _repository.send(command);
 
+  Future<String?> shareUri(int collection) => _repository.shareUri(collection);
+
   /// Selects the one collection whose expensive detail projection is needed.
   /// Widgets consume this stream directly; it deliberately does not become a
   /// second app-level cache beside [state].

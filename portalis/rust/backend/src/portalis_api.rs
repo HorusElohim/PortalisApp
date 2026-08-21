@@ -251,6 +251,18 @@ pub async fn watch_detail(
     }
 }
 
+/// The collection's shareable magnet URI, when the local substrate has a real
+/// persisted info hash for it. The URI is fetched on demand rather than added
+/// to every snapshot because a QR is only useful on the screen that asked for
+/// it.
+pub fn share_uri(collection: u32) -> Result<Option<String>, String> {
+    locked_runtime()?
+        .as_ref()
+        .ok_or_else(|| "start Nexus before sharing a collection".to_owned())?
+        .share_uri(Handle(collection))
+        .map_err(|error| error.to_string())
+}
+
 /// One collection's transfer history, as it happens.
 ///
 /// Its own stream rather than a field of the detail, because it changes for a

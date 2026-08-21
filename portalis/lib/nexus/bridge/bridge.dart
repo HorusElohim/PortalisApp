@@ -5,7 +5,6 @@
 
 import 'frb_generated.dart';
 import 'nexus/device.dart';
-import 'nexus/settings.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 String getVersion() => RustLib.instance.api.crateBridgeGetVersion();
