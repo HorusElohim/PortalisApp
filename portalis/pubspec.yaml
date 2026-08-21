@@ -28,7 +28,7 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
-  mobile_scanner: ^4.0.0
+  mobile_scanner: ^7.4.0
   flutter:
     sdk: flutter
 
@@ -42,7 +42,7 @@ dependencies:
 
   # Cross-platform file picker, used by the Torrent tab to pick a .torrent
   # file (magnet links are just a text field).
-  file_picker: ^11.0.2
+  file_picker: ^12.0.0
 
   # Opens a downloaded torrent file with the OS default app (image viewer,
   # video player, etc.) from the Torrent tab's detail screen.
@@ -62,7 +62,7 @@ dependencies:
   shared_preferences: ^2.5.5
   image_picker: ^1.2.3
   qr_flutter: ^4.1.0
-  desktop_drop: ^0.7.1
+  desktop_drop: ^0.8.0
 
 dev_dependencies:
   flutter_test:
@@ -101,10 +101,6 @@ flutter_launcher_icons:
 
 # The following section is specific to Flutter packages.
 flutter:
-  # CocoaPods remains explicit until every macOS plugin supports Swift Package
-  # Manager. Flutter documents this project-level compatibility opt-out.
-  config:
-    enable-swift-package-manager: false
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

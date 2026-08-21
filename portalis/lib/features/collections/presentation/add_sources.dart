@@ -183,14 +183,10 @@ Future<ChosenSources?> _pickFiles() async {
   if (!supportsDirectPathSources) {
     throw PickerFailure(noCopySourceUnavailableMessage);
   }
-  final result = await FilePicker.pickFiles(
-    withData: false,
-    allowMultiple: true,
-    type: FileType.any,
-  );
-  if (result == null) return null;
+  final result = await FilePicker.pickFiles(type: FileType.any);
+  if (result.isEmpty) return null;
   try {
-    final picked = await Future.wait(result.files.map(
+    final picked = await Future.wait(result.map(
       (file) => pickedFileFrom(name: file.name, nativePath: file.path),
     ));
     return _asTorrentIfSingleDescriptor(picked) ?? LocalSources(picked);

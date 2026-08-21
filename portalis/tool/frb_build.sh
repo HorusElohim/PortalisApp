@@ -39,6 +39,9 @@ function maybe_codegen() {
     --dart-output "lib/nexus/bridge" \
     --rust-output "$CRATE/src/api.rs" \
     --no-add-mod-to-lib
+  # FRB emits generated Rust with its own import ordering. Format immediately
+  # so a successful regeneration leaves the workspace ready for the fmt gate.
+  (cd "$CRATE" && cargo fmt --all)
 }
 
 function build_macos() {
