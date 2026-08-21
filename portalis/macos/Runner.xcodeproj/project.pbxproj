@@ -418,6 +418,7 @@
 		};
 		4D097EEA2E33AF67006AC3B6 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -429,6 +430,7 @@
 			);
 			outputPaths = (
 			);
+			name = "Build Rust backend";
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"$SRCROOT/Runner/build_backend.sh\"\n";

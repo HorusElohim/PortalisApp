@@ -9,6 +9,10 @@
   tiered `NexusGateway`; redundant collection, media, peer, and history view
   models have been removed.
 
+- Kept CocoaPods explicit for macOS until the app's scanner and media plugins
+  adopt Swift Package Manager, and marked the Rust embedding phase as an
+  intentional every-build Xcode step.
+
 - Kept native Android MediaStore and iOS PhotoKit adapters inside the Nexus
   platform namespace, separating platform glue from the app-facing Rust bridge
   and preserving a scalable backend layout.

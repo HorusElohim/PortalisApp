@@ -101,6 +101,10 @@ flutter_launcher_icons:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # CocoaPods remains explicit until every macOS plugin supports Swift Package
+  # Manager. Flutter documents this project-level compatibility opt-out.
+  config:
+    enable-swift-package-manager: false
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
