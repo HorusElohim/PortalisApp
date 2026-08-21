@@ -4,6 +4,11 @@
 
 ### Changed
 
+- **ADR-0006.5**: The Flutter collection UI now renders generated Nexus
+  summaries, details, entries, history, and commands directly through one
+  tiered `NexusGateway`; redundant collection, media, peer, and history view
+  models have been removed.
+
 - Kept native Android MediaStore and iOS PhotoKit adapters inside the Nexus
   platform namespace, separating platform glue from the app-facing Rust bridge
   and preserving a scalable backend layout.

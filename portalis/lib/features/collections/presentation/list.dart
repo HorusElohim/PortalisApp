@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
-import '../domain/collection.dart';
+import '../../../nexus/domain/app_state.dart';
 import 'commands.dart';
 import 'views.dart';
 
@@ -16,9 +16,9 @@ class CollectionsList extends StatelessWidget {
     this.footer,
   });
 
-  final List<Collection> collections;
-  final ValueChanged<Collection> onOpen;
-  final ValueChanged<(Collection, CollectionCommand)> onCommand;
+  final List<AppCollection> collections;
+  final ValueChanged<AppCollection> onOpen;
+  final ValueChanged<(AppCollection, CollectionCommand)> onCommand;
 
   final Widget? footer;
 

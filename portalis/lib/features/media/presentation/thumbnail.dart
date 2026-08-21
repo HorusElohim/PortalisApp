@@ -8,7 +8,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../../design/theme.dart';
 import '../application/formats.dart';
-import '../domain/item.dart';
+import '../../../nexus/domain/app_state.dart';
 import '../platform/heic_preview.dart';
 
 /// Placeholder tile standing in for real thumbnails/covers/media — shown
@@ -60,7 +60,7 @@ class PlaceholderTile extends StatelessWidget {
   }
 }
 
-/// A [MediaItem]'s thumbnail: the real downloaded image when one's ready,
+/// A [AppEntry]'s thumbnail: the real downloaded image when one's ready,
 /// falling back to [PlaceholderTile] otherwise (not downloaded yet, or not
 /// previewable). Video files render their first frame without starting
 /// playback. Used
@@ -74,7 +74,7 @@ class MediaThumbnail extends StatelessWidget {
     this.decodeSize = 160,
   });
 
-  final MediaItem media;
+  final AppEntry media;
   final double borderRadius;
 
   /// Longest side to decode the source image to, in logical pixels.
@@ -158,7 +158,7 @@ class _NativeImageThumbnail extends StatefulWidget {
     required this.decodeSize,
   });
 
-  final MediaItem media;
+  final AppEntry media;
   final double borderRadius;
   final double decodeSize;
 
@@ -234,7 +234,7 @@ String? _previewTypeLabel(String name) {
 class _VideoThumbnail extends StatefulWidget {
   const _VideoThumbnail({required this.media, required this.borderRadius});
 
-  final MediaItem media;
+  final AppEntry media;
   final double borderRadius;
 
   @override

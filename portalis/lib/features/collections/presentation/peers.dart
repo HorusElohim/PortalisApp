@@ -4,41 +4,40 @@ import '../../../design/design.dart';
 import '../../../design/peer_chip.dart';
 import '../../../design/theme.dart';
 import '../../../nexus/domain/app_state.dart';
-import '../domain/collection.dart';
-import '../domain/peer_observation.dart';
-import 'peer_color.dart';
 
-/// Presents identified collaborators and anonymous torrent observations as one
-/// peer surface while keeping their identity guarantees visually distinct.
+/// Presents generated collaborators and anonymous live swarm addresses.
 class CollectionPeers extends StatelessWidget {
   const CollectionPeers({
     super.key,
     required this.collection,
-    this.peerHistory = const [],
+    required this.detail,
+    required this.contacts,
   });
 
-  final Collection collection;
-  final List<PeerObservation> peerHistory;
+  final AppCollection collection;
+  final AppDetail? detail;
+  final List<AppContact> contacts;
 
   @override
   Widget build(BuildContext context) {
-    final namedPeers = collection.collaborators.take(6).toList();
-    final torrentPeers = _torrentPeers;
-    final total = collection.collaborators.length + torrentPeers.length;
+    final namedPeers = collection.collaboratorsIn(contacts).take(6).toList();
+    final addresses = detail?.peers ?? const <String>[];
+    final total = namedPeers.length + addresses.length;
+    final livePeers = collection.livePeersFor(detail);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionLabel('PEERS - $total'),
         const SizedBox(height: 7),
-        if (torrentPeers.isNotEmpty && collection.totalBytes > 0) ...[
+        if (addresses.isNotEmpty && collection.totalBytesInt > 0) ...[
           _CollectionTransferProgress(collection: collection),
           const SizedBox(height: 10),
         ],
         if (total == 0)
           Text(
-            collection.livePeers == 0
+            livePeers == 0
                 ? 'No peers connected right now'
-                : '${collection.peersLabel} connected - addresses unavailable',
+                : '$livePeers peer${livePeers == 1 ? '' : 's'} connected - addresses unavailable',
             style:
                 monoLabel(size: 10, color: AppColors.textDim, letterSpacing: 0),
           )
@@ -49,34 +48,17 @@ class CollectionPeers extends StatelessWidget {
             children: [
               for (final collaborator in namedPeers)
                 _NamedPeer(collaborator: collaborator),
-              if (collection.collaborators.length > namedPeers.length)
+              if (collection.collaboratorsIn(contacts).length >
+                  namedPeers.length)
                 PeerChip(
                   label:
-                      '+${collection.collaborators.length - namedPeers.length} more',
+                      '+${collection.collaboratorsIn(contacts).length - namedPeers.length} more',
                 ),
-              for (final peer in torrentPeers)
-                _AnonymousPeer(
-                  peer: peer,
-                  active: collection.torrentPeers.contains(peer.address),
-                ),
+              for (final address in addresses) _AnonymousPeer(address: address),
             ],
           ),
       ],
     );
-  }
-
-  List<PeerObservation> get _torrentPeers {
-    if (peerHistory.isNotEmpty) return peerHistory;
-    final now = DateTime.now();
-    return [
-      for (final address in collection.torrentPeers)
-        PeerObservation(
-          collectionId: collection.id,
-          collectionName: collection.name,
-          address: address,
-          lastSeen: now,
-        ),
-    ];
   }
 }
 
@@ -98,29 +80,21 @@ class _NamedPeer extends StatelessWidget {
 }
 
 class _AnonymousPeer extends StatelessWidget {
-  const _AnonymousPeer({
-    required this.peer,
-    required this.active,
-  });
+  const _AnonymousPeer({required this.address});
 
-  final PeerObservation peer;
-  final bool active;
+  final String address;
 
   @override
   Widget build(BuildContext context) => PeerChip(
-        label: peer.address,
-        detail: formatLastSeen(peer.lastSeen),
-        color: active ? AppColors.ember : rememberedPeerColor(peer.address),
+        label: address,
+        color: AppColors.ember,
       );
 }
 
-/// Bytes received by this device for the collection, not an invented split by
-/// peer. BitTorrent addresses identify a current connection but do not expose
-/// a durable, trustworthy contribution ledger after it leaves.
 class _CollectionTransferProgress extends StatelessWidget {
   const _CollectionTransferProgress({required this.collection});
 
-  final Collection collection;
+  final AppCollection collection;
 
   @override
   Widget build(BuildContext context) {
@@ -133,19 +107,12 @@ class _CollectionTransferProgress extends StatelessWidget {
             Text(
               'COLLECTION TRANSFER',
               style: monoLabel(
-                size: 9,
-                color: AppColors.textDim,
-                letterSpacing: 0.35,
-              ),
+                  size: 9, color: AppColors.textDim, letterSpacing: 0.35),
             ),
             const Spacer(),
             Text(
-              formatProgressPercent(collection.progress),
-              style: monoLabel(
-                size: 10,
-                color: color,
-                weight: FontWeight.w700,
-              ),
+              formatProgressPercent(collection.progressFor(null)),
+              style: monoLabel(size: 10, color: color, weight: FontWeight.w700),
             ),
           ],
         ),
@@ -154,7 +121,7 @@ class _CollectionTransferProgress extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.pill),
           child: LinearProgressIndicator(
             key: const Key('collectionPeerTransferProgress'),
-            value: collection.progress.clamp(0.0, 1.0).toDouble(),
+            value: collection.progressFor(null).clamp(0.0, 1.0).toDouble(),
             minHeight: 4,
             backgroundColor: AppColors.borderStrong,
             valueColor: AlwaysStoppedAnimation(color),
@@ -162,7 +129,7 @@ class _CollectionTransferProgress extends StatelessWidget {
         ),
         const SizedBox(height: 5),
         Text(
-          '${formatBytes(collection.downloadedBytes)} of ${formatBytes(collection.totalBytes)} received on this device',
+          '${formatBytes(collection.downloadedBytesInt)} of ${formatBytes(collection.totalBytesInt)} received on this device',
           style: monoLabel(size: 9, color: AppColors.textDim),
         ),
       ],

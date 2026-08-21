@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import '../domain/item.dart';
+import '../../../nexus/domain/app_state.dart';
 
 /// Paints only piece state supplied by the backend. When older/unavailable
 /// telemetry has no ranges, the existing aggregate perimeter remains as the
@@ -16,7 +16,7 @@ class MediaPieceFrame extends StatefulWidget {
     required this.child,
   });
 
-  final MediaItem media;
+  final AppEntry media;
   final Color color;
   final BorderRadius borderRadius;
   final Widget child;
@@ -33,8 +33,10 @@ class _MediaPieceFrameState extends State<MediaPieceFrame>
     value: 1,
   );
 
-  bool get _hasWorkers =>
-      widget.media.pieceRuns.any((run) => run.isDownloading);
+  /// The generated detail currently exposes the aggregate piece bitmap, not
+  /// file-relative worker ranges. Keep the aggregate perimeter honest until
+  /// that direct bridge field exists instead of inventing a media DTO.
+  bool get _hasWorkers => false;
 
   @override
   void didChangeDependencies() {
@@ -68,18 +70,7 @@ class _MediaPieceFrameState extends State<MediaPieceFrame>
 
   @override
   Widget build(BuildContext context) {
-    final size = widget.media.sizeBytes;
-    final segments = size <= 0
-        ? const <PerimeterSegment>[]
-        : [
-            for (final run in widget.media.pieceRuns)
-              PerimeterSegment(
-                start: run.offsetBytes / size,
-                extent: run.lengthBytes / size,
-                active: run.isDownloading,
-                workerCount: run.peers.length,
-              ),
-          ];
+    const segments = <PerimeterSegment>[];
     return AnimatedBuilder(
       animation: _pulse,
       builder: (context, child) => PerimeterProgress(

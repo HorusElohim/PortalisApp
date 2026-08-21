@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/nexus/application/app_controller.dart';
-import 'package:portalis/nexus/data/app_repository.dart';
+import 'package:portalis/nexus/application/nexus_gateway.dart';
 import 'package:portalis/nexus/domain/app_state.dart';
 import 'package:portalis/features/collections/presentation/route.dart';
 import 'package:portalis/features/collections/presentation/home_library.dart';
@@ -13,7 +13,7 @@ import 'package:portalis/features/collections/presentation/home_library.dart';
 void main() {
   test('owns one state subscription and forwards lifecycle changes', () async {
     final repository = _Repository();
-    final controller = AppController(repository: repository);
+    final controller = AppController(gateway: repository);
     var notifications = 0;
     controller.addListener(() => notifications++);
 
@@ -36,7 +36,7 @@ void main() {
 
   test('forwards the selected detail stream without caching it', () async {
     final repository = _Repository();
-    final controller = AppController(repository: repository);
+    final controller = AppController(gateway: repository);
     final detail = AppDetail(
       id: 9,
       entries: [
@@ -66,7 +66,7 @@ void main() {
   /// a delta against what a screen believed it last saw.
   testWidgets('a torrent collection deselects a file in place', (tester) async {
     final repository = _Repository();
-    final controller = AppController(repository: repository);
+    final controller = AppController(gateway: repository);
     await controller.start();
     await tester.binding.setSurfaceSize(const Size(420, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -121,7 +121,7 @@ void main() {
   /// person means by that, so the command is refused rather than sent.
   testWidgets('the last wanted file cannot be deselected', (tester) async {
     final repository = _Repository();
-    final controller = AppController(repository: repository);
+    final controller = AppController(gateway: repository);
     await controller.start();
     await tester.binding.setSurfaceSize(const Size(420, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -164,7 +164,7 @@ void main() {
   testWidgets('a draft collection opens in edit mode and shares on confirm',
       (tester) async {
     final repository = _Repository();
-    final controller = AppController(repository: repository);
+    final controller = AppController(gateway: repository);
     await controller.start();
     await tester.binding.setSurfaceSize(const Size(420, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -281,7 +281,7 @@ void main() {
   testWidgets('a torrent arriving for the first time is not named',
       (tester) async {
     final repository = _Repository();
-    final controller = AppController(repository: repository);
+    final controller = AppController(gateway: repository);
     await controller.start();
     await tester.binding.setSurfaceSize(const Size(420, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -317,7 +317,7 @@ void main() {
   testWidgets('a shared collection edits without offering to share again',
       (tester) async {
     final repository = _Repository();
-    final controller = AppController(repository: repository);
+    final controller = AppController(gateway: repository);
     await controller.start();
     await tester.binding.setSurfaceSize(const Size(420, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -348,7 +348,7 @@ void main() {
   /// they can see, so activity has exactly one derivation.
   test('activity is idle when Nexus holds nothing, whatever else is running',
       () {
-    final controller = AppController(repository: _Repository());
+    final controller = AppController(gateway: _Repository());
 
     // Before any state has arrived at all.
     expect(controller.activity.isMoving, isFalse);
@@ -362,7 +362,7 @@ void main() {
   });
 
   test('activity sums only what is actually moving', () {
-    final controller = AppController(repository: _Repository());
+    final controller = AppController(gateway: _Repository());
     final idle = _collectionState().collections.single;
     controller.debugSeed(
       AppSnapshot(
@@ -415,7 +415,7 @@ void main() {
   testWidgets('the wide layout hands an opened collection to its owner',
       (tester) async {
     final repository = _Repository();
-    final controller = AppController(repository: repository);
+    final controller = AppController(gateway: repository);
     controller.debugSeed(
       _collectionState(),
       details: const Stream<AppDetail?>.empty(),
@@ -452,7 +452,7 @@ void main() {
       'collection detail deletes through the same command bar and dialog '
       'the legacy screen uses', (tester) async {
     final repository = _Repository();
-    final controller = AppController(repository: repository);
+    final controller = AppController(gateway: repository);
     controller.debugSeed(
       _collectionState(),
       details: const Stream<AppDetail?>.empty(),
@@ -477,7 +477,7 @@ void main() {
 
   testWidgets('choosing "delete with files" carries the flag', (tester) async {
     final repository = _Repository();
-    final controller = AppController(repository: repository);
+    final controller = AppController(gateway: repository);
     controller.debugSeed(
       _collectionState(),
       details: const Stream<AppDetail?>.empty(),
@@ -500,7 +500,7 @@ void main() {
       'restart resumes and pause pauses, both through the one setPaused '
       'command', (tester) async {
     final repository = _Repository();
-    final controller = AppController(repository: repository);
+    final controller = AppController(gateway: repository);
     controller.debugSeed(
       _collectionState(),
       details: const Stream<AppDetail?>.empty(),
@@ -576,7 +576,7 @@ AppSnapshot _state(String name) => AppSnapshot(
     );
 
 /// One torrent import, downloading. `Torrent` is what makes its files a
-/// choice at all — see `EngineCollectionSource.supportsSelection`.
+/// choice at all — [CollectionRoute] exposes selection only for torrents.
 AppSnapshot _torrentState({
   String status = 'Downloading',
   String nature = 'Torrent',
@@ -610,18 +610,18 @@ AppSnapshot _torrentState({
       alerts: const [],
     );
 
-class _Repository implements AppRepository {
+class _Repository implements NexusGateway {
   final states = StreamController<AppSnapshot>.broadcast();
   final details = StreamController<AppDetail?>.broadcast();
   final history = StreamController<Uint8List>.broadcast();
   final active = <bool>[];
   final detailCollections = <int?>[];
-  final commands = <EngineCommand>[];
+  final commands = <AppCommand>[];
   var starts = 0;
   var stops = 0;
 
   @override
-  Future<AppAccepted> send(EngineCommand command) async {
+  Future<AppAccepted> send(AppCommand command) async {
     commands.add(command);
     return AppAccepted(id: BigInt.zero, collection: null, queued: false);
   }

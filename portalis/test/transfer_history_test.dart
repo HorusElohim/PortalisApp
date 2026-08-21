@@ -1,60 +1,23 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:portalis/features/collections/domain/transfer_history.dart';
+import 'package:portalis/nexus/domain/app_state.dart';
 
 void main() {
-  test('keeps timestamped transfer samples at a readable cadence', () {
-    final start = DateTime(2026, 8, 5, 12, 0);
-    final history = TransferHistory(startedAt: start);
+  test('decodes append-only generated history rows once at the gateway edge',
+      () {
+    final bytes = Uint8List(18);
+    ByteData.sublistView(bytes)
+      ..setUint64(0, 1000000000)
+      ..setUint32(8, 525000)
+      ..setUint32(12, 37500)
+      ..setUint16(16, 800);
 
-    expect(
-      history.record(
-        at: start,
-        downBytesPerSecond: 1,
-        upBytesPerSecond: 0,
-        progress: 0.1,
-      ),
-      isTrue,
-    );
-    expect(
-      history.record(
-        at: start.add(const Duration(milliseconds: 500)),
-        downBytesPerSecond: 2,
-        upBytesPerSecond: 0,
-        progress: 0.2,
-      ),
-      isFalse,
-    );
-    expect(
-      history.record(
-        at: start.add(const Duration(seconds: 1)),
-        downBytesPerSecond: 3,
-        upBytesPerSecond: 25000,
-        progress: 0.3,
-      ),
-      isTrue,
-    );
+    final readings = decodeReadings(bytes);
 
-    expect(history.samples, hasLength(2));
-    expect(history.samples.last.downBytesPerSecond, 3);
-  });
-
-  test('restores the graph and completion marker after a restart', () {
-    final start = DateTime(2026, 8, 5, 12, 0);
-    final sample = TransferSample(
-      at: start.add(const Duration(seconds: 4)),
-      downBytesPerSecond: 525000,
-      upBytesPerSecond: 37500,
-      progress: 0.8,
-    );
-    final history = TransferHistory.restore(
-      startedAt: start,
-      samples: [sample],
-      completedAt: start.add(const Duration(minutes: 2)),
-    );
-
-    expect(history.startedAt, start);
-    expect(history.samples.single.at, sample.at);
-    expect(history.samples.single.downBytesPerSecond, 525000);
-    expect(history.completedAt, start.add(const Duration(minutes: 2)));
+    expect(readings, hasLength(1));
+    expect(readings.single.downBytesPerSecond, 525000);
+    expect(readings.single.upBytesPerSecond, 37500);
+    expect(readings.single.progress, .8);
   });
 }

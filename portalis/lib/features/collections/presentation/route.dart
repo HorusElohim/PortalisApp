@@ -1,35 +1,18 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import 'detail.dart';
 import '../../../nexus/application/app_controller.dart';
-import '../../../nexus/data/collection_source.dart';
-import '../../../nexus/data/collection_view.dart';
 import '../../../nexus/domain/app_state.dart';
+import 'detail.dart';
 
-/// Which screen represents [collection] when it is opened as its own route.
-///
-/// One answer for every collection. A torrent waiting to be chosen from used
-/// to get a screen of its own, which made choosing a gate passed through
-/// exactly once: afterwards there was nowhere to change your mind, and no
-/// screen could show a half-fetched collection alongside the files it had
-/// skipped. Choosing now happens on the collection itself, where it stays
-/// available for as long as the collection does.
-Widget routeFor(
-  AppCollection collection,
-  AppController controller,
-) =>
+Widget routeFor(AppCollection collection, AppController controller) =>
     CollectionRoute(collection: collection.id, controller: controller);
 
-/// One Nexus collection, on its own screen.
-///
-/// Not a second implementation of the collection screen: this *is*
-/// [CollectionScreen] — the exact widget the legacy collection screen uses —
-/// given a [EngineCollectionSource] instead of the legacy collections
-/// controller. Every rendering and command decision lives in
-/// [CollectionDetail]; this file only wires where its data and its commands
-/// go, and owns the source's subscription for as long as this screen does.
+/// Owns exactly the selected collection's tiered detail and history streams.
 class CollectionRoute extends StatefulWidget {
   const CollectionRoute({
     super.key,
@@ -45,70 +28,85 @@ class CollectionRoute extends StatefulWidget {
 }
 
 class _CollectionRouteState extends State<CollectionRoute> {
-  // Constructed once, here, so its subscription survives every rebuild this
-  // wrapper goes through — and disposed here too, because whoever constructs
-  // a source owns it. Built in `initState` rather than lazily so that
-  // disposing never has to first create the thing it is disposing.
-  late final EngineCollectionSource _source;
+  AppDetail? _detail;
+  final List<Reading> _readings = [];
+  StreamSubscription<AppDetail?>? _detailSubscription;
+  StreamSubscription<Uint8List>? _historySubscription;
 
   @override
   void initState() {
     super.initState();
-    _source = EngineCollectionSource(
-      controller: widget.controller,
-      collectionId: widget.collection,
-    );
+    widget.controller.addListener(_changed);
+    _detailSubscription =
+        widget.controller.watchDetail(widget.collection).listen((detail) {
+      if (!mounted) return;
+      setState(() => _detail = detail);
+    });
+    _historySubscription =
+        widget.controller.watchHistory(widget.collection).listen((packed) {
+      if (!mounted) return;
+      setState(() {
+        _readings.addAll(decodeReadings(packed));
+        if (_readings.length > 1800) {
+          _readings.removeRange(0, _readings.length - 1800);
+        }
+      });
+    });
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _source.dispose();
+    widget.controller.removeListener(_changed);
+    unawaited(_detailSubscription?.cancel());
+    unawaited(_historySubscription?.cancel());
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-        listenable: widget.controller,
-        builder: (context, _) {
-          final current = widget.controller.state?.collections
-              .where((item) => item.id == widget.collection)
-              .firstOrNull;
-          if (current == null) {
-            return Scaffold(
-              backgroundColor: AppColors.surfaceDeep,
-              body: SafeArea(
-                child: PageBody(
-                  child: Padding(
-                    padding: const EdgeInsets.all(kScreenGutter),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        NavBackButton(onTap: () => Navigator.of(context).pop()),
-                        const Padding(
-                          padding: EdgeInsets.only(top: 40),
-                          child: Center(
-                            child:
-                                Text('This collection is no longer available.'),
-                          ),
-                        ),
-                      ],
+  Widget build(BuildContext context) {
+    final state = widget.controller.state;
+    final collection = state?.collections
+        .where((item) => item.id == widget.collection)
+        .firstOrNull;
+    if (collection == null) return const _CollectionUnavailable();
+    return CollectionScreen(
+      collection: collection,
+      detail: _detail,
+      readings: _readings,
+      contacts: state?.contacts ?? const [],
+      controller: widget.controller,
+    );
+  }
+}
+
+class _CollectionUnavailable extends StatelessWidget {
+  const _CollectionUnavailable();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: AppColors.surfaceDeep,
+        body: SafeArea(
+          child: PageBody(
+            child: Padding(
+              padding: const EdgeInsets.all(kScreenGutter),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  NavBackButton(onTap: () => Navigator.of(context).pop()),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 40),
+                    child: Center(
+                      child: Text('This collection is no longer available.'),
                     ),
                   ),
-                ),
+                ],
               ),
-            );
-          }
-          return CollectionScreen(
-            // A seed only: `_source.resolve` supplies the live answer on
-            // every rebuild. This covers the one frame before that answer
-            // exists.
-            collection: collectionView(
-              collection: current,
-              detail: null,
-              contacts: widget.controller.state?.contacts ?? const [],
             ),
-            source: _source,
-          );
-        },
+          ),
+        ),
       );
 }

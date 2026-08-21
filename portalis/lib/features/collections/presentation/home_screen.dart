@@ -10,7 +10,7 @@ import '../domain/picked_file.dart';
 import 'commands.dart';
 import 'add_sources.dart';
 import '../domain/draft_names.dart';
-import '../../../nexus/data/collection_source.dart';
+import '../../../nexus/application/nexus_gateway.dart';
 import '../../../nexus/domain/app_state.dart';
 import 'route.dart';
 import 'home_library.dart';
@@ -73,7 +73,7 @@ class _HomeState extends State<Home> {
 
   Future<int?> _createDraft(List<PickedFile> files) async {
     final accepted = await AppControllers.engine.send(
-      EngineCommand(
+      appCommand(
         kind: 'createCollection',
         name: randomDraftName(),
         files: [
@@ -119,11 +119,15 @@ class _HomeState extends State<Home> {
     try {
       switch (command) {
         case CollectionCommand.restart:
-          await sendSetPaused(AppControllers.engine, collection.id,
-              paused: false);
+          await AppControllers.engine.send(
+            appCommand(
+                kind: 'setPaused', collection: collection.id, paused: false),
+          );
         case CollectionCommand.pause:
-          await sendSetPaused(AppControllers.engine, collection.id,
-              paused: true);
+          await AppControllers.engine.send(
+            appCommand(
+                kind: 'setPaused', collection: collection.id, paused: true),
+          );
         case CollectionCommand.delete:
         // Editing needs the collection's own page; a row has nowhere to put
         // a name field, so the row simply opens it instead.
@@ -145,11 +149,11 @@ class _HomeState extends State<Home> {
     );
     if (choice == null || !mounted) return;
     try {
-      await sendDeleteCollection(
-        AppControllers.engine,
-        collection.id,
+      await AppControllers.engine.send(appCommand(
+        kind: 'deleteCollection',
+        collection: collection.id,
         deleteFiles: choice == CollectionDeletionChoice.withFiles,
-      );
+      ));
       // Embedded, the list simply drops it and the selection moves on;
       // there is no route to leave.
     } catch (error) {
@@ -202,7 +206,7 @@ class _HomeState extends State<Home> {
 
   Future<int?> _importTorrent(String source) async {
     final accepted = await AppControllers.engine.send(
-      EngineCommand.importTorrent(source),
+      appCommand(kind: 'importTorrent', source: source),
     );
     final collection = accepted.collection;
     if (collection == null) {

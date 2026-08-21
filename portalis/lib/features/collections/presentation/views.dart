@@ -4,10 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../../design/theme.dart';
 import '../../../design/formatters.dart';
-import '../../media/presentation/thumbnail.dart';
-import '../domain/collection.dart';
+import '../../../nexus/domain/app_state.dart';
 import 'commands.dart';
-import 'peer_color.dart';
 import '../../../design/indicators.dart';
 import '../../../design/primitives.dart';
 
@@ -25,7 +23,7 @@ class CollectionRow extends StatefulWidget {
     this.onCommand,
   });
 
-  final Collection collection;
+  final AppCollection collection;
   final VoidCallback onTap;
   final bool selected;
   final ValueChanged<CollectionCommand>? onCommand;
@@ -47,10 +45,10 @@ class _CollectionRowState extends State<CollectionRow> {
       // shared-and-standing-by glows calmly, everything else not at all. The
       // wash that separates a live row from the settled ones comes with it —
       // see [Glow.gradient].
-      glow: collection.glow,
+      glow: collection.glowFor(null),
       glowColor: accent,
       glowIntensity: collection.liveIntensity,
-      borderColor: widget.selected && collection.glow == GlowLevel.none
+      borderColor: widget.selected && collection.glowFor(null) == GlowLevel.none
           ? AppColors.borderStrong
           : null,
       child: Column(
@@ -79,11 +77,11 @@ class _CollectionRowState extends State<CollectionRow> {
     final accent = torrent ? AppColors.ember : AppColors.signal;
     final live =
         collection.downBytesPerSecond > 0 || collection.upBytesPerSecond > 0;
-    final downloading = collection.state == 'downloading';
+    final downloading = collection.isDownloading;
     // No metadata has arrived, so there is no total to measure against — an
     // indeterminate bar is the honest shape for "reaching out to a peer".
     final connecting = collection.isConnecting;
-    final subtitle = collection.subtitle;
+    final subtitle = collection.subtitleFor(null);
     return Row(
       children: [
         SizedBox(
@@ -127,8 +125,9 @@ class _CollectionRowState extends State<CollectionRow> {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.pill),
                   child: LinearProgressIndicator(
-                    value:
-                        connecting ? null : collection.progress.clamp(0.0, 1.0),
+                    value: connecting
+                        ? null
+                        : collection.progressFor(null).clamp(0.0, 1.0),
                     minHeight: 5,
                     backgroundColor: AppColors.borderStrong,
                     valueColor: AlwaysStoppedAnimation(accent),
@@ -149,17 +148,17 @@ class _CollectionRowState extends State<CollectionRow> {
   Widget _status() {
     final collection = widget.collection;
     final accent = collection.isShared ? AppColors.signal : AppColors.ember;
-    if (collection.state == 'downloading') {
+    if (collection.isDownloading) {
       return StatusBadge(
-        label: formatProgressPercent(collection.progress),
+        label: formatProgressPercent(collection.progressFor(null)),
         color: accent,
       );
     }
-    if (collection.isSharing) {
+    if (collection.isSharingFor(null)) {
       // Mint here is earned: this device is genuinely serving the collection.
       return StatusBadge(label: 'SHARING', color: accent);
     }
-    return StatusBadge(label: collection.state.toUpperCase());
+    return StatusBadge(label: collection.status.toUpperCase());
   }
 }
 
@@ -201,13 +200,11 @@ class _SharedCollectionTile extends StatelessWidget {
     required this.accent,
   });
 
-  final Collection collection;
+  final AppCollection collection;
   final Color accent;
 
   @override
   Widget build(BuildContext context) {
-    final media = collection.media.firstOrNull;
-    final hasPreview = media?.isReady ?? false;
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -233,10 +230,7 @@ class _SharedCollectionTile extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (hasPreview)
-              MediaThumbnail(media: media!, borderRadius: AppRadius.control)
-            else
-              _SharedCollectionPlaceholder(accent: accent),
+            _SharedCollectionPlaceholder(accent: accent),
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -255,7 +249,7 @@ class _SharedCollectionTile extends StatelessWidget {
               child: Icon(
                 Icons.people_alt_outlined,
                 size: 14,
-                color: hasPreview ? Colors.white : accent,
+                color: accent,
               ),
             ),
           ],

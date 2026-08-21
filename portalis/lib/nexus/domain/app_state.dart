@@ -15,11 +15,16 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
+import '../../design/formatters.dart';
+import '../../design/theme.dart';
+
 import '../bridge/portalis_api.dart';
 
 export '../bridge/portalis_api.dart'
     show
         AppAccepted,
+        AppCommand,
         AppCollection,
         AppContact,
         AppDetail,
@@ -39,7 +44,9 @@ extension DetailPieces on AppDetail {
   /// Whether the bar at [index] is verified.
   bool pieceAt(int index) {
     final byte = index ~/ 8;
-    if (byte < 0 || byte >= pieces.length) return false;
+    if (byte < 0 || byte >= pieces.length) {
+      return false;
+    }
     return pieces[byte] & (1 << (index % 8)) != 0;
   }
 
@@ -89,6 +96,97 @@ List<Reading> decodeReadings(Uint8List packed) {
   return rows;
 }
 
+extension AppEntryPresentation on AppEntry {
+  int get sizeBytes => bytes.toInt();
+  int get downloadedBytesInt => downloadedBytes.toInt();
+  double get progress =>
+      sizeBytes == 0 ? 0 : (downloadedBytesInt / sizeBytes).clamp(0.0, 1.0);
+  bool get fetched => available || downloadedBytesInt > 0;
+  bool get isReady => available && path != null;
+  String? get localPath => isReady ? path : null;
+}
+
+extension AppCollectionPresentation on AppCollection {
+  String get stringId => '$id';
+  bool get isTorrent => nature == 'Torrent';
+  bool get isShared => !isTorrent;
+  bool get isDraft => status == 'Draft';
+  bool get isPaused => status == 'Paused';
+  bool get isConnecting => status == 'WaitingForOwner';
+  bool get isDownloading => status == 'Downloading';
+  bool get isComplete => status == 'Available';
+  int get totalBytesInt => totalBytes.toInt();
+  int get downloadedBytesInt => onDiskBytes.toInt();
+  int get uploadedBytesInt => uploadedBytes.toInt();
+  int get revisionInt => revision.toInt();
+  double progressFor(Reading? lastReading) =>
+      transfer?.progress ?? lastReading?.progress ?? 0;
+  int get downBytesPerSecond => transfer?.downBytesPerSecond ?? 0;
+  int get upBytesPerSecond => transfer?.upBytesPerSecond ?? 0;
+  int livePeersFor(AppDetail? detail) =>
+      transfer?.peers ?? detail?.peers.length ?? 0;
+  bool isSharingFor(AppDetail? detail) => isComplete && entries > 0;
+  int pendingEntries(AppDetail? detail) =>
+      detail?.entries.where((entry) => !entry.available).length ?? 0;
+  String? get etaLabel => transfer?.etaSecs == null
+      ? null
+      : '${formatEta(transfer!.etaSecs!)} left';
+  Color get hue => AppColors.hueAt(stringId.hashCode.abs());
+  GlowLevel glowFor(AppDetail? detail) {
+    if (downBytesPerSecond > 0 || upBytesPerSecond > 0) {
+      return downBytesPerSecond + upBytesPerSecond > 500000
+          ? GlowLevel.vivid
+          : GlowLevel.active;
+    }
+    return isConnecting || isSharingFor(detail)
+        ? GlowLevel.calm
+        : GlowLevel.none;
+  }
+
+  double get liveIntensity =>
+      Glow.intensityForRate(downBytesPerSecond + upBytesPerSecond);
+
+  DateTime? get startedAtMoment => _moment(startedAt);
+  DateTime? get completedAtMoment => _moment(completedAt);
+
+  String subtitleFor(AppDetail? detail) {
+    final count = detail?.entries.length ?? entries;
+    final items = '$count item${count == 1 ? '' : 's'}';
+    if (isConnecting) return '$items · looking for a peer';
+    final eta = etaLabel;
+    if (eta != null) return '$items · $eta';
+    final pending = pendingEntries(detail);
+    return pending > 0 ? '$items · $pending to fetch' : items;
+  }
+
+  String copiesLabelFor(AppDetail? detail) {
+    final peers = livePeersFor(detail);
+    final peersLabel = '$peers peer${peers == 1 ? '' : 's'}';
+    if (!isComplete) {
+      final eta = etaLabel;
+      final completed = formatProgressPercent(progressFor(null));
+      return eta == null
+          ? '$completed · $peersLabel'
+          : '$completed · $eta · $peersLabel';
+    }
+    return peers == 0
+        ? 'Seeding · this device'
+        : 'Seeding · this device + $peersLabel';
+  }
+
+  List<AppContact> collaboratorsIn(List<AppContact> contacts) => [
+        for (final member in members)
+          for (final contact in contacts.where((item) => item.id == member))
+            contact,
+      ];
+}
+
+DateTime? _moment(BigInt? unixNanoseconds) => unixNanoseconds == null
+    ? null
+    : DateTime.fromMicrosecondsSinceEpoch(
+        (unixNanoseconds ~/ BigInt.from(1000)).toInt(),
+      );
+
 extension EntryPreview on AppEntry {
   /// Whether this entry can be shown as a picture.
   bool get isImage {
@@ -134,71 +232,4 @@ class EngineActivity {
 
   /// Everything moving right now, in the unit the engine counts.
   int get totalBytesPerSecond => downBytesPerSecond + upBytesPerSecond;
-}
-
-/// One command envelope, in the shape a caller wants to write.
-///
-/// The one part of the old adapter that was doing real work rather than
-/// copying: `AppCommand` requires `files` and `entries` at every call site and
-/// wants a `Uint32List` where callers hold a `List<int>`. Defaults and that
-/// conversion live here, so asking to pause a collection stays one line.
-class EngineCommand {
-  const EngineCommand({
-    required this.kind,
-    this.name,
-    this.files = const [],
-    this.collection,
-    this.label,
-    this.deleteFiles,
-    this.paused,
-    this.entry,
-    this.source,
-    this.entries = const [],
-    this.contact,
-    this.handle,
-    this.accept,
-    this.device,
-    this.active,
-  });
-
-  const EngineCommand.importTorrent(String source)
-      : this(kind: 'importTorrent', source: source);
-
-  final String kind;
-  final String? name;
-  final List<AppSourceFile> files;
-  final int? collection;
-  final String? label;
-  final bool? deleteFiles;
-
-  /// Required by `setPaused` and ignored otherwise. Optional here because one
-  /// envelope carries every command; the core refuses a pause that does not
-  /// say which way.
-  final bool? paused;
-  final int? entry;
-  final String? source;
-  final List<int> entries;
-  final int? contact;
-  final String? handle;
-  final bool? accept;
-  final int? device;
-  final bool? active;
-
-  AppCommand toBridge() => AppCommand(
-        kind: kind,
-        name: name,
-        files: files,
-        collection: collection,
-        label: label,
-        deleteFiles: deleteFiles,
-        paused: paused,
-        entry: entry,
-        source: source,
-        entries: Uint32List.fromList(entries),
-        contact: contact,
-        handle: handle,
-        accept: accept,
-        device: device,
-        active: active,
-      );
 }

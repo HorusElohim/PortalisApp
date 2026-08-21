@@ -2,18 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../data/app_repository.dart';
+import 'nexus_gateway.dart';
 import '../domain/app_state.dart';
 
 /// Owns Portalis's one app-level Nexus state subscription.
 class AppController extends ChangeNotifier {
-  AppController({required AppRepository repository}) : _repository = repository;
+  AppController({required NexusGateway gateway}) : _gateway = gateway;
 
   factory AppController.production() => AppController(
-        repository: const FrbAppRepository(),
+        gateway: const FrbNexusGateway(),
       );
 
-  final AppRepository _repository;
+  final NexusGateway _gateway;
   StreamSubscription<AppSnapshot>? _subscription;
   Future<void>? _starting;
 
@@ -58,8 +58,8 @@ class AppController extends ChangeNotifier {
 
   Future<void> _start() async {
     try {
-      await _repository.start();
-      _subscription = _repository.watchStates().listen(
+      await _gateway.start();
+      _subscription = _gateway.watchStates().listen(
         (state) {
           _state = state;
           lastError = null;
@@ -80,24 +80,24 @@ class AppController extends ChangeNotifier {
 
   Future<void> setActive(bool active) async {
     try {
-      await _repository.setActive(active);
+      await _gateway.setActive(active);
     } catch (error) {
       lastError = '$error';
       notifyListeners();
     }
   }
 
-  Future<AppAccepted> send(EngineCommand command) => _repository.send(command);
+  Future<AppAccepted> send(AppCommand command) => _gateway.send(command);
 
   /// Selects the one collection whose expensive detail projection is needed.
   /// Widgets consume this stream directly; it deliberately does not become a
   /// second app-level cache beside [state].
   Stream<AppDetail?> watchDetail(int? collection) =>
-      _debugDetails ?? _repository.watchDetail(collection);
+      _debugDetails ?? _gateway.watchDetail(collection);
 
-  /// The readings a subscriber has not seen yet — see [AppRepository].
+  /// The readings a subscriber has not seen yet — see [NexusGateway].
   Stream<Uint8List> watchHistory(int collection) =>
-      _debugHistory ?? _repository.watchHistory(collection);
+      _debugHistory ?? _gateway.watchHistory(collection);
 
   /// Seeds the projection for widgets that exercise app composition without a
   /// native runtime. Production state always arrives through [watchStates].
@@ -124,7 +124,7 @@ class AppController extends ChangeNotifier {
     _subscription = null;
     await subscription?.cancel();
     if (!wasStarted) return;
-    await _repository.stop();
+    await _gateway.stop();
     _starting = null;
   }
 

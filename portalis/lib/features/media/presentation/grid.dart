@@ -2,63 +2,46 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import '../domain/item.dart';
+import '../../../nexus/domain/app_state.dart';
 import 'piece_frame.dart';
 import 'thumbnail.dart';
 
-/// A thumbnail grid of media, capped so a tile stays thumbnail-sized at any
-/// window width.
+/// A thumbnail grid over generated entries in the selected detail projection.
 class MediaGrid extends StatelessWidget {
   const MediaGrid({
     super.key,
-    required this.media,
+    required this.entries,
     required this.color,
     required this.onOpenMedia,
     this.onToggleWanted,
   });
 
-  final List<MediaItem> media;
-
-  /// The collection's colour, used by the piece frame. Passed in rather than
-  /// derived so this grid needs nothing but the media it draws — which is what
-  /// lets a Nexus collection and a legacy one share it.
+  final List<AppEntry> entries;
   final Color color;
-  final ValueChanged<MediaItem> onOpenMedia;
-
-  /// Toggles whether a file is one the collection should fetch.
-  ///
-  /// `null` where nothing can be chosen, which is most collections — a tile
-  /// then draws no toggle at all rather than a disabled one. Its own control
-  /// rather than the tile's tap, so choosing what to download and opening
-  /// what has downloaded stay two different gestures.
-  final ValueChanged<MediaItem>? onToggleWanted;
+  final ValueChanged<AppEntry> onOpenMedia;
+  final ValueChanged<AppEntry>? onToggleWanted;
 
   @override
   Widget build(BuildContext context) => GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        // A fixed column count still made previews enormous on a wide Home
-        // card. Cap each tile instead, keeping the media and its piece frame
-        // deliberately thumbnail-sized at every window width.
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: 84,
           mainAxisSpacing: 7,
           crossAxisSpacing: 6,
           childAspectRatio: 0.78,
         ),
-        itemCount: media.length,
+        itemCount: entries.length,
         itemBuilder: (context, index) {
-          final item = media[index];
-          final choosable = onToggleWanted != null && item.entryId != null;
-          // Only a file nobody asked for is dimmed. Fading anything else would
-          // make an ordinary collection look half-disabled.
-          final skipped = choosable && !item.selected;
+          final entry = entries[index];
+          final choosable = onToggleWanted != null;
+          final skipped = choosable && !entry.selected;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: MediaPieceFrame(
-                  media: item,
+                  media: entry,
                   color: color,
                   borderRadius: BorderRadius.circular(AppRadius.tight),
                   child: Container(
@@ -70,7 +53,7 @@ class MediaGrid extends StatelessWidget {
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => onOpenMedia(item),
+                        onTap: () => onOpenMedia(entry),
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
@@ -78,9 +61,9 @@ class MediaGrid extends StatelessWidget {
                               duration: const Duration(milliseconds: 160),
                               opacity: skipped ? 0.3 : 1,
                               child:
-                                  MediaThumbnail(media: item, borderRadius: 6),
+                                  MediaThumbnail(media: entry, borderRadius: 6),
                             ),
-                            if (!item.fetched && !skipped)
+                            if (!entry.fetched && !skipped)
                               Container(
                                 color: AppColors.surfaceDeep
                                     .withValues(alpha: 0.55),
@@ -96,10 +79,10 @@ class MediaGrid extends StatelessWidget {
                                 top: 3,
                                 right: 3,
                                 child: _WantedToggle(
-                                  key: Key('mediaWanted:${item.entryId}'),
-                                  wanted: item.selected,
+                                  key: Key('mediaWanted:${entry.id}'),
+                                  wanted: entry.selected,
                                   color: color,
-                                  onTap: () => onToggleWanted!(item),
+                                  onTap: () => onToggleWanted!(entry),
                                 ),
                               ),
                           ],
@@ -111,7 +94,7 @@ class MediaGrid extends StatelessWidget {
               ),
               const SizedBox(height: 5),
               Text(
-                item.label,
+                entry.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppText.caption(
@@ -122,12 +105,12 @@ class MediaGrid extends StatelessWidget {
               Text(
                 skipped
                     ? 'skipped'
-                    : !item.fetched
+                    : !entry.fetched
                         ? 'not fetched'
-                        : item.progress < 1.0
-                            ? formatProgressPercent(item.progress)
-                            : item.sizeBytes > 0
-                                ? formatBytes(item.sizeBytes)
+                        : entry.progress < 1.0
+                            ? formatProgressPercent(entry.progress)
+                            : entry.sizeBytes > 0
+                                ? formatBytes(entry.sizeBytes)
                                 : '',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -139,10 +122,6 @@ class MediaGrid extends StatelessWidget {
       );
 }
 
-/// The corner control that says whether a file is wanted.
-///
-/// Filled with the collection's own colour when it is, hollow when it is not,
-/// so a glance at the grid says what will be fetched without reading a word.
 class _WantedToggle extends StatelessWidget {
   const _WantedToggle({
     super.key,
@@ -162,7 +141,6 @@ class _WantedToggle extends StatelessWidget {
         label: wanted ? 'Downloading this file' : 'Skipping this file',
         child: GestureDetector(
           onTap: onTap,
-          // The dot is small; the target around it is not.
           behavior: HitTestBehavior.opaque,
           child: Padding(
             padding: const EdgeInsets.all(4),

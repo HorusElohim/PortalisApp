@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import '../domain/collection.dart';
 import 'commands.dart';
 import 'views.dart';
 import 'list.dart';
 import 'share_action.dart';
-import '../../../nexus/data/collection_view.dart';
 import '../../../nexus/domain/app_state.dart';
 
 /// The Home collection projection, drawn by the same row and list widgets the
@@ -19,9 +17,7 @@ import '../../../nexus/domain/app_state.dart';
 /// command bar always visible, exactly as it always did; opening one is the
 /// caller's business (see [Home.onOpen]), not this widget's.
 ///
-/// [collectionView] is what makes reusing those widgets possible: this
-/// file translates Nexus's vocabulary into theirs and otherwise makes no
-/// rendering decision of its own.
+/// Rows consume Nexus summaries directly and make no data translation.
 class HomeLibrary extends StatelessWidget {
   const HomeLibrary({
     super.key,
@@ -51,14 +47,6 @@ class HomeLibrary extends StatelessWidget {
       .toList(growable: false);
 
   bool _matchesQuery(AppCollection collection) => true;
-
-  /// The row summary for one collection — cheap, and never a subscription:
-  /// see [collectionView]'s own doc for what a missing detail costs it.
-  Collection _rowView(AppCollection collection) => collectionView(
-        collection: collection,
-        detail: null,
-        contacts: state?.contacts ?? const [],
-      );
 
   @override
   Widget build(BuildContext context) => wide ? _wide() : _compact();
@@ -100,17 +88,10 @@ class HomeLibrary extends StatelessWidget {
     if (error != null) return CollectionsErrorState(message: error!);
     if (_shown.isEmpty) return _emptyState();
 
-    // Rows are built from the summary view, and matched back to their
-    // originating [AppCollection] by id — `CollectionsList`/`CollectionRow`
-    // speak only the legacy `Collection`, so this map is what lets their
-    // callbacks hand a real Nexus collection back to this widget's own.
-    final byRowId = {
-      for (final collection in _shown) '${collection.id}': collection,
-    };
     return CollectionsList(
-      collections: [for (final collection in _shown) _rowView(collection)],
-      onOpen: (row) => onOpen(byRowId[row.id]!),
-      onCommand: (action) => onCommand((byRowId[action.$1.id]!, action.$2)),
+      collections: _shown,
+      onOpen: onOpen,
+      onCommand: onCommand,
       // Every row expands now. A torrent waiting to be chosen from used to be
       // the exception, because choosing happened on a screen of its own; it
       // happens on the collection itself, so there is nothing left that a row
@@ -158,7 +139,7 @@ class HomeLibrary extends StatelessWidget {
         itemBuilder: (_, index) {
           final collection = _shown[index];
           return CollectionRow(
-            collection: _rowView(collection),
+            collection: collection,
             onTap: () => onOpen(collection),
             onCommand: (command) => onCommand((collection, command)),
           );

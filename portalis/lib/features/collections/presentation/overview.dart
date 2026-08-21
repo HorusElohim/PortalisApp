@@ -2,79 +2,56 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import '../domain/collection.dart';
-import '../domain/peer_observation.dart';
-import '../domain/transfer_history.dart';
+import '../../../nexus/domain/app_state.dart';
 import 'commands.dart';
 import 'peers.dart';
-import 'peer_color.dart';
 
-/// Live collection facts and actions, independent of navigation and commands.
+/// Live generated collection facts and actions, independent of navigation.
 class CollectionOverview extends StatelessWidget {
   const CollectionOverview({
     super.key,
     required this.collection,
+    required this.detail,
+    required this.readings,
+    required this.contacts,
     required this.busy,
     required this.onCommand,
-    this.history,
     this.showCommands = true,
     this.editing = false,
     this.paused = false,
     this.showTitle = true,
-    required this.onAddMedia,
-    required this.onFetch,
-    this.peerHistory = const [],
   });
 
-  final Collection collection;
+  final AppCollection collection;
+  final AppDetail? detail;
+  final List<Reading> readings;
+  final List<AppContact> contacts;
   final bool busy;
   final ValueChanged<CollectionCommand> onCommand;
-  final TransferHistory? history;
   final bool showCommands;
-
   final bool editing;
-
-  /// Which half of the start/stop pair the command bar offers.
   final bool paused;
   final bool showTitle;
-  final VoidCallback onAddMedia;
-  final VoidCallback onFetch;
-  final List<PeerObservation> peerHistory;
 
   @override
   Widget build(BuildContext context) {
-    final transferHistory = [
-      for (final sample in history?.samples ?? const <TransferSample>[])
+    final history = [
+      for (final reading in readings)
         TransferPoint(
-          at: sample.at,
-          downBytesPerSecond: sample.downBytesPerSecond,
-          upBytesPerSecond: sample.upBytesPerSecond,
+          at: reading.at,
+          downBytesPerSecond: reading.downBytesPerSecond,
+          upBytesPerSecond: reading.upBytesPerSecond,
         ),
     ];
-    final commandBusy = busy;
-    final commandBar = CollectionCommandBar(
-      busy: commandBusy,
-      onCommand: onCommand,
-      editing: editing,
-      paused: paused,
-      trailingActions: [
-        if (collection.pendingMedia > 0)
-          PillButton(
-            label: 'Fetch ${collection.pendingMedia}',
-            onTap: commandBusy ? null : onFetch,
-          ),
-      ],
-    );
-    final hasTransfer = collection.totalBytes > 0 ||
+    final livePeers = collection.livePeersFor(detail);
+    final hasTransfer = collection.totalBytesInt > 0 ||
         collection.downBytesPerSecond > 0 ||
         collection.upBytesPerSecond > 0 ||
-        transferHistory.isNotEmpty;
+        history.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _CollectionControls(
-          collection: collection,
-        ),
+        const _CollectionControls(),
         if (showTitle) ...[
           Text(
             collection.name,
@@ -83,8 +60,8 @@ class CollectionOverview extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             collection.isShared
-                ? 'Shared collection - ${collection.subtitle}'
-                : 'Torrent - ${collection.subtitle}',
+                ? 'Shared collection - ${collection.subtitleFor(detail)}'
+                : 'Torrent - ${collection.subtitleFor(detail)}',
             style: monoLabel(
               size: 12,
               color: AppColors.textDim,
@@ -94,72 +71,61 @@ class CollectionOverview extends StatelessWidget {
           const SizedBox(height: 6),
           CopiesIndicator(
             color: collection.hue,
-            label: collection.copiesLabel,
+            label: collection.copiesLabelFor(detail),
             fontSize: 13,
           ),
         ],
         if (hasTransfer) ...[
           const SizedBox(height: 10),
           TransferPanel(
-            progress: collection.progress,
-            downloadedBytes: collection.downloadedBytes,
-            totalBytes: collection.totalBytes,
+            progress:
+                collection.progressFor(readings.isEmpty ? null : readings.last),
+            downloadedBytes: collection.downloadedBytesInt,
+            totalBytes: collection.totalBytesInt,
             downBytesPerSecond: collection.downBytesPerSecond,
             upBytesPerSecond: collection.upBytesPerSecond,
-            history: transferHistory,
-            // The core's own moments, not the span of surviving readings.
-            startedAt: collection.startedAt ?? history?.startedAt,
-            completedAt: collection.completedAt,
-            livePeers: collection.livePeers,
+            history: history,
+            startedAt: collection.startedAtMoment,
+            completedAt: collection.completedAtMoment,
+            livePeers: livePeers,
             etaLabel: collection.etaLabel,
             color: collection.hue,
           ),
         ],
         if (showCommands) ...[
           const SizedBox(height: 14),
-          commandBar,
+          CollectionCommandBar(
+            busy: busy,
+            onCommand: onCommand,
+            editing: editing,
+            paused: paused,
+          ),
           const SizedBox(height: 12),
         ],
-        ...[
-          _CollectionIdentifiers(collection: collection),
-          const SizedBox(height: 14),
-          CollectionPeers(
-            collection: collection,
-            peerHistory: peerHistory,
-          ),
-          const SizedBox(height: 14),
-        ],
+        _CollectionIdentifiers(collection: collection),
+        const SizedBox(height: 14),
+        CollectionPeers(
+          collection: collection,
+          detail: detail,
+          contacts: contacts,
+        ),
+        const SizedBox(height: 14),
       ],
     );
   }
 }
 
 class _CollectionControls extends StatelessWidget {
-  const _CollectionControls({required this.collection});
-
-  final Collection collection;
+  const _CollectionControls();
 
   @override
-  Widget build(BuildContext context) {
-    final admins = 0;
-    return Row(
-      children: [
-        if (admins > 0)
-          Text(
-            '$admins admin${admins == 1 ? '' : 's'}',
-            style:
-                monoLabel(size: 10, color: AppColors.textDim, letterSpacing: 0),
-          ),
-        const Spacer(),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _CollectionIdentifiers extends StatelessWidget {
   const _CollectionIdentifiers({required this.collection});
 
-  final Collection collection;
+  final AppCollection collection;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -175,24 +141,22 @@ class _CollectionIdentifiers extends StatelessWidget {
             ),
             InfoRow(
               label: 'State',
-              value: collection.state.isEmpty ? 'Unknown' : collection.state,
+              value: collection.status.isEmpty ? 'Unknown' : collection.status,
             ),
-            if (collection.uploadedBytes > 0)
+            if (collection.uploadedBytesInt > 0)
               InfoRow(
                 label: 'Uploaded',
-                value: formatBytesPrecise(collection.uploadedBytes),
+                value: formatBytesPrecise(collection.uploadedBytesInt),
               ),
-            // Only once there is one: a draft has never been published, and
-            // "revision 0" would read as a version rather than as none.
-            if (collection.revision > 0)
+            if (collection.revisionInt > 0)
               InfoRow(
                 label: 'Revision',
-                value: '${collection.revision}',
+                value: '${collection.revisionInt}',
                 monospace: true,
               ),
             InfoRow(
               label: collection.isShared ? 'Collection id' : 'Info hash',
-              value: collection.id,
+              value: collection.stringId,
               monospace: true,
               copyable: true,
             ),

@@ -3,9 +3,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import '../../collections/domain/collection.dart';
-import '../../collections/presentation/peer_color.dart';
-import '../domain/item.dart';
+import '../../../nexus/domain/app_state.dart';
 import 'thumbnail.dart';
 import 'piece_frame.dart';
 
@@ -24,8 +22,8 @@ class CollectionMediaViewer extends StatelessWidget {
     required this.onOpenExternally,
   });
 
-  final Collection collection;
-  final MediaItem media;
+  final AppCollection collection;
+  final AppEntry media;
   final bool isPlayableVideo;
   final bool videoFailed;
   final VideoPlayerController? videoController;
@@ -108,12 +106,12 @@ class CollectionMediaViewer extends StatelessWidget {
                               alignment: Alignment.centerLeft,
                               child: TransferFacts(
                                 progress: media.progress,
-                                downloadedBytes: media.downloadedBytes,
+                                downloadedBytes: media.downloadedBytesInt,
                                 totalBytes: media.sizeBytes,
                                 downBytesPerSecond:
                                     collection.downBytesPerSecond,
                                 upBytesPerSecond: collection.upBytesPerSecond,
-                                livePeers: collection.livePeers,
+                                livePeers: collection.livePeersFor(null),
                                 etaLabel: collection.etaLabel,
                                 color: collection.hue,
                                 pendingLabel: media.fetched
@@ -147,7 +145,7 @@ class MediaPreview extends StatelessWidget {
     required this.videoController,
   });
 
-  final MediaItem media;
+  final AppEntry media;
   final bool isPlayableVideo;
   final bool videoFailed;
   final VideoPlayerController? videoController;
@@ -211,8 +209,8 @@ class MediaPreview extends StatelessWidget {
 class _MediaDetails extends StatelessWidget {
   const _MediaDetails({required this.collection, required this.media});
 
-  final Collection collection;
-  final MediaItem media;
+  final AppCollection collection;
+  final AppEntry media;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -223,11 +221,9 @@ class _MediaDetails extends StatelessWidget {
             const SectionLabel('DETAILS'),
             const SizedBox(height: 3),
             InfoRow(label: 'Collection', value: collection.name, dense: true),
-            if (media.entryLabel != media.label)
-              InfoRow(label: 'Added as', value: media.entryLabel, dense: true),
             InfoRow(
               label: 'State',
-              value: collection.state.isEmpty ? 'Unknown' : collection.state,
+              value: collection.status.isEmpty ? 'Unknown' : collection.status,
               dense: true,
             ),
             if (media.sizeBytes > 0)

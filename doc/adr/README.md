@@ -17,9 +17,10 @@ instead of a living SPEC.
 | [0003](0003-transport-substrate-dual-engine.md) | Transport: Substrate as a Strategy with two real engines | superseded | [0003.5](0003.5-single-bittorrent-substrate-discovery-strategies.md) |
 | [0004](0004-naming-discipline.md) | Naming discipline: no same-name across levels | proposed | — |
 | [0005](0005-decision-records-adrs.md) | Decision records: ADRs only + index, no living SPEC | proposed | — |
-| [0006](0006-frontend-thin-seam.md) | Frontend shape: one thin seam layer | proposed | — |
+| [0006](0006-frontend-thin-seam.md) | Frontend shape: one thin seam layer | superseded | [0006.5](0006.5-tiered-frontend-gateway.md) |
 | [0007](0007-symmetric-peer-topology.md) | Symmetric peer topology (the organizing principle) | proposed | — |
 | [0003.5](0003.5-single-bittorrent-substrate-discovery-strategies.md) | One BitTorrent substrate, pluggable peer discovery | proposed | — |
+| [0006.5](0006.5-tiered-frontend-gateway.md) | Tiered frontend gateway: generated types without flattened streams | proposed | — |
 | [0009](0009-qr-peer-bootstrap.md) | QR-first peer bootstrap for offline sharing | proposed | — |
 | [0010](0010-frb-generated-glue-single-app-contract.md) | Generated FRB glue behind one app-facing contract | proposed | — |
 

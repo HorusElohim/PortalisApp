@@ -1,29 +1,26 @@
 import 'package:flutter/material.dart';
 
-import '../../media/domain/item.dart';
+import '../../../nexus/domain/app_state.dart';
 import '../../media/presentation/grid.dart';
-import '../domain/collection.dart';
-import 'peer_color.dart';
 
-/// Manifest-entry grouping and media tiles for a collection.
+/// Manifest entries for the selected generated collection detail.
 class CollectionContents extends StatelessWidget {
   const CollectionContents({
     super.key,
     required this.collection,
+    required this.detail,
     required this.onOpenMedia,
     this.onToggleWanted,
   });
 
-  final Collection collection;
-  final ValueChanged<MediaItem> onOpenMedia;
-
-  /// Passed straight to the grids. `null` where the collection's files are
-  /// not a choice — see [MediaGrid.onToggleWanted].
-  final ValueChanged<MediaItem>? onToggleWanted;
+  final AppCollection collection;
+  final AppDetail? detail;
+  final ValueChanged<AppEntry> onOpenMedia;
+  final ValueChanged<AppEntry>? onToggleWanted;
 
   @override
   Widget build(BuildContext context) => MediaGrid(
-        media: collection.media,
+        entries: detail?.entries ?? const [],
         color: collection.hue,
         onOpenMedia: onOpenMedia,
         onToggleWanted: onToggleWanted,
