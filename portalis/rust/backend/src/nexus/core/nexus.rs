@@ -685,13 +685,11 @@ impl Nexus {
                     draft: false,
                     started_at: None,
                     completed_at: None,
-                    // Confirmed, and waiting to be started. Finishing the
-                    // assembly of something is not the same as saying "go
-                    // now" — a person who has just chosen twenty files may
-                    // want to plug in first. One deliberate tap begins it,
-                    // and the button that does so is the one already there
-                    // for stopping it again.
-                    paused: true,
+                    // Sharing is the explicit instruction to publish and
+                    // seed. Stopping it remains a separate Pause action;
+                    // confirming while leaving it paused produced no usable
+                    // torrent or link until an undocumented second tap.
+                    paused: false,
                     ..stored
                 },
             )
@@ -1769,19 +1767,23 @@ mod tests {
             .command(&Command::PublishDraft { collection })
             .expect("confirms");
         tokio::time::timeout(Duration::from_secs(2), async {
-            while substrate.published.lock().unwrap().is_empty() {
+            while nexus
+                .share_uri(collection)
+                .expect("the collection still exists")
+                .is_none()
+            {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         })
         .await
-        .expect("publishes once confirmed");
+        .expect("publishes and exposes its share URI once confirmed");
 
-        // What the interface reads has to agree with what was stored, or the
-        // start/stop button offers the half that is already in force.
+        // Share begins the torrent rather than leaving a collection whose QR
+        // claims it is shared while the engine has been told to remain idle.
         assert_eq!(
             nexus.state().collections[0].status,
-            Status::Paused,
-            "confirmed and waiting to be started"
+            Status::Downloading,
+            "confirmed and ready to seed"
         );
 
         // Confirming twice is a second tap on a button, not an error.
@@ -2357,10 +2359,7 @@ mod tests {
                     .collections
                     .first()
                     .is_some_and(|collection| {
-                        // Published, and waiting to be started: confirming a
-                        // draft finishes assembling it, which is not the same
-                        // as saying "go now".
-                        collection.status == Status::Paused && collection.revision == 1
+                        collection.status == Status::Downloading && collection.revision == 1
                     });
                 if settled {
                     break;
@@ -2399,6 +2398,10 @@ mod tests {
                 .expect("descriptor exists")
                 .descriptor,
             b"torrent descriptor"
+        );
+        assert_eq!(
+            nexus.share_uri(collection).expect("share URI"),
+            Some("magnet:?xt=urn:btih:1111111111111111111111111111111111111111".to_owned())
         );
         nexus.close().await;
     }
