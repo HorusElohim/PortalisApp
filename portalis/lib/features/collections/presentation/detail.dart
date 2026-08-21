@@ -378,7 +378,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
           showTitle: widget.showTitle && !_namesInHeader(collection),
           onAddMedia: _addMedia,
           onFetch: _fetchPending,
-          onShareQr: collection.isSharing ? () => unawaited(_shareQr()) : null,
+          onShareQr: collection.canShareQr ? () => unawaited(_shareQr()) : null,
           editing: _isEditing,
           paused: collection.isPaused,
         ),

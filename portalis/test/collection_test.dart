@@ -190,6 +190,29 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('a paused collection with content still offers QR sharing',
+        (tester) async {
+      final collection = buildCollection(
+        name: 'Iceland trip',
+        status: 'Paused',
+        entries: [buildEntry(label: 'waterfall.jpg', bytes: 42)],
+      );
+      await tester.binding.setSurfaceSize(phoneSize);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CollectionScreen(
+            collection: collection,
+            source: _FixedSource(collection),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byKey(const Key('collectionShareQr')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('sharing a collection renders its magnet URI as a QR code',
         (tester) async {
       const uri =
