@@ -1024,7 +1024,7 @@ pub mod native {
             .collect::<anyhow::Result<Vec<_>>>()?;
         progress.set_stage("hashing");
         let hash_lengths = lengths.clone();
-        let torrent_bytes = tokio::task::spawn_blocking({
+        let (torrent_bytes, info_hash) = tokio::task::spawn_blocking({
             let files = files.clone();
             let sources = sources.clone();
             let progress = progress.clone();
@@ -1053,18 +1053,33 @@ pub mod native {
             ..Default::default()
         };
         let persisted_bytes = torrent_bytes.to_vec();
-        let response = session
-            .add_torrent(AddTorrent::from_bytes(torrent_bytes), Some(options))
-            .await
-            .context("adding gallery-linked torrent")?;
-        let info = response_to_info(&api(session), response)?;
+        // librqbit constructs the referenced storage while adding this
+        // torrent. That storage resolves the descriptor through this vault,
+        // so writing it after `add_torrent` is too late: the first open sees
+        // an absent record and rejects publication.
         crate::nexus::linked_source_store::upsert(
             crate::nexus::linked_source_store::LinkedSourceRecord {
-                info_hash: info.info_hash.clone(),
+                info_hash: info_hash.clone(),
                 torrent_bytes: persisted_bytes,
                 sources: files,
             },
         )?;
+        let response = match session
+            .add_torrent(AddTorrent::from_bytes(torrent_bytes), Some(options))
+            .await
+            .context("adding gallery-linked torrent")
+        {
+            Ok(response) => response,
+            Err(error) => {
+                let _ = crate::nexus::linked_source_store::remove(&info_hash);
+                return Err(error);
+            }
+        };
+        let info = response_to_info(&api(session), response)?;
+        anyhow::ensure!(
+            info.info_hash.eq_ignore_ascii_case(&info_hash),
+            "created torrent info hash disagrees with its metainfo"
+        );
         Ok(info)
     }
 
@@ -1074,7 +1089,7 @@ pub mod native {
         sources: &[crate::nexus::content_location::ContentLocation],
         lengths: &[u64],
         progress: &PublishProgress,
-    ) -> anyhow::Result<bytes::Bytes> {
+    ) -> anyhow::Result<(bytes::Bytes, String)> {
         const PIECE_LENGTH: u32 = TORRENT_PIECE_LENGTH as u32;
         const READ_SIZE: usize = 64 * 1024;
         anyhow::ensure!(
@@ -1152,7 +1167,7 @@ pub mod native {
         };
         let mut bytes = Vec::new();
         bencode_serialize_to_writer(&metainfo, &mut bytes)?;
-        Ok(bytes.into())
+        Ok((bytes.into(), info_hash.as_string()))
     }
 
     fn hash_metainfo(info: &TorrentMetaV1Info<ByteBufOwned>) -> anyhow::Result<Id20> {
@@ -1869,7 +1884,7 @@ pub mod native {
 
     #[cfg(test)]
     mod link_tests {
-        use super::{PublishProgress, SourceFile, link_sources};
+        use super::{PublishProgress, SourceFile, create_referenced_metainfo, link_sources};
 
         #[test]
         fn source_layout_is_a_link_not_a_second_file() {
@@ -1898,6 +1913,49 @@ pub mod native {
                 std::fs::read(layout_dir.join("clip.mp4")).unwrap(),
                 b"again"
             );
+            std::fs::remove_dir_all(root).unwrap();
+        }
+
+        #[test]
+        fn referenced_descriptor_is_persisted_before_session_admission() {
+            let _state = crate::nexus::paths::redirect_to_temp();
+            let root =
+                std::env::temp_dir().join(format!("portalis-referenced-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&root).unwrap();
+            let source = root.join("clip.mov");
+            std::fs::write(&source, b"movie").unwrap();
+            let files = [SourceFile {
+                name: "clip.mov".into(),
+                path: source.to_string_lossy().into_owned(),
+                length_bytes: Some(5),
+            }];
+            let sources = [crate::nexus::content_location::ContentLocation::Filesystem(
+                source,
+            )];
+            let (descriptor, info_hash) = create_referenced_metainfo(
+                "Holiday",
+                &files,
+                &sources,
+                &[5],
+                &PublishProgress::new(5),
+            )
+            .expect("builds referenced metainfo");
+
+            crate::nexus::linked_source_store::upsert(
+                crate::nexus::linked_source_store::LinkedSourceRecord {
+                    info_hash: info_hash.clone(),
+                    torrent_bytes: descriptor.to_vec(),
+                    sources: files.to_vec(),
+                },
+            )
+            .expect("persists descriptor before session admission");
+
+            assert_eq!(
+                crate::nexus::linked_source_store::descriptor_for(&info_hash)
+                    .expect("the storage factory can read the descriptor"),
+                descriptor.as_ref()
+            );
+            crate::nexus::linked_source_store::remove(&info_hash).unwrap();
             std::fs::remove_dir_all(root).unwrap();
         }
 
