@@ -332,6 +332,19 @@ class _CollectionDetailState extends State<CollectionDetail> {
     }
   }
 
+  Future<void> _downloadSelected() async {
+    final entries = {
+      for (final media in _collection.media)
+        if (media.selected && media.entryId != null) media.entryId!,
+    };
+    if (entries.isEmpty) {
+      _toast('Waiting for this torrent\'s file list');
+      return;
+    }
+    await _run(() => widget.source.setSelection(_collection.id, entries));
+    if (mounted) setState(() => _editing = false);
+  }
+
   void _toggleEditing(Collection collection) {
     if (_isEditing) {
       unawaited(_commitName());
@@ -425,7 +438,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
           _EditFooter(
             busy: _busy,
             isDraft: collection.isDraft,
+            isTorrent: collection.isTorrent,
             onShare: () => unawaited(_share()),
+            onDownload: () => unawaited(_downloadSelected()),
             onDone: () => _toggleEditing(collection),
           ),
         ],
@@ -560,17 +575,21 @@ class _EditFooter extends StatelessWidget {
   const _EditFooter({
     required this.busy,
     required this.isDraft,
+    required this.isTorrent,
     required this.onShare,
+    required this.onDownload,
     required this.onDone,
   });
 
   final bool busy;
 
-  /// A draft has never been shared, so its finishing move is "Share". An
-  /// already-shared collection is only being edited, so its is "Done" — the
-  /// same button would otherwise promise something that already happened.
+  /// A native draft has never been shared, so its finishing move is "Share".
+  /// A torrent draft instead receives somebody else's selected files; an
+  /// already-settled collection is only being edited, so its move is "Done".
   final bool isDraft;
+  final bool isTorrent;
   final VoidCallback onShare;
+  final VoidCallback onDownload;
   final VoidCallback onDone;
 
   @override
@@ -579,16 +598,26 @@ class _EditFooter extends StatelessWidget {
         children: [
           PrimaryActionButton(
             key: const Key('editFinish'),
-            label: isDraft ? 'Share this collection' : 'Done',
-            icon: isDraft ? Icons.ios_share : Icons.check,
+            label: isDraft
+                ? (isTorrent
+                    ? 'Download selected files'
+                    : 'Share this collection')
+                : 'Done',
+            icon: isDraft
+                ? (isTorrent ? Icons.download : Icons.ios_share)
+                : Icons.check,
             expand: true,
             tone: isDraft ? ActionButtonTone.ember : ActionButtonTone.neutral,
-            onTap: busy ? null : (isDraft ? onShare : onDone),
+            onTap: busy
+                ? null
+                : (isDraft ? (isTorrent ? onDownload : onShare) : onDone),
           ),
           if (isDraft) ...[
             const SizedBox(height: 8),
             Text(
-              'Nothing has left this device yet.',
+              isTorrent
+                  ? 'This device will receive the selected files.'
+                  : 'Nothing has left this device yet.',
               textAlign: TextAlign.center,
               style: monoLabel(size: 10),
             ),

@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/app/collection_link.dart';
 import 'package:portalis/nexus/domain/app_state.dart';
@@ -43,6 +46,54 @@ void main() {
       expect(commands, hasLength(1));
       expect(commands.single.kind, 'importTorrent');
       expect(commands.single.source, magnet);
+    });
+
+    test('a collection link starts downloading its resolved selection',
+        () async {
+      final commands = <EngineCommand>[];
+      final details = StreamController<AppDetail?>();
+      addTearDown(details.close);
+
+      final imported = await importCollectionLink(
+        Uri.parse(collectionShareLink(magnet)),
+        send: (command) async {
+          commands.add(command);
+          return AppAccepted(id: BigInt.one, collection: 7, queued: false);
+        },
+      );
+      final starting = startCollectionLinkDownload(
+        imported!,
+        send: (command) async {
+          commands.add(command);
+          return AppAccepted(
+              id: BigInt.from(2), collection: null, queued: false);
+        },
+        watchDetail: (_) => details.stream,
+      );
+
+      details.add(AppDetail(
+        id: 7,
+        entries: [
+          AppEntry(
+            id: 4,
+            label: 'mac-only.mov',
+            bytes: BigInt.from(12),
+            selected: true,
+            available: false,
+            downloadedBytes: BigInt.zero,
+          ),
+        ],
+        pieces: Uint8List(0),
+        peers: const [],
+      ));
+      await starting;
+
+      expect(commands.map((command) => command.kind),
+          ['importTorrent', 'downloadSelection']);
+      expect(commands.last.collection, 7);
+      expect(commands.last.entries, [4]);
+      expect(commands.map((command) => command.kind),
+          isNot(contains('publishDraft')));
     });
   });
 }

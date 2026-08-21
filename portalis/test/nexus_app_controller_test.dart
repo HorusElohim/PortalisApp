@@ -295,10 +295,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     // Open for choosing files, with nothing to name and nothing to add:
-    // a torrent's contents are its identity.
+    // a torrent's contents are its identity. The finishing action receives
+    // the remote collection; it must never claim to publish local sources.
     expect(find.byKey(const Key('editCollectionName')), findsNothing);
     expect(find.byKey(const Key('editAddSources')), findsNothing);
-    expect(find.text('Share this collection'), findsOneWidget);
+    expect(find.text('Download selected files'), findsOneWidget);
+    expect(find.text('Share this collection'), findsNothing);
     // But it still says what arrived. Not editable is not invisible.
     expect(find.text('Big Buck Bunny'), findsWidgets);
 
