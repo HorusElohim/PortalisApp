@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'test_support.dart';
+import 'package:portalis/app/collection_link.dart';
 import 'package:portalis/nexus/data/collection_view.dart';
+import 'package:portalis/features/collections/presentation/share_qr.dart';
 
 import 'package:portalis/features/collections/domain/picked_file.dart';
 import 'package:portalis/features/collections/domain/transfer_history.dart';
@@ -237,6 +239,14 @@ void main() {
       expect(source.shareRequests, [collection.id]);
       expect(find.byKey(const Key('collectionShareQrDialog')), findsOneWidget);
       expect(find.byKey(const Key('collectionShareQrCode')), findsOneWidget);
+      expect(
+        tester
+            .widget<CollectionShareQrCode>(
+              find.byKey(const Key('collectionShareQrCode')),
+            )
+            .uri,
+        collectionShareLink(uri),
+      );
       expect(find.text('Scan to import Iceland trip'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../app/collection_link.dart';
 import '../../../design/theme.dart';
 
 /// Shows the existing import URI for a carried collection as an in-person QR.
@@ -44,10 +45,9 @@ Future<void> showCollectionShareQrDialog(
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: QrImageView(
+                    child: CollectionShareQrCode(
                       key: const Key('collectionShareQrCode'),
-                      data: uri,
-                      size: 240,
+                      uri: collectionShareLink(uri),
                     ),
                   ),
                 ),
@@ -63,3 +63,13 @@ Future<void> showCollectionShareQrDialog(
         ),
       ),
     );
+
+/// Renders one app-routable collection import URI as a QR code.
+class CollectionShareQrCode extends StatelessWidget {
+  const CollectionShareQrCode({super.key, required this.uri});
+
+  final String uri;
+
+  @override
+  Widget build(BuildContext context) => QrImageView(data: uri, size: 240);
+}
