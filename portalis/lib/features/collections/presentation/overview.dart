@@ -23,6 +23,7 @@ class CollectionOverview extends StatelessWidget {
     this.showTitle = true,
     required this.onAddMedia,
     required this.onFetch,
+    this.onShareQr,
     this.peerHistory = const [],
   });
 
@@ -39,6 +40,7 @@ class CollectionOverview extends StatelessWidget {
   final bool showTitle;
   final VoidCallback onAddMedia;
   final VoidCallback onFetch;
+  final VoidCallback? onShareQr;
   final List<PeerObservation> peerHistory;
 
   @override
@@ -58,6 +60,15 @@ class CollectionOverview extends StatelessWidget {
       editing: editing,
       paused: paused,
       trailingActions: [
+        if (onShareQr != null)
+          OutlineActionButton(
+            key: const Key('collectionShareQr'),
+            label: 'Share QR',
+            icon: Icons.qr_code_2_outlined,
+            compact: true,
+            tooltip: 'Show a QR code to import this collection',
+            onTap: commandBusy ? null : onShareQr,
+          ),
         if (collection.pendingMedia > 0)
           PillButton(
             label: 'Fetch ${collection.pendingMedia}',

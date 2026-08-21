@@ -161,6 +161,9 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
         EngineCommand(kind: 'publishDraft', collection: collectionId),
       );
 
+  @override
+  Future<String?> shareUri(String id) => controller.shareUri(collectionId);
+
   /// Only a torrent import has files to choose between: a collection this
   /// device published owns all of them, and there is nothing to fetch.
   @override

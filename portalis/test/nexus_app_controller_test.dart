@@ -627,6 +627,9 @@ class _Repository implements AppRepository {
   }
 
   @override
+  Future<String?> shareUri(int collection) async => null;
+
+  @override
   Future<void> setActive(bool value) async => active.add(value);
 
   @override

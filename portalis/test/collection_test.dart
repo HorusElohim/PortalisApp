@@ -16,10 +16,12 @@ import 'package:portalis/features/collections/presentation/peer_color.dart';
 /// are about what it *draws*, so the simplest possible source keeps them
 /// about that rather than about whichever engine is behind it.
 class _FixedSource extends CollectionSource with ChangeNotifier {
-  _FixedSource(this.collection);
+  _FixedSource(this.collection, {this.qrUri});
 
   Collection collection;
+  final String? qrUri;
   final commands = <String>[];
+  final shareRequests = <String>[];
 
   @override
   Listenable get listenable => this;
@@ -56,6 +58,12 @@ class _FixedSource extends CollectionSource with ChangeNotifier {
   @override
   Future<void> deleteWithFiles(String id) async =>
       commands.add('deleteWithFiles');
+
+  @override
+  Future<String?> shareUri(String id) async {
+    shareRequests.add(id);
+    return qrUri;
+  }
 }
 
 void main() {
@@ -155,6 +163,58 @@ void main() {
       expect(find.text('Invite'), findsNothing);
       expect(find.text('ï¼‹ Add media'), findsNothing);
       expect(find.text('Sync'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a completed collection offers a QR sharing action',
+        (tester) async {
+      final collection = buildCollection(
+        name: 'Iceland trip',
+        status: 'Available',
+        entries: [buildEntry(label: 'waterfall.jpg', bytes: 42)],
+      );
+      await tester.binding.setSurfaceSize(phoneSize);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CollectionScreen(
+            collection: collection,
+            source: _FixedSource(collection),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byKey(const Key('collectionShareQr')), findsOneWidget);
+      expect(find.text('Share QR'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('sharing a collection renders its magnet URI as a QR code',
+        (tester) async {
+      const uri =
+          'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567';
+      final collection = buildCollection(
+        name: 'Iceland trip',
+        status: 'Available',
+        entries: [buildEntry(label: 'waterfall.jpg', bytes: 42)],
+      );
+      final source = _FixedSource(collection, qrUri: uri);
+      await tester.binding.setSurfaceSize(phoneSize);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+            home: CollectionScreen(collection: collection, source: source)),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('collectionShareQr')));
+      await pumpTransition(tester);
+
+      expect(source.shareRequests, [collection.id]);
+      expect(find.byKey(const Key('collectionShareQrDialog')), findsOneWidget);
+      expect(find.byKey(const Key('collectionShareQrCode')), findsOneWidget);
+      expect(find.text('Scan to import Iceland trip'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

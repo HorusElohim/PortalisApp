@@ -39,6 +39,13 @@ Stream<AppSnapshot> watchStates() =>
 Stream<AppDetail?> watchDetail({int? collection}) =>
     RustLib.instance.api.cratePortalisApiWatchDetail(collection: collection);
 
+/// The collection's shareable magnet URI, when the local substrate has a real
+/// persisted info hash for it. The URI is fetched on demand rather than added
+/// to every snapshot because a QR is only useful on the screen that asked for
+/// it.
+Future<String?> shareUri({required int collection}) =>
+    RustLib.instance.api.cratePortalisApiShareUri(collection: collection);
+
 /// One collection's transfer history, as it happens.
 ///
 /// Its own stream rather than a field of the detail, because it changes for a

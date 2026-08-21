@@ -50,6 +50,12 @@ abstract class CollectionSource {
   Future<void> publishDraft(String id) async =>
       throw const SourceUnsupported('this collection is already shared');
 
+  /// The import URI a second device can scan, once this source has one.
+  ///
+  /// `null` is deliberate: a draft or unresolved collection has no stable
+  /// BitTorrent identity yet, so rendering a QR for it would be misleading.
+  Future<String?> shareUri(String id) async => null;
+
   /// Whether the files of this collection can be chosen individually.
   ///
   /// False for a collection that owns its files — there is nothing to choose,
