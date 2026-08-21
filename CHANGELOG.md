@@ -20,6 +20,11 @@
 
 ### Fixed
 
+- Scanning a collection QR now stays on the receiver path: Portalis imports
+  the Mac's magnet, waits for its file list, and starts downloading the
+  selected remote files. Incoming torrents no longer present or invoke a
+  local **Share this collection** action.
+
 - **Share this collection** now starts torrent publication and seeding instead
   of leaving the collection paused after confirmation. Once publication
   persists its info hash, the collection exposes a usable share URI and QR.

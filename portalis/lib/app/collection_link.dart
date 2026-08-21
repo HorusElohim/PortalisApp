@@ -5,6 +5,8 @@ typedef CollectionCommandSender = Future<AppAccepted> Function(
   EngineCommand command,
 );
 
+typedef CollectionDetailWatcher = Stream<AppDetail?> Function(int collection);
+
 /// Wraps a collection's existing import URI in the app-owned URL scheme.
 ///
 /// iOS Camera can route a registered custom scheme to Portalis, while it has no
@@ -39,4 +41,32 @@ Future<int?> importCollectionLink(
   if (magnet == null) return null;
   final accepted = await send(EngineCommand.importTorrent(magnet));
   return accepted.collection;
+}
+
+/// Confirms the default selection after a collection link resolves its
+/// descriptor, starting the receiver-side torrent download.
+///
+/// A Portalis QR names content another device is carrying. Its completion must
+/// therefore be `downloadSelection`, never `publishDraft`: publication is
+/// reserved for local files this device owns.
+Future<void> startCollectionLinkDownload(
+  int collection, {
+  required CollectionCommandSender send,
+  required CollectionDetailWatcher watchDetail,
+}) async {
+  final detail = await watchDetail(collection).firstWhere(
+    (detail) => detail != null && detail.entries.isNotEmpty,
+  );
+  final entries = [
+    for (final entry in detail!.entries)
+      if (entry.selected) entry.id,
+  ];
+  if (entries.isEmpty) {
+    throw StateError('The shared collection did not select any files');
+  }
+  await send(EngineCommand(
+    kind: 'downloadSelection',
+    collection: collection,
+    entries: entries,
+  ));
 }

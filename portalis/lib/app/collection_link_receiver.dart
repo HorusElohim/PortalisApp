@@ -48,6 +48,7 @@ class CollectionLinkReceiver {
       );
       if (collection == null) return;
       _handled = uri.toString();
+      unawaited(_startDownload(collection));
       AppNavigation.goHome();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final navigator = AppNavigation.navigatorKey.currentState;
@@ -63,6 +64,20 @@ class CollectionLinkReceiver {
       // The link is external input; report its failure without taking down the
       // app or navigating somewhere that suggests an import succeeded.
       debugPrint('Portalis collection link was not imported: $error');
+    }
+  }
+
+  Future<void> _startDownload(int collection) async {
+    try {
+      await startCollectionLinkDownload(
+        collection,
+        send: AppControllers.engine.send,
+        watchDetail: AppControllers.engine.watchDetail,
+      );
+    } catch (error) {
+      // The import route stays visible if metadata or the torrent download
+      // cannot start; this must not fall through to the local Share workflow.
+      debugPrint('Portalis collection download did not start: $error');
     }
   }
 }
