@@ -30,10 +30,10 @@
 
 <!-- New user-visible features go here before the next release. -->
 
-- Completed collections can now show a **Share QR** code. The QR contains the
-  collection's validated BitTorrent magnet URI, so another device can scan it
-  into the existing import flow; drafts and unresolved collections expose no
-  QR code.
+- Completed collections can now show a **Share QR** code. The QR contains a
+  `portalis://import` deep link carrying the collection's validated BitTorrent
+  magnet URI, so iOS and Android can open Portalis and enter the existing
+  import flow; drafts and unresolved collections expose no QR code.
 
 - **ADR-0003.5 / ADR-0009**: Peer hint parsing and QR-first bootstrap for offline sharing. Magnet URIs can now carry `x.pe` parameters with LAN peer addresses for direct device-to-device transfers. QR code scanner extracts magnet links with peer hints. LAN/mDNS discovery returns local network peers on the standard BitTorrent port (6881). FRB API exposed: `peer_hints_create`, `peer_hints_from_magnet`, `peer_hints_validate_address`, `peer_hints_discover_local`.
 

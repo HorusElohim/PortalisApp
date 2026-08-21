@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player_media_kit/video_player_media_kit.dart';
 
+import 'collection_link_receiver.dart';
 import '../nexus/bridge/bridge.dart';
 import '../nexus/bridge/frb_generated.dart';
 import '../design/theme_controller.dart';
@@ -34,6 +35,7 @@ Future<void> runPortalisApp() async {
     // Future preference lands.
     await ThemeController.instance.load();
     runApp(const MyApp());
+    startCollectionLinkReceiver();
   } catch (error) {
     runApp(_StartupErrorApp(error: error));
   }
