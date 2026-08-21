@@ -202,7 +202,7 @@ class _CollectionIdentifiers extends StatelessWidget {
                 monospace: true,
               ),
             InfoRow(
-              label: collection.isShared ? 'Collection id' : 'Info hash',
+              label: collection.isShared ? 'Collection id' : 'Local handle',
               value: collection.id,
               monospace: true,
               copyable: true,

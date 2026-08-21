@@ -199,8 +199,8 @@ impl PublishProgress {
 #[cfg(test)]
 mod validation_tests {
     use super::{
-        SourceFile, is_magnet, is_remote_source, is_torrent_path, make_source_names_unique,
-        native::sanitize_component,
+        SourceFile, is_magnet, is_remote_source, is_torrent_path, magnet_for_share,
+        make_source_names_unique, native, native::sanitize_component,
     };
 
     /// The magnet that broke this: its `xs=` web-seed hint ends in
@@ -283,6 +283,26 @@ mod validation_tests {
         assert_eq!(sanitize_component("CON.txt"), "_CON.txt");
         assert_eq!(sanitize_component("..."), "untitled");
     }
+
+    #[test]
+    fn a_shared_magnet_carries_its_direct_lan_peer_hints() {
+        let peers = crate::nexus::substrate::PeerHints::new([
+            "192.168.1.42:61234".parse().expect("a LAN peer"),
+            "10.0.0.8:61234".parse().expect("a LAN peer"),
+        ])
+        .expect("valid peer hints");
+
+        let magnet = magnet_for_share("0123456789abcdef0123456789abcdef01234567", &peers);
+        assert_eq!(
+            magnet,
+            "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567\
+&x.pe=192.168.1.42:61234&x.pe=10.0.0.8:61234"
+        );
+        assert_eq!(
+            native::peer_hints_from_source(&magnet).expect("decodes direct peers"),
+            peers
+        );
+    }
 }
 
 /// Create a new collection by linking local files into a torrent layout,
@@ -303,6 +323,30 @@ pub(crate) async fn publish(
     progress: PublishProgress,
 ) -> anyhow::Result<TorrentInfo> {
     native::create_collection(name, files, progress).await
+}
+
+/// Builds the stable collection magnet and its direct peer bootstrap hints.
+///
+/// The info hash identifies content, but a private, trackerless collection
+/// also needs at least one endpoint where the receiver can find its seeder.
+/// The QR is that in-person bootstrap channel; it carries endpoint metadata,
+/// never source paths or media bytes.
+pub(crate) fn magnet_for_share(
+    info_hash: &str,
+    peer_hints: &crate::nexus::substrate::PeerHints,
+) -> String {
+    let mut magnet = format!("magnet:?xt=urn:btih:{info_hash}");
+    for peer in peer_hints.as_slice() {
+        magnet.push_str("&x.pe=");
+        magnet.push_str(&peer.to_string());
+    }
+    magnet
+}
+
+/// Directly reachable LAN endpoints for this device's live BitTorrent
+/// listener. Empty is honest before the session has bound its listener.
+pub(crate) fn local_peer_hints() -> crate::nexus::substrate::PeerHints {
+    native::local_peer_hints()
 }
 
 /// Snapshot of every torrent currently managed by the session. Internal:
@@ -489,6 +533,7 @@ pub(crate) async fn restart_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
 
 pub mod native {
     use std::io::Write;
+    use std::net::{IpAddr, SocketAddr};
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -505,6 +550,7 @@ pub mod native {
     use librqbit_core::torrent_metainfo::{
         TorrentMetaV1File, TorrentMetaV1Info, TorrentMetaV1Owned,
     };
+    use network_interface::{Addr, NetworkInterface, NetworkInterfaceConfig};
     use sha1w::{ISha1, Sha1};
     use tokio::sync::OnceCell;
 
@@ -514,6 +560,46 @@ pub mod native {
     };
 
     static SESSION: OnceCell<Arc<Session>> = OnceCell::const_new();
+
+    pub(super) fn local_peer_hints() -> crate::nexus::substrate::PeerHints {
+        let Some(port) = SESSION.get().and_then(|session| session.tcp_listen_port()) else {
+            return crate::nexus::substrate::PeerHints::default();
+        };
+        let interfaces = match NetworkInterface::show() {
+            Ok(interfaces) => interfaces,
+            Err(error) => {
+                crate::nexus::log::clog!(
+                    "torrent",
+                    "could not enumerate local interfaces for QR bootstrap: {error}"
+                );
+                return crate::nexus::substrate::PeerHints::default();
+            }
+        };
+        peer_hints_for_interfaces(port, interfaces)
+    }
+
+    fn peer_hints_for_interfaces(
+        port: u16,
+        interfaces: impl IntoIterator<Item = NetworkInterface>,
+    ) -> crate::nexus::substrate::PeerHints {
+        let mut peers = interfaces
+            .into_iter()
+            .filter(|interface| !interface.internal)
+            .flat_map(|interface| interface.addr)
+            .filter_map(|address| match address {
+                Addr::V4(address) if address.ip.is_private() => {
+                    Some(SocketAddr::new(IpAddr::V4(address.ip), port))
+                }
+                Addr::V4(_) | Addr::V6(_) => None,
+            })
+            .collect::<Vec<_>>();
+        peers.sort_unstable();
+        peers.dedup();
+        // PeerHints validates this same bound. Truncate rather than discarding
+        // every endpoint on unusual hosts with many virtual interfaces.
+        peers.truncate(64);
+        crate::nexus::substrate::PeerHints::new(peers).unwrap_or_default()
+    }
 
     #[derive(Clone)]
     struct ReferencedStorageFactory {
@@ -1679,6 +1765,46 @@ pub mod native {
             assert_eq!(persisted[0].path, files[0].path);
             crate::nexus::linked_source_store::remove(&info_hash).unwrap();
             std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[cfg(test)]
+    mod peer_advertisement_tests {
+        use std::net::Ipv4Addr;
+
+        use network_interface::NetworkInterface;
+
+        use super::peer_hints_for_interfaces;
+
+        #[test]
+        fn peer_hints_use_private_external_interfaces_and_the_bound_port() {
+            let peers = peer_hints_for_interfaces(
+                61234,
+                [
+                    NetworkInterface::new_afinet("lo0", Ipv4Addr::LOCALHOST, None, None, 1, true),
+                    NetworkInterface::new_afinet(
+                        "en0",
+                        Ipv4Addr::new(192, 168, 1, 42),
+                        None,
+                        None,
+                        2,
+                        false,
+                    ),
+                    NetworkInterface::new_afinet(
+                        "wan0",
+                        Ipv4Addr::new(203, 0, 113, 8),
+                        None,
+                        None,
+                        3,
+                        false,
+                    ),
+                ],
+            );
+
+            assert_eq!(
+                peers.as_slice(),
+                ["192.168.1.42:61234".parse().expect("the bound LAN peer")]
+            );
         }
     }
 }

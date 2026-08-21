@@ -1099,7 +1099,11 @@ impl Nexus {
         if handle.len() != 40 || !handle.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Ok(None);
         }
-        Ok(Some(format!("magnet:?xt=urn:btih:{handle}")))
+        let peer_hints = crate::nexus::torrent::local_peer_hints();
+        Ok(Some(crate::nexus::torrent::magnet_for_share(
+            &handle,
+            &peer_hints,
+        )))
     }
 
     fn collection_detail(&self, collection: Handle) -> Option<Detail> {
@@ -1721,9 +1725,12 @@ mod tests {
         stored.substrate_handle = Some("01".repeat(20));
         nexus.store.put_collection(&key, &stored).expect("writes");
 
-        assert_eq!(
-            nexus.share_uri(collection).expect("builds the URI"),
-            Some("magnet:?xt=urn:btih:0101010101010101010101010101010101010101".to_owned())
+        assert!(
+            nexus
+                .share_uri(collection)
+                .expect("builds the URI")
+                .is_some_and(|uri| uri
+                    .starts_with("magnet:?xt=urn:btih:0101010101010101010101010101010101010101"))
         );
         nexus.close().await;
     }
@@ -2399,9 +2406,12 @@ mod tests {
                 .descriptor,
             b"torrent descriptor"
         );
-        assert_eq!(
-            nexus.share_uri(collection).expect("share URI"),
-            Some("magnet:?xt=urn:btih:1111111111111111111111111111111111111111".to_owned())
+        assert!(
+            nexus
+                .share_uri(collection)
+                .expect("share URI")
+                .is_some_and(|uri| uri
+                    .starts_with("magnet:?xt=urn:btih:1111111111111111111111111111111111111111"))
         );
         nexus.close().await;
     }
