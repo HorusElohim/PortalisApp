@@ -132,6 +132,7 @@ cc = "1"
 
 [patch.crates-io]
 librqbit = { path = "../vendor/librqbit" }
+librqbit-dualstack-sockets = { path = "../vendor/librqbit-dualstack-sockets" }
 
 # The domain layer's randomness (device keygen, invite secrets, collection
 # ids) has no OS RNG to call into on wasm32 — route it through the browser's

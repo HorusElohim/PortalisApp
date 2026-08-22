@@ -20,6 +20,11 @@
 
 ### Fixed
 
+- Patched librqbit's dual-stack socket helper for iOS, tvOS, and visionOS.
+  Apple mobile targets now report device binding as unsupported instead of
+  compiling the Linux-only `socket2::Socket::bind_device` call, allowing the
+  iOS Rust build to proceed while preserving macOS and Linux interface binding.
+
 - Upgraded the vendored BitTorrent engine from librqbit 8.1.1 to 9.0.1,
   retaining Portalis's verified piece-activity telemetry and adapting session,
   listener, metainfo, and storage APIs to the new engine. librqbit 9 no longer
