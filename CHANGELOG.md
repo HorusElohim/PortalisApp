@@ -20,6 +20,11 @@
 
 ### Fixed
 
+- Magnet imports now honor a validated HTTPS/HTTP `.torrent` exact-source
+  (`xs`) fallback when supplied. Portalis verifies the descriptor's BTv1 info
+  hash against the magnet before accepting it, so magnets can resolve metadata
+  even when DHT, tracker, and direct-peer discovery find no peer.
+
 - Collection QR magnets now include the sender's private-LAN address and the
   BitTorrent session's actual bound port as direct `x.pe` bootstrap hints. A
   receiver on the same network can resolve the file list without relying on a
