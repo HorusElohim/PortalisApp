@@ -563,6 +563,10 @@ pub mod native {
 
     pub(super) fn local_peer_hints() -> crate::nexus::substrate::PeerHints {
         let Some(port) = SESSION.get().and_then(|session| session.tcp_listen_port()) else {
+            crate::nexus::log::clog!(
+                "torrent",
+                "QR bootstrap has no direct peer: the session has no bound TCP listener"
+            );
             return crate::nexus::substrate::PeerHints::default();
         };
         let interfaces = match NetworkInterface::show() {
@@ -575,7 +579,13 @@ pub mod native {
                 return crate::nexus::substrate::PeerHints::default();
             }
         };
-        peer_hints_for_interfaces(port, interfaces)
+        let peers = peer_hints_for_interfaces(port, interfaces);
+        crate::nexus::log::clog!(
+            "torrent",
+            "QR bootstrap listener_port={port}, advertised_peers={:?}",
+            peers.as_slice()
+        );
+        peers
     }
 
     fn peer_hints_for_interfaces(
@@ -1372,6 +1382,12 @@ pub mod native {
             .copied()
             .chain(source_peers.as_slice().iter().copied())
             .collect::<Vec<_>>();
+        crate::nexus::log::clog!(
+            "torrent",
+            "resolving torrent metadata: source_peer_hints={:?}, supplied_peer_hints={:?}",
+            source_peers.as_slice(),
+            peer_hints.as_slice()
+        );
         let mut options = add_opts_with_peers(
             crate::nexus::substrate::PeerHints::new(peers)?
                 .as_slice()

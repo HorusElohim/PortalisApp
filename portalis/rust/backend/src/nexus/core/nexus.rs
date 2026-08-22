@@ -1100,6 +1100,11 @@ impl Nexus {
             return Ok(None);
         }
         let peer_hints = crate::nexus::torrent::local_peer_hints();
+        crate::nexus::log::clog!(
+            "nexus",
+            "share QR for {collection:?}: direct_peer_hints={:?}",
+            peer_hints.as_slice()
+        );
         Ok(Some(crate::nexus::torrent::magnet_for_share(
             &handle,
             &peer_hints,
