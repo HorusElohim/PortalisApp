@@ -8,7 +8,8 @@ import 'package:portalis/nexus/domain/app_state.dart';
 void main() {
   group('collection links', () {
     const magnet =
-        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567';
+        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567'
+        '&x.pe=192.168.1.42:61234';
 
     test('wrap a magnet in a Portalis import URI', () {
       final link = collectionShareLink(magnet);
