@@ -562,7 +562,7 @@ pub mod native {
     static SESSION: OnceCell<Arc<Session>> = OnceCell::const_new();
 
     pub(super) fn local_peer_hints() -> crate::nexus::substrate::PeerHints {
-        let Some(port) = SESSION.get().and_then(|session| session.tcp_listen_port()) else {
+        let Some(port) = SESSION.get().and_then(|session| session.announce_port()) else {
             crate::nexus::log::clog!(
                 "torrent",
                 "QR bootstrap has no direct peer: the session has no bound TCP listener"
@@ -724,17 +724,26 @@ pub mod native {
                         }
                     })
                     .collect();
+                let connect = librqbit::ConnectionOptions {
+                    proxy_url: settings.socks_proxy_url.clone(),
+                    peer_opts: Some(peer_opts),
+                    ..Default::default()
+                };
                 let opts = librqbit::SessionOptions {
                     // A range is mandatory, not optional: librqbit only binds
-                    // a TCP listener `if let Some(port_range) =
-                    // opts.listen_port_range` (verified in 8.1.1's
-                    // session.rs) — with none it binds nothing, this device
-                    // can never accept an incoming peer connection, and
-                    // enable_upnp_port_forwarding has no port to forward.
-                    // settings.rs rejects an empty or zero range for exactly
-                    // that reason.
-                    listen_port_range: Some(settings.listen_port_start..settings.listen_port_end),
-                    enable_upnp_port_forwarding: settings.enable_upnp_port_forwarding,
+                    // a TCP listener when `listen` is `Some(..)` — with
+                    // `None` it binds nothing, this device can never accept
+                    // an incoming peer connection, and UPnP forwarding has
+                    // no port to forward. settings.rs rejects an empty or
+                    // zero range for exactly that reason.
+                    listen: Some(librqbit::ListenerOptions {
+                        mode: librqbit::ListenerMode::TcpOnly,
+                        listen_addr: (std::net::Ipv6Addr::UNSPECIFIED, settings.listen_port_start)
+                            .into(),
+                        enable_upnp_port_forwarding: settings.enable_upnp_port_forwarding,
+                        ..Default::default()
+                    }),
+                    connect: Some(connect),
                     // Without persistence librqbit starts empty every launch,
                     // so a collection you were seeding comes back with every
                     // manifest entry unmatched and silently seeds nothing.
@@ -746,12 +755,16 @@ pub mod native {
                         },
                     ),
                     fastresume: settings.fastresume,
-                    disable_dht: settings.disable_dht,
-                    disable_dht_persistence: settings.disable_dht_persistence,
-                    socks_proxy_url: settings.socks_proxy_url.clone(),
-                    defer_writes_up_to: settings.defer_writes_up_to_mb.map(|mb| mb as usize),
+                    dht: (!settings.disable_dht).then(|| librqbit::DhtSessionConfig {
+                        persistence: (!settings.disable_dht_persistence)
+                            .then(librqbit::dht::DhtPersistenceConfig::default),
+                        ..Default::default()
+                    }),
+                    // librqbit 9.0.1 removed the deferred-write-buffer knob
+                    // this mapped to (`defer_writes_up_to`) with no direct
+                    // replacement; `settings.defer_writes_up_to_mb` is kept
+                    // for the Settings screen but is now inert upstream.
                     concurrent_init_limit: settings.concurrent_init_limit.map(|n| n as usize),
-                    peer_opts: Some(peer_opts),
                     blocklist_url: settings.blocklist_url.clone(),
                     trackers,
                     ratelimits: librqbit::limits::LimitsConfig {
@@ -1169,7 +1182,15 @@ pub mod native {
         let metainfo = TorrentMetaV1Owned {
             announce: None,
             announce_list: Vec::new(),
-            info,
+            // `raw_bytes` only matters when re-decoding a `.torrent` we did
+            // not just build; on this write path `info_hash` above is what
+            // actually pins the identity of the info dict, and
+            // `WithRawBytes`'s own `Serialize` impl only ever encodes
+            // `.data`, never `.raw_bytes` — see librqbit-bencode.
+            info: bencode::WithRawBytes {
+                data: info,
+                raw_bytes: ByteBufOwned::default(),
+            },
             comment: None,
             created_by: None,
             encoding: Some(b"utf-8".as_slice().into()),
@@ -1330,7 +1351,7 @@ pub mod native {
         let live_peers = stats
             .live
             .as_ref()
-            .map_or(0, |live| live.snapshot.peer_stats.live as u32);
+            .map_or(0, |live| live.snapshot.peer_stats.live);
         let info_hash = handle.info_hash().as_string();
         let mut files = files_for(api, id, &stats, initializing);
         if let Ok(Some(sources)) = crate::nexus::linked_source_store::sources_for(&info_hash) {
@@ -1429,8 +1450,8 @@ pub mod native {
                 .bytes()
                 .await
                 .with_context(|| format!("reading magnet xs descriptor {descriptor_url:?}"))?;
-            let parsed = librqbit::torrent_from_bytes::<ByteBufOwned>(&bytes)
-                .context("decoding magnet xs descriptor")?;
+            let parsed =
+                librqbit::torrent_from_bytes(&bytes).context("decoding magnet xs descriptor")?;
             anyhow::ensure!(
                 parsed.info_hash == expected,
                 "magnet xs descriptor does not match the magnet's BTv1 info hash"
@@ -1491,22 +1512,16 @@ pub mod native {
 
         let name = listed
             .info
-            .name
-            .as_ref()
-            .map(|name| std::str::from_utf8(name.as_ref()))
-            .transpose()?
+            .name()
+            .map(|name| name.into_owned())
             .filter(|name| !name.is_empty())
-            .unwrap_or("Torrent import")
-            .to_owned();
+            .unwrap_or_else(|| "Torrent import".to_owned());
         let files = listed
             .info
-            .iter_file_details()?
+            .iter_file_details()
             .map(|file| {
                 Ok(super::TorrentMetadataFile {
-                    label: file
-                        .filename
-                        .to_string()
-                        .context("decoding torrent filename")?,
+                    label: file.filename.to_string(),
                     bytes: file.len,
                 })
             })
