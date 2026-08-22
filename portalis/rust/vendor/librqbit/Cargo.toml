@@ -53,9 +53,11 @@ postgres = [
 ]
 prometheus = ["metrics-exporter-prometheus"]
 rust-tls = [
-    "reqwest/rustls",
-    "sha1w/sha1-ring",
-    "librqbit-core/sha1-ring",
+    "reqwest/rustls-no-provider",
+    "sha1w/sha1-crypto-hash",
+    "librqbit-core/sha1-crypto-hash",
+    "dep:rustls",
+    "rustls/ring",
 ]
 storage_examples = []
 storage_middleware = ["lru"]
@@ -252,6 +254,11 @@ default-features = false
 
 [dependencies.rlimit]
 version = "0.11"
+
+[dependencies.rustls]
+version = "0.23"
+optional = true
+default-features = false
 
 [dependencies.serde]
 version = "1"
