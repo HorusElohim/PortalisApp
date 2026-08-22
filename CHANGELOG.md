@@ -20,6 +20,11 @@
 
 ### Fixed
 
+- Aligned Rust, native dependency, and generated XCFramework deployment targets
+  with Xcode's `IPHONEOS_DEPLOYMENT_TARGET` (15.0 by default). This prevents
+  current-SDK native objects from being linked as iOS 10.0 binaries, which
+  caused librqbit 9's AWS-LC dependency to fail with `___chkstk_darwin`.
+
 - Patched librqbit's dual-stack socket helper for iOS, tvOS, and visionOS.
   Apple mobile targets now report device binding as unsupported instead of
   compiling the Linux-only `socket2::Socket::bind_device` call, allowing the

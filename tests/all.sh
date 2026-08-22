@@ -6,6 +6,7 @@ PROJECT_ROOT="$SCRIPT_DIR/.."
 
 NEXUS_SCRIPT="$SCRIPT_DIR/nexus.sh"
 FRONTEND_SCRIPT="$SCRIPT_DIR/frontend.sh"
+IOS_RUST_SCRIPT="$SCRIPT_DIR/ios_rust_build_script.sh"
 
 if [[ ! -x $NEXUS_SCRIPT ]]; then
   echo "[ERROR] Missing Nexus script at $NEXUS_SCRIPT" >&2
@@ -17,9 +18,15 @@ if [[ ! -x $FRONTEND_SCRIPT ]]; then
   exit 1
 fi
 
+if [[ ! -x $IOS_RUST_SCRIPT ]]; then
+  echo "[ERROR] Missing iOS Rust build script test at $IOS_RUST_SCRIPT" >&2
+  exit 1
+fi
+
 pushd "$PROJECT_ROOT" >/dev/null
 
 trap 'popd >/dev/null' EXIT
 
 "$NEXUS_SCRIPT" "$@"
 "$FRONTEND_SCRIPT" "$@"
+"$IOS_RUST_SCRIPT"
