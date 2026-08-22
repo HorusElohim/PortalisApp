@@ -93,7 +93,7 @@ librqbit = { version = "9.0.1", default-features = false, features = ["rust-tls"
 bencode = { package = "librqbit-bencode", version = "9.0.1", default-features = false }
 buffers = { package = "librqbit-buffers", version = "9.0.1" }
 librqbit-core = { version = "9.0.1", default-features = false }
-sha1w = { package = "librqbit-sha1-wrapper", version = "9.0.1", default-features = false, features = ["sha1-ring"] }
+sha1w = { package = "librqbit-sha1-wrapper", version = "9.0.1", default-features = false, features = ["sha1-crypto-hash"] }
 bytes = "1"
 dirs = "6"
 serde_json = "1.0"
@@ -103,10 +103,10 @@ serde_json = "1.0"
 # `sync` is Notify, which wakes the convergence loop on a user action. It
 # compiles without it today only because librqbit happens to enable it.
 tokio = { version = "1", features = ["rt", "net", "io-util", "time", "macros", "sync"] }
-# Public-IP discovery for invite codes. Already in the dependency tree
-# (librqbit pulls the same version/features), so this adds no compilation —
-# it just lets us call it directly.
-reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+# HTTPS remains available without AWS-LC's native iOS objects. reqwest leaves
+# provider selection to the direct Rustls ring dependency below.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 # UPnP port forwarding for the manifest-sync listener (librqbit forwards
 # its own BT port via SessionOptions; this same crate — already in the
 # tree as librqbit's dependency — lets us forward the sync port too, so

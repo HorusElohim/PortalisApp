@@ -20,6 +20,10 @@
 
 ### Fixed
 
+- Kept UPnP and HTTPS enabled on iOS while replacing librqbit 9's AWS-LC Rustls
+  provider with Rustls `ring` and the portable SHA-1 implementation. This
+  removes the AWS-LC iOS linker objects that referenced `___chkstk_darwin`.
+
 - Aligned Rust, native dependency, and generated XCFramework deployment targets
   with Xcode's `IPHONEOS_DEPLOYMENT_TARGET` (15.0 by default). This prevents
   current-SDK native objects from being linked as iOS 10.0 binaries, which
