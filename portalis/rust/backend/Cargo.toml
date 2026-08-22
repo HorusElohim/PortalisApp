@@ -89,11 +89,11 @@ x25519-dalek = { version = "3", features = ["static_secrets"] }
 # don't exist on wasm32 — Web is a viewer, not a swarm participant, so it's
 # excluded there rather than gated behind a feature no wasm code path uses.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-librqbit = { version = "8.1.1", default-features = false, features = ["rust-tls"] }
-bencode = { package = "librqbit-bencode", version = "3.1", default-features = false }
-buffers = { package = "librqbit-buffers", version = "4.2" }
-librqbit-core = { version = "5", default-features = false }
-sha1w = { package = "librqbit-sha1-wrapper", version = "4.1", default-features = false, features = ["sha1-ring"] }
+librqbit = { version = "9.0.1", default-features = false, features = ["rust-tls"] }
+bencode = { package = "librqbit-bencode", version = "9.0.1", default-features = false }
+buffers = { package = "librqbit-buffers", version = "9.0.1" }
+librqbit-core = { version = "9.0.1", default-features = false }
+sha1w = { package = "librqbit-sha1-wrapper", version = "9.0.1", default-features = false, features = ["sha1-ring"] }
 bytes = "1"
 dirs = "6"
 serde_json = "1.0"
@@ -106,13 +106,13 @@ tokio = { version = "1", features = ["rt", "net", "io-util", "time", "macros", "
 # Public-IP discovery for invite codes. Already in the dependency tree
 # (librqbit pulls the same version/features), so this adds no compilation —
 # it just lets us call it directly.
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 # UPnP port forwarding for the manifest-sync listener (librqbit forwards
 # its own BT port via SessionOptions; this same crate — already in the
 # tree as librqbit's dependency — lets us forward the sync port too, so
 # the public-IP address embedded in invites is actually reachable on
 # UPnP-enabled routers without manual port-forward setup).
-librqbit-upnp = "1"
+librqbit-upnp = "9.0.1"
 # Real interface enumeration for the addresses we advertise in invites.
 # Already in the tree (librqbit depends on the same version), so this adds no
 # compilation. Needed because inferring "our LAN address" from the default

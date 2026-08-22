@@ -20,6 +20,13 @@
 
 ### Fixed
 
+- Upgraded the vendored BitTorrent engine from librqbit 8.1.1 to 9.0.1,
+  retaining Portalis's verified piece-activity telemetry and adapting session,
+  listener, metainfo, and storage APIs to the new engine. librqbit 9 no longer
+  exposes the previous deferred-write-buffer option, so the existing deferred
+  writes setting is preserved for compatibility but is not applied by the
+  upstream engine.
+
 - Magnet imports now honor a validated HTTPS/HTTP `.torrent` exact-source
   (`xs`) fallback when supplied. Portalis verifies the descriptor's BTv1 info
   hash against the magnet before accepting it, so magnets can resolve metadata
