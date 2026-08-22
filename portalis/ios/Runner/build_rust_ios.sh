@@ -14,6 +14,19 @@ mkdir -p "$OUT_DIR"
 # Ensure cargo is available when invoked from Xcode environment
 export PATH="$HOME/.cargo/bin:$PATH"
 
+# Cargo's built-in iOS triples default their linker floor to iOS 10.0, while
+# Xcode builds the Runner for its IPHONEOS_DEPLOYMENT_TARGET. Exporting the
+# latter keeps native dependency objects (cc-rs, aws-lc-sys and PhotoKit) and
+# Rust's final linker invocation compatible with the same SDK floor.
+IOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-15.0}"
+if [[ ! $IOS_DEPLOYMENT_TARGET =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+  echo "(error) Invalid IPHONEOS_DEPLOYMENT_TARGET: $IOS_DEPLOYMENT_TARGET" >&2
+  exit 1
+fi
+export IPHONEOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET"
+export CARGO_TARGET_AARCH64_APPLE_IOS_RUSTFLAGS="${CARGO_TARGET_AARCH64_APPLE_IOS_RUSTFLAGS:-} -C link-arg=-miphoneos-version-min=${IOS_DEPLOYMENT_TARGET}"
+export CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUSTFLAGS="${CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUSTFLAGS:-} -C link-arg=-mios-simulator-version-min=${IOS_DEPLOYMENT_TARGET}"
+
 # Ensure required Rust targets (install if FRB_BOOTSTRAP=1)
 function ensure_target() {
   local tgt="$1"
@@ -56,7 +69,7 @@ create_framework() {
     install_name_tool -id "@rpath/backend.framework/backend" "$dst_dir/backend" || true
   fi
   # Minimal Info.plist required by frameworks
-  cat > "$dst_dir/Info.plist" <<'PLIST'
+  cat > "$dst_dir/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -74,7 +87,7 @@ create_framework() {
   <key>CFBundleExecutable</key>
   <string>backend</string>
   <key>MinimumOSVersion</key>
-  <string>12.0</string>
+  <string>${IOS_DEPLOYMENT_TARGET}</string>
 </dict>
 </plist>
 PLIST
