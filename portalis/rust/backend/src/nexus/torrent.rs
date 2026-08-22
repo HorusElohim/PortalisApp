@@ -687,7 +687,18 @@ pub mod native {
         }
     }
 
+    fn install_rustls_ring_provider() {
+        // reqwest's `rustls-no-provider` feature intentionally leaves this
+        // process-global choice to us. Install it before `Session::new` opens
+        // DHT sockets: a panic while reqwest builds its client otherwise leaves
+        // the DHT port occupied and turns later import retries into bind errors.
+        if rustls::crypto::CryptoProvider::get_default().is_none() {
+            let _ = rustls::crypto::ring::default_provider().install_default();
+        }
+    }
+
     async fn session() -> anyhow::Result<Arc<Session>> {
+        install_rustls_ring_provider();
         SESSION
             .get_or_try_init(|| async {
                 // Read once so the configured output folder and all other
@@ -1875,6 +1886,17 @@ pub mod native {
             assert_eq!(persisted[0].path, files[0].path);
             crate::nexus::linked_source_store::remove(&info_hash).unwrap();
             std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[cfg(test)]
+    mod tls_provider_tests {
+        use super::install_rustls_ring_provider;
+
+        #[test]
+        fn ring_is_installed_before_librqbit_creates_http_clients() {
+            install_rustls_ring_provider();
+            assert!(rustls::crypto::CryptoProvider::get_default().is_some());
         }
     }
 
