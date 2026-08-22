@@ -881,9 +881,49 @@ pub mod native {
         Ok(String::from_utf8(decoded)?)
     }
 
+    /// Returns a web `.torrent` descriptor from a magnet's exact-source
+    /// (`xs`) fields. This is distinct from a web seed (`ws`): it retrieves
+    /// only immutable metadata, never media payload bytes.
+    fn torrent_descriptor_url_from_magnet(source: &str) -> Option<String> {
+        if !super::is_magnet(source) {
+            return None;
+        }
+        source
+            .split_once('?')
+            .map_or("", |(_, query)| query)
+            .split('&')
+            .filter_map(|part| part.split_once('='))
+            .filter(|(key, _)| key.eq_ignore_ascii_case("xs"))
+            .filter_map(|(_, value)| decode_exact_source(value).ok())
+            .find_map(|value| {
+                let url = reqwest::Url::parse(&value).ok()?;
+                (matches!(url.scheme(), "http" | "https")
+                    && url.path().to_ascii_lowercase().ends_with(".torrent"))
+                .then(|| url.to_string())
+            })
+    }
+
+    fn decode_exact_source(value: &str) -> anyhow::Result<String> {
+        let bytes = value.as_bytes();
+        let mut decoded = Vec::with_capacity(bytes.len());
+        let mut index = 0;
+        while index < bytes.len() {
+            if bytes[index] != b'%' {
+                decoded.push(bytes[index]);
+                index += 1;
+                continue;
+            }
+            anyhow::ensure!(index + 2 < bytes.len(), "invalid exact-source escape");
+            let hex = std::str::from_utf8(&bytes[index + 1..index + 3])?;
+            decoded.push(u8::from_str_radix(hex, 16)?);
+            index += 3;
+        }
+        Ok(String::from_utf8(decoded)?)
+    }
+
     #[cfg(test)]
     mod peer_hint_tests {
-        use super::peer_hints_from_source;
+        use super::{peer_hints_from_source, torrent_descriptor_url_from_magnet};
 
         #[test]
         fn magnet_peer_hints_are_decoded_deduplicated_and_ordered() {
@@ -899,6 +939,16 @@ pub mod native {
                 .expect_err("malformed peer hint");
 
             assert!(error.to_string().contains("peer hint"));
+        }
+
+        #[test]
+        fn a_magnet_uses_its_https_xs_torrent_as_a_metadata_fallback() {
+            const COSMOS_LAUNDROMAT: &str = "magnet:?xt=urn:btih:c9e15763f722f23e98a29decdfae341b98d53056&dn=Cosmos+Laundromat&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2F&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fcosmos-laundromat.torrent";
+
+            assert_eq!(
+                torrent_descriptor_url_from_magnet(COSMOS_LAUNDROMAT),
+                Some("https://webtorrent.io/torrents/cosmos-laundromat.torrent".to_owned())
+            );
         }
     }
 
@@ -1361,7 +1411,36 @@ pub mod native {
     /// Read here rather than handed over as a path because a sandboxed app
     /// may open a file the person chose and still not be able to hand that
     /// path to something that opens it again later.
-    fn add_torrent_for(source: &str) -> anyhow::Result<AddTorrent<'static>> {
+    async fn add_torrent_for(source: &str) -> anyhow::Result<AddTorrent<'static>> {
+        if let Some(descriptor_url) = torrent_descriptor_url_from_magnet(source) {
+            let expected = librqbit::Magnet::parse(source)
+                .context("parsing magnet exact-source metadata")?
+                .as_id20()
+                .context("magnet exact-source metadata has no BTv1 info hash")?;
+            let response = reqwest::get(&descriptor_url)
+                .await
+                .with_context(|| format!("fetching magnet xs descriptor {descriptor_url:?}"))?;
+            anyhow::ensure!(
+                response.status().is_success(),
+                "magnet xs descriptor {descriptor_url:?} returned {}",
+                response.status()
+            );
+            let bytes = response
+                .bytes()
+                .await
+                .with_context(|| format!("reading magnet xs descriptor {descriptor_url:?}"))?;
+            let parsed = librqbit::torrent_from_bytes::<ByteBufOwned>(&bytes)
+                .context("decoding magnet xs descriptor")?;
+            anyhow::ensure!(
+                parsed.info_hash == expected,
+                "magnet xs descriptor does not match the magnet's BTv1 info hash"
+            );
+            crate::nexus::log::clog!(
+                "torrent",
+                "resolving magnet metadata through xs descriptor {descriptor_url:?}"
+            );
+            return Ok(AddTorrent::from_bytes(bytes.to_vec()));
+        }
         if super::is_torrent_path(source) {
             let bytes = std::fs::read(source)
                 .with_context(|| format!("reading the .torrent descriptor {source:?}"))?;
@@ -1395,7 +1474,7 @@ pub mod native {
         );
         options.list_only = true;
         let response = session
-            .add_torrent(add_torrent_for(source)?, Some(options))
+            .add_torrent(add_torrent_for(source).await?, Some(options))
             .await
             .with_context(|| format!("resolving what {source:?} contains"))?;
 
@@ -1472,7 +1551,7 @@ pub mod native {
         options.only_files = Some(files.to_vec());
         options.output_folder = Some(destination.to_string_lossy().into_owned());
         let response = session
-            .add_torrent(add_torrent_for(source)?, Some(options))
+            .add_torrent(add_torrent_for(source).await?, Some(options))
             .await
             .with_context(|| format!("starting the download of {source:?}"))?;
         // An `AlreadyManaged` answer means the engine still carries this info
