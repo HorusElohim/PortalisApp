@@ -11,6 +11,11 @@
 - Upgraded `mobile_scanner` to 7.4.0 for the current macOS AVFoundation camera
   selector and fallback behavior.
 
+- Restored zero-copy gallery-backed torrents into the live librqbit session on
+  startup from the persisted descriptor and original source references. QR
+  sharing now continues to serve metadata after an iPhone or macOS restart
+  without copying media.
+
 - Added the macOS App Sandbox camera entitlement to both debug and release
   profiles.
 
