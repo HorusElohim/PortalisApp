@@ -634,6 +634,10 @@ pub mod native {
         fn clone_box(&self) -> librqbit::storage::BoxStorageFactory {
             self.clone().boxed()
         }
+
+        fn supports_persistence(&self) -> bool {
+            false
+        }
     }
 
     #[derive(Clone)]
@@ -1838,7 +1842,22 @@ pub mod native {
 
     #[cfg(test)]
     mod referenced_storage_tests {
-        use super::{PublishProgress, SourceFile, create_referenced_metainfo};
+        use super::{
+            PublishProgress, ReferencedStorageFactory, SourceFile, create_referenced_metainfo,
+        };
+
+        #[test]
+        fn referenced_storage_is_not_sent_to_librqbit_session_persistence() {
+            use librqbit::storage::StorageFactory;
+
+            assert!(
+                !ReferencedStorageFactory {
+                    sources: Vec::new(),
+                    lengths: Vec::new(),
+                }
+                .supports_persistence()
+            );
+        }
 
         #[test]
         fn referenced_descriptor_is_persisted_before_session_admission() {
