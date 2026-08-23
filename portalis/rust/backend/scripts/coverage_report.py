@@ -81,9 +81,9 @@ def unreachable_spans(path: str) -> dict[int, str]:
 
     `#[ignore]`
         A test that is skipped unless asked for by name, together with the
-        helpers nested inside it. `core::service::live_tests` needs a service
-        already listening (see `tool/nexus_server.sh`), so its endpoint
-        implementations are compiled but never driven by a normal run.
+        helpers nested inside it. `core::service::live_tests` needs a live
+        endpoint service already listening, so its endpoint implementations
+        are compiled but never driven by a normal run.
 
     Excluding these is not a lowered standard: it is the difference between
     code no test reached and code no test *can* reach. Everything else stays
