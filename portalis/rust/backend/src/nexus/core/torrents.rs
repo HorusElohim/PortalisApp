@@ -32,7 +32,7 @@ use tokio::sync::{mpsc, watch};
 use crate::nexus::projection::state::{Handle, PortalisState};
 use crate::nexus::store::Store;
 use crate::nexus::store::records::{StoredCollection, StoredImportEntry};
-use crate::nexus::substrate::{PeerHints, Substrate};
+use crate::nexus::substrate::Substrate;
 
 /// One collection this worker has something to do for.
 enum Pending {
@@ -206,7 +206,8 @@ async fn resolve(
     key: &[u8],
     source: &str,
 ) -> anyhow::Result<()> {
-    let inspected = substrate.inspect(source, &PeerHints::default()).await?;
+    let peer_hints = crate::nexus::torrent::peer_hints_from_source(source)?;
+    let inspected = substrate.inspect(source, &peer_hints).await?;
     anyhow::ensure!(!inspected.files.is_empty(), "that source names no files");
 
     let entries = inspected
@@ -245,8 +246,9 @@ async fn acquire(
     files: &[usize],
 ) -> anyhow::Result<()> {
     let destination = crate::nexus::torrent::download_dir();
+    let peer_hints = crate::nexus::torrent::peer_hints_from_source(source)?;
     let info = substrate
-        .acquire_selection(source, files, &destination, &PeerHints::default())
+        .acquire_selection(source, files, &destination, &peer_hints)
         .await?;
 
     // Recorded last, and only once the download is genuinely started: the

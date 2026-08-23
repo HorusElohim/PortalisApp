@@ -23,6 +23,14 @@
 
 ### Fixed
 
+- Fixed post-creation native collection additions: `AddMedia` now persists new
+  original source references, refreshes the projection, and wakes publication
+  instead of being silently accepted and discarded.
+
+- Shared magnet imports now forward their embedded `x.pe` LAN peer hints during
+  both metadata resolution and file acquisition, allowing the receiver to
+  connect directly to the publishing Mac.
+
 - Gallery-linked publication now remains zero-copy with librqbit 9.0.1 session
   persistence: referenced storage factories are explicitly skipped by the
   filesystem-only session serializer while Portalis keeps the torrent metadata
