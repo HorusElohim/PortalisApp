@@ -608,6 +608,27 @@ impl Nexus {
     /// this device may do, or needs a connection it cannot wait for.
     pub fn command(&self, command: &Command) -> Result<Accepted, CommandError> {
         validate(command)?;
+        match command {
+            Command::ImportTorrent { source } => crate::nexus::log::clog!(
+                "nexus",
+                "command ImportTorrent source_kind={} source_len={}",
+                if crate::nexus::torrent::is_magnet(source) {
+                    "magnet"
+                } else {
+                    "torrent_path"
+                },
+                source.len()
+            ),
+            Command::DownloadSelection {
+                collection,
+                entries,
+            } => crate::nexus::log::clog!(
+                "nexus",
+                "command DownloadSelection collection={collection:?} entries={:?}",
+                entries
+            ),
+            _ => {}
+        }
 
         // A collection the person has just created, renamed, or removed must
         // survive a crash before it can be published. The database write is
@@ -824,6 +845,16 @@ impl Nexus {
     /// well be the only case there is — and a command that promises not to
     /// wait for a network cannot resolve one inline anyway.
     fn import_torrent(&self, source: &str) -> Result<Handle, CommandError> {
+        crate::nexus::log::clog!(
+            "nexus",
+            "import_torrent accepted source_kind={} source_len={}",
+            if crate::nexus::torrent::is_magnet(source) {
+                "magnet"
+            } else {
+                "torrent_path"
+            },
+            source.len()
+        );
         let id = crate::nexus::collections::model::CollectionId::generate();
         let stored = StoredCollection {
             // A placeholder until the source says its real name. Taken from
@@ -1067,6 +1098,11 @@ impl Nexus {
         collection: Handle,
         selected: &[Handle],
     ) -> Result<(), CommandError> {
+        crate::nexus::log::clog!(
+            "nexus",
+            "confirm_torrent_selection collection={collection:?} entries={:?}",
+            selected
+        );
         if selected.is_empty() {
             return Err(CommandError::Invalid(
                 "choose at least one file before downloading".to_owned(),

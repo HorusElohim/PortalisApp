@@ -204,9 +204,12 @@ class _HomeState extends State<Home> {
   }
 
   Future<int?> _importTorrent(String source) async {
+    debugPrint('[home] import torrent start source_len=${source.length}');
     final accepted = await AppControllers.engine.send(
       EngineCommand.importTorrent(source),
     );
+    debugPrint(
+        '[home] import torrent result collection=${accepted.collection}');
     final collection = accepted.collection;
     if (collection == null) {
       throw StateError('The engine did not identify the imported torrent');
@@ -217,6 +220,8 @@ class _HomeState extends State<Home> {
   }
 
   Future<int?> _importScannedCollection(String magnet) async {
+    debugPrint(
+        '[home] scanned collection import start source_len=${magnet.length}');
     final collection = await _importTorrent(magnet);
     if (collection == null) return null;
     unawaited(

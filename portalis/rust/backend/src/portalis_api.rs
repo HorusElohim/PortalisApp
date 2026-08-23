@@ -181,6 +181,7 @@ fn locked_runtime() -> Result<std::sync::MutexGuard<'static, Option<Nexus>>, Str
 /// Returns a displayable reason when the device identity or local store cannot
 /// be opened.
 pub async fn start() -> Result<(), String> {
+    crate::nexus::log::clog!("api", "start");
     let mut runtime = locked_runtime()?;
     if runtime.is_none() {
         *runtime = Some(Nexus::open_default().map_err(|error| error.to_string())?);
@@ -190,6 +191,7 @@ pub async fn start() -> Result<(), String> {
 
 /// Stops the runtime and waits for its bounded shutdown.
 pub async fn stop() -> Result<(), String> {
+    crate::nexus::log::clog!("api", "stop");
     let nexus = locked_runtime()?.take();
     if let Some(nexus) = nexus {
         nexus.close().await;
@@ -256,6 +258,7 @@ pub async fn watch_detail(
 /// to every snapshot because a QR is only useful on the screen that asked for
 /// it.
 pub fn share_uri(collection: u32) -> Result<Option<String>, String> {
+    crate::nexus::log::clog!("api", "share_uri collection={collection}");
     locked_runtime()?
         .as_ref()
         .ok_or_else(|| "start Nexus before sharing a collection".to_owned())?
@@ -386,6 +389,13 @@ pub async fn storage_breakdown() -> Result<Vec<AppStorageEntry>, String> {
 
 /// Validates and accepts one command without waiting for I/O.
 pub fn send(command: AppCommand) -> Result<AppAccepted, String> {
+    crate::nexus::log::clog!(
+        "api",
+        "send kind={} collection={:?} entries={}",
+        command.kind,
+        command.collection,
+        command.entries.len()
+    );
     let command = command.into_core()?;
     let runtime = locked_runtime()?;
     let accepted = runtime
@@ -393,11 +403,19 @@ pub fn send(command: AppCommand) -> Result<AppAccepted, String> {
         .ok_or_else(|| "start Nexus before sending a command".to_owned())?
         .command(&command)
         .map_err(|error| error.to_string())?;
-    Ok(AppAccepted {
+    let accepted = AppAccepted {
         id: accepted.id,
         collection: accepted.collection.map(|handle| handle.0),
         queued: accepted.queued,
-    })
+    };
+    crate::nexus::log::clog!(
+        "api",
+        "accepted id={} collection={:?} queued={}",
+        accepted.id,
+        accepted.collection,
+        accepted.queued
+    );
+    Ok(accepted)
 }
 
 impl AppCommand {
