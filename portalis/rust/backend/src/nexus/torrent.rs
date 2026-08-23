@@ -468,6 +468,21 @@ pub(crate) async fn inspect_source(
     native::inspect_source(source, peer_hints).await
 }
 
+/// Extracts direct LAN bootstrap peers embedded in a shared magnet.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn peer_hints_from_source(
+    source: &str,
+) -> anyhow::Result<crate::nexus::substrate::PeerHints> {
+    native::peer_hints_from_source(source)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn peer_hints_from_source(
+    _source: &str,
+) -> anyhow::Result<crate::nexus::substrate::PeerHints> {
+    Ok(crate::nexus::substrate::PeerHints::default())
+}
+
 #[cfg(target_arch = "wasm32")]
 pub(crate) async fn inspect_source(
     _source: &str,

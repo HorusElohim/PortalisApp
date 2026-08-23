@@ -615,7 +615,8 @@ impl Nexus {
         let collection = self.apply_local(command)?;
         if matches!(
             command,
-            Command::CreateCollection { files, .. } if !files.is_empty()
+            Command::CreateCollection { files, .. } | Command::AddMedia { files, .. }
+                if !files.is_empty()
         ) {
             // A full channel already contains the only wake the worker needs.
             let _ = self.publisher.try_send(());
@@ -639,6 +640,11 @@ impl Nexus {
             Command::CreateCollection { name, files } => {
                 self.create_collection(name, files).map(Some)
             }
+            Command::AddMedia {
+                collection,
+                label: _,
+                files,
+            } => self.add_media(*collection, files).map(|()| None),
             Command::RenameCollection { collection, name } => {
                 self.rename_collection(*collection, name).map(|()| None)
             }
@@ -878,6 +884,52 @@ impl Nexus {
         // A full channel already holds the one wake the worker needs.
         let _ = self.torrents.try_send(());
         Ok(handle)
+    }
+
+    fn add_media(&self, handle: Handle, files: &[LocalFile]) -> Result<(), CommandError> {
+        let key = self.collection_key(handle)?;
+        let mut stored = self
+            .store
+            .collection(&key)
+            .map_err(persistence)?
+            .ok_or_else(|| missing_collection(handle))?;
+        if !stored.draft {
+            return Err(CommandError::Invalid(
+                "only an unshared collection can receive more files".to_owned(),
+            ));
+        }
+        if self
+            .store
+            .torrent_import(&key)
+            .map_err(persistence)?
+            .is_some()
+        {
+            return Err(CommandError::Invalid(
+                "a torrent collection has a fixed file list".to_owned(),
+            ));
+        }
+
+        let additions = prepare_sources(files)?;
+        stored.sources.extend(additions);
+        let mut names = stored
+            .sources
+            .iter()
+            .map(|source| crate::nexus::torrent::SourceFile {
+                name: source.label.clone(),
+                path: source.path.clone(),
+                length_bytes: Some(source.bytes),
+            })
+            .collect::<Vec<_>>();
+        crate::nexus::torrent::make_source_names_unique(&mut names);
+        for (stored, source) in stored.sources.iter_mut().zip(names) {
+            stored.label = source.name;
+        }
+        self.store
+            .put_collection(&key, &stored)
+            .map_err(persistence)?;
+        self.refresh_status(handle, &key)?;
+        self.republish(handle, &key);
+        Ok(())
     }
 
     fn rename_collection(&self, handle: Handle, name: &str) -> Result<(), CommandError> {
