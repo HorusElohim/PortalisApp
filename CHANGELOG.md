@@ -23,6 +23,11 @@
 
 ### Fixed
 
+- Gallery-linked publication now remains zero-copy with librqbit 9.0.1 session
+  persistence: referenced storage factories are explicitly skipped by the
+  filesystem-only session serializer while Portalis keeps the torrent metadata
+  and original source descriptors in its linked-source vault.
+
 - Added `tool/build.sh` and `tool/run.sh` helpers for platform-aware Flutter
   builds and build-then-run workflows. Both support `--clean`; `--ai` keeps
   successful output concise while replaying full Cargo/Flutter output on errors,
