@@ -49,8 +49,9 @@ class _QrPeerHintScannerState extends State<QrPeerHintScanner> {
     final stream = _qrService.startScanning();
     _scanningSubscription = stream.listen(
       (magnetLink) {
-        // Stop scanning after first successful read
-        _qrService.stopScanning();
+        // The callback pops this route. Let route disposal stop and dispose the
+        // controller; disposing it here leaves MobileScanner building for one
+        // frame with an already-disposed controller.
         _scanningSubscription?.cancel();
 
         // Notify the callback
