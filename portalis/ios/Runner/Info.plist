@@ -41,6 +41,8 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Portalis uses the camera to scan collection QR codes and start a direct transfer.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Portalis uses your local network to find nearby devices and share media directly, without a server.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

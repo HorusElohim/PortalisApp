@@ -28,6 +28,11 @@ void main() {
       // can still fetch a torrent, and that is what the entry is for.
       expect(find.byKey(const Key('addFiles')), findsOneWidget);
       expect(find.byKey(const Key('addMagnet')), findsOneWidget);
+      expect(find.byKey(const Key('scanCollectionQr')), findsOneWidget);
+      expect(
+        find.text('Import a shared collection'),
+        findsOneWidget,
+      );
       expect(
         find.text('A .torrent here is fetched, not shared'),
         findsOneWidget,

@@ -12,6 +12,7 @@ import '../domain/picked_file.dart';
 import '../platform/no_copy_source_picker.dart';
 import '../platform/photo_library_picker.dart';
 import '../platform/source_access.dart';
+import '../../peer_hints/widgets/collection_qr_scanner.dart';
 
 /// What a person chose to make a collection out of.
 ///
@@ -35,6 +36,13 @@ class TorrentSource extends ChosenSources {
   const TorrentSource(this.source);
 
   final String source;
+}
+
+/// A collection QR magnet, which is imported and fetched rather than shared.
+class ScannedCollectionSource extends ChosenSources {
+  const ScannedCollectionSource(this.magnet);
+
+  final String magnet;
 }
 
 /// Asks what to put in a new collection, and returns it.
@@ -97,6 +105,13 @@ Future<ChosenSources?> showAddSourcesSheet(BuildContext context) async {
             title: const Text('Magnet link'),
             onTap: () => Navigator.of(sheetContext).pop('magnet'),
           ),
+          ListTile(
+            key: const Key('scanCollectionQr'),
+            leading: const Icon(Icons.qr_code_scanner_outlined),
+            title: const Text('Scan QR code'),
+            subtitle: const Text('Import a shared collection'),
+            onTap: () => Navigator.of(sheetContext).pop('scanQr'),
+          ),
           const SizedBox(height: 6),
         ],
       ),
@@ -114,6 +129,11 @@ Future<ChosenSources?> showAddSourcesSheet(BuildContext context) async {
     );
     final trimmed = source?.trim() ?? '';
     return trimmed.isEmpty ? null : TorrentSource(trimmed);
+  }
+
+  if (choice == 'scanQr') {
+    final magnet = await scanCollectionQrCode(context);
+    return magnet == null ? null : ScannedCollectionSource(magnet);
   }
 
   try {

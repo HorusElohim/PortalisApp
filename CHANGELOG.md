@@ -8,6 +8,11 @@
   source. Portalis reads and hashes the original files directly; it never
   creates hard-link, clone, or copied source layouts.
 
+- Added a cross-platform Share-menu `Scan QR code` action. It opens the camera,
+  accepts Portalis collection QR links and legacy raw magnets, then imports the
+  torrent and starts receiver-side selection/download without publishing local
+  media.
+
 - Kept native Android MediaStore and iOS PhotoKit adapters inside the Nexus
   platform namespace, separating platform glue from the app-facing Rust bridge
   and preserving a scalable backend layout.

@@ -4,6 +4,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/app_controllers.dart';
+import '../../../app/collection_link.dart';
 import '../../../design/collection_deletion_dialog.dart';
 import '../../../design/design.dart';
 import '../domain/picked_file.dart';
@@ -61,6 +62,8 @@ class _HomeState extends State<Home> {
         LocalSources(:final files) when files.isEmpty => null,
         LocalSources(:final files) => await _createDraft(files),
         TorrentSource(:final source) => await _importTorrent(source),
+        ScannedCollectionSource(:final magnet) =>
+          await _importScannedCollection(magnet),
       };
       if (collection == null || !mounted) return;
       _openCollectionById(collection);
@@ -210,6 +213,21 @@ class _HomeState extends State<Home> {
     }
     // The caller opens it. A magnet's file list arrives from the swarm a
     // moment later and the screen fills in; a descriptor's is already there.
+    return collection;
+  }
+
+  Future<int?> _importScannedCollection(String magnet) async {
+    final collection = await _importTorrent(magnet);
+    if (collection == null) return null;
+    unawaited(
+      startCollectionLinkDownload(
+        collection,
+        send: AppControllers.engine.send,
+        watchDetail: AppControllers.engine.watchDetail,
+      ).catchError((error) {
+        debugPrint('Scanned collection download did not start: $error');
+      }),
+    );
     return collection;
   }
 
