@@ -90,8 +90,28 @@ pub(crate) async fn follow_torrent_imports(
                 continue;
             }
         };
+        crate::nexus::log::clog!(
+            "nexus",
+            "torrent worker wake: pending_work_count={}",
+            pending.len()
+        );
 
         for work in pending {
+            crate::nexus::log::clog!(
+                "nexus",
+                "torrent worker performing {}",
+                match &work {
+                    Pending::Resolve { source, .. } => {
+                        format!("resolve source_len={}", source.len())
+                    }
+                    Pending::Acquire { source, files, .. } => {
+                        format!("acquire source_len={} files={files:?}", source.len())
+                    }
+                    Pending::Reconcile { handle, files, .. } => {
+                        format!("reconcile handle={handle} files={files:?}")
+                    }
+                }
+            );
             let done = tokio::select! {
                 () = shutdown.requested() => return,
                 done = perform(&store, substrate.as_ref(), &work) => done,
@@ -206,6 +226,15 @@ async fn resolve(
     key: &[u8],
     source: &str,
 ) -> anyhow::Result<()> {
+    crate::nexus::log::clog!(
+        "nexus",
+        "torrent resolve begin source_len={} supplied_peer_hints={:?}",
+        source.len(),
+        crate::nexus::torrent::peer_hints_from_source(source)
+            .as_ref()
+            .map(|peers| peers.as_slice())
+            .unwrap_or_default()
+    );
     let peer_hints = crate::nexus::torrent::peer_hints_from_source(source)?;
     let inspected = substrate.inspect(source, &peer_hints).await?;
     anyhow::ensure!(!inspected.files.is_empty(), "that source names no files");
@@ -223,6 +252,13 @@ async fn resolve(
         .collect::<Vec<_>>();
     store.put_torrent_import_entries(key, &entries)?;
     store.put_torrent_import_descriptor(key, &inspected.descriptor)?;
+    crate::nexus::log::clog!(
+        "nexus",
+        "torrent resolve complete source_len={} files={} info_hash={}",
+        source.len(),
+        entries.len(),
+        inspected.info_hash
+    );
 
     // The real name replaces the placeholder taken from the source string.
     if let Some(stored) = store.collection(key)? {
