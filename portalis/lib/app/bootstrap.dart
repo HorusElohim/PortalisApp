@@ -22,10 +22,18 @@ Future<void> runPortalisApp() async {
     );
     await RustLib.init();
     final backendVersion = getVersion();
-    if (backendVersion != expectedBackendVersion) {
+    final compatibility = backendVersion == expectedBackendVersion;
+    debugPrint(
+      '[startup] backend trust report: '
+      'frontend=$portalisVersion backend=$backendVersion '
+      'expected_backend=$expectedBackendVersion '
+      'compatibility=${compatibility ? "trusted" : "rejected"}',
+    );
+    if (!compatibility) {
       throw StateError(
-        'Native backend $backendVersion is incompatible with this frontend '
-        '(expected backend $expectedBackendVersion). '
+        'Native backend compatibility rejected: frontend $portalisVersion '
+        'loaded backend $backendVersion, expected backend '
+        '$expectedBackendVersion. '
         'Regenerate the bridge and rebuild the native backend together.',
       );
     }
