@@ -1569,10 +1569,13 @@ pub mod native {
                 .to_vec(),
         );
         options.list_only = true;
-        let response = session
-            .add_torrent(add_torrent_for(source).await?, Some(options))
-            .await
-            .with_context(|| format!("resolving what {source:?} contains"))?;
+        let response = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            session.add_torrent(add_torrent_for(source).await?, Some(options)),
+        )
+        .await
+        .context("timed out after 30 seconds while resolving torrent metadata")?
+        .with_context(|| format!("resolving what {source:?} contains"))?;
 
         let listed = match response {
             AddTorrentResponse::ListOnly(listed) => listed,
@@ -1602,6 +1605,12 @@ pub mod native {
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 
+        crate::nexus::log::clog!(
+            "torrent",
+            "resolved torrent metadata: info_hash={}, files={}",
+            listed.info_hash.as_string(),
+            files.len()
+        );
         Ok(crate::nexus::substrate::Inspected {
             info_hash: listed.info_hash.as_string(),
             name,
