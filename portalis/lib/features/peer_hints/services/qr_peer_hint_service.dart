@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../app/collection_link.dart';
@@ -29,6 +30,9 @@ class QrPeerHintService {
   /// Returns a Stream that emits decoded magnet strings when QR codes are scanned
   Stream<String> startScanning() {
     _controller = MobileScannerController(
+      facing: defaultTargetPlatform == TargetPlatform.macOS
+          ? CameraFacing.front
+          : CameraFacing.back,
       formats: [BarcodeFormat.qrCode],
       detectionSpeed: DetectionSpeed.normal,
       returnImage: false,

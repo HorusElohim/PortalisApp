@@ -43,18 +43,7 @@ class _QrPeerHintScannerState extends State<QrPeerHintScanner> {
   }
 
   Future<void> _initializeScanner() async {
-    if (!await QrPeerHintService.isAvailable) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('QR scanning not available on this device'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
+    if (!mounted) return;
     setState(() => _isInitialized = true);
 
     final stream = _qrService.startScanning();

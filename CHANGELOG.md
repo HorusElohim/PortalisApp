@@ -8,6 +8,10 @@
   source. Portalis reads and hashes the original files directly; it never
   creates hard-link, clone, or copied source layouts.
 
+- Fixed macOS QR scanning startup by selecting the macOS-compatible camera
+  facing and removing the preflight probe that rejected the device before the
+  real scanner view could start.
+
 - Added a cross-platform Share-menu `Scan QR code` action. It opens the camera,
   accepts Portalis collection QR links and legacy raw magnets, then imports the
   torrent and starts receiver-side selection/download without publishing local
