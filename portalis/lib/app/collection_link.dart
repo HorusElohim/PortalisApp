@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../features/collections/domain/paste.dart';
 import '../nexus/domain/app_state.dart';
 
@@ -39,7 +41,13 @@ Future<int?> importCollectionLink(
 }) async {
   final magnet = collectionMagnetFromLink(uri);
   if (magnet == null) return null;
+  debugPrint(
+    '[collection-link] import start source_len=${magnet.length}',
+  );
   final accepted = await send(EngineCommand.importTorrent(magnet));
+  debugPrint(
+    '[collection-link] import result collection=${accepted.collection}',
+  );
   return accepted.collection;
 }
 
@@ -54,6 +62,7 @@ Future<void> startCollectionLinkDownload(
   required CollectionCommandSender send,
   required CollectionDetailWatcher watchDetail,
 }) async {
+  debugPrint('[collection-link] download start collection=$collection');
   final detail = await watchDetail(collection).firstWhere(
     (detail) => detail != null && detail.entries.isNotEmpty,
   );
@@ -64,9 +73,14 @@ Future<void> startCollectionLinkDownload(
   if (entries.isEmpty) {
     throw StateError('The shared collection did not select any files');
   }
+  debugPrint(
+    '[collection-link] download selection collection=$collection entries=$entries',
+  );
   await send(EngineCommand(
     kind: 'downloadSelection',
     collection: collection,
     entries: entries,
   ));
+  debugPrint(
+      '[collection-link] download command accepted collection=$collection');
 }
