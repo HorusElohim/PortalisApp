@@ -90,7 +90,11 @@ if [[ "$EXPECT_DEVICE" -eq 1 ]]; then
   echo "--device requires a Flutter device ID" >&2
   exit 2
 fi
-FLUTTER_ARGS=("${POSITIONAL[@]}")
+if [[ ${#POSITIONAL[@]} -gt 0 ]]; then
+  FLUTTER_ARGS=("${POSITIONAL[@]}")
+else
+  FLUTTER_ARGS=()
+fi
 
 run() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -125,7 +129,9 @@ fi
 if [[ "$AI_MODE" -eq 1 ]]; then
   BUILD_ARGS+=("--ai")
 fi
-BUILD_ARGS+=("${FLUTTER_ARGS[@]}")
+if [[ ${#FLUTTER_ARGS[@]} -gt 0 ]]; then
+  BUILD_ARGS+=("${FLUTTER_ARGS[@]}")
+fi
 
 # build.sh performs dependency resolution and the platform build first.
 echo "==> Building $PLATFORM ($MODE)"
