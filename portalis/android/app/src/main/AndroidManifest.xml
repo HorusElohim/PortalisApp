@@ -6,6 +6,7 @@
          public-IP discovery — failed with EACCES, and sharing appeared to do
          nothing at all while debug builds on the same device worked. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:label="portalis"
         android:name="${applicationName}"
