@@ -31,7 +31,7 @@ environment:
 dependencies:
   # Receives the portalis:// collection QR links registered on iOS and Android.
   app_links: ^7.2.1
-  mobile_scanner: ^4.0.0
+  mobile_scanner: ^7.4.0
   flutter:
     sdk: flutter
 

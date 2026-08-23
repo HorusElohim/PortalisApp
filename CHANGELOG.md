@@ -8,9 +8,11 @@
   source. Portalis reads and hashes the original files directly; it never
   creates hard-link, clone, or copied source layouts.
 
-- Fixed macOS QR scanning startup by selecting the macOS-compatible camera
-  facing and removing the preflight probe that rejected the device before the
-  real scanner view could start.
+- Upgraded `mobile_scanner` to 7.4.0 for the current macOS AVFoundation camera
+  selector and fallback behavior.
+
+- Added the macOS App Sandbox camera entitlement to both debug and release
+  profiles.
 
 - Added a cross-platform Share-menu `Scan QR code` action. It opens the camera,
   accepts Portalis collection QR links and legacy raw magnets, then imports the
