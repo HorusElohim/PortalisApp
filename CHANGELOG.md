@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.31+32
+
+- Bumped the coordinated Flutter release to `1.0.31+32` and the Rust backend
+  to `0.1.29`.
+- Added a startup backend trust report showing the frontend version, loaded
+  backend version, expected backend version, and whether compatibility was
+  accepted or rejected. Compatibility failures now include all of those
+  details instead of reporting only a generic version mismatch.
+
 ## Unreleased
 
 ### Changed
