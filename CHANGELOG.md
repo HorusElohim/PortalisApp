@@ -22,7 +22,8 @@
 
 - Added `tool/build.sh` and `tool/run.sh` helpers for platform-aware Flutter
   builds and build-then-run workflows. Both support `--clean`; `--ai` keeps
-  successful output concise while replaying full Cargo/Flutter output on errors.
+  successful output concise while replaying full Cargo/Flutter output on errors,
+  and both work without optional Flutter arguments under Bash strict mode.
 
 - Kept UPnP and HTTPS enabled on iOS while replacing librqbit 9's AWS-LC Rustls
   provider with Rustls `ring` and the portable SHA-1 implementation. Portalis

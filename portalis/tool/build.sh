@@ -125,7 +125,9 @@ BUILD_ARGS=("$MODE")
 if [[ "$FLUTTER_PLATFORM" == "ios" ]]; then
   BUILD_ARGS+=("--no-codesign")
 fi
-BUILD_ARGS+=("${FLUTTER_ARGS[@]}")
+if [[ ${#FLUTTER_ARGS[@]} -gt 0 ]]; then
+  BUILD_ARGS+=("${FLUTTER_ARGS[@]}")
+fi
 
 case "$FLUTTER_PLATFORM" in
   ios|macos|android|linux|windows|web)

@@ -151,7 +151,9 @@ esac
 if [[ -n "$DEVICE" ]]; then
   RUN_ARGS+=("-d" "$DEVICE")
 fi
-RUN_ARGS+=("${FLUTTER_ARGS[@]}")
+if [[ ${#FLUTTER_ARGS[@]} -gt 0 ]]; then
+  RUN_ARGS+=("${FLUTTER_ARGS[@]}")
+fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   run flutter run "${RUN_ARGS[@]}"
