@@ -1,3 +1,3 @@
 
-# A local Nexus service's data and node identity — see tool/nexus_server.sh.
+# A local Nexus service's data and node identity.
 portalis/.nexus-dev/
