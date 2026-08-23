@@ -807,12 +807,57 @@ pub mod native {
                     },
                     ..Default::default()
                 };
-                Session::new_with_opts(dir.clone(), opts)
+                let session = Session::new_with_opts(dir.clone(), opts)
                     .await
-                    .with_context(|| format!("starting librqbit session in {dir:?}"))
+                    .with_context(|| format!("starting librqbit session in {dir:?}"))?;
+                rehydrate_linked_torrents(&session).await?;
+                Ok(session)
             })
             .await
             .cloned()
+    }
+
+    /// Restores owner torrents whose storage reads the original sources
+    /// directly. librqbit cannot persist this custom storage factory, so the
+    /// descriptor and source references are restored from Portalis' linked
+    /// source vault instead. No media bytes are copied or staged.
+    async fn rehydrate_linked_torrents(session: &Arc<Session>) -> anyhow::Result<()> {
+        for record in crate::nexus::linked_source_store::load()? {
+            let sources = record
+                .sources
+                .iter()
+                .map(|source| {
+                    crate::nexus::content_location::ContentLocation::from_source_path(&source.path)
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?;
+            let lengths = record
+                .sources
+                .iter()
+                .zip(&sources)
+                .map(|(source, location)| location.length(source.length_bytes))
+                .collect::<anyhow::Result<Vec<_>>>()?;
+            let options = AddTorrentOptions {
+                overwrite: true,
+                storage_factory: Some(ReferencedStorageFactory { sources, lengths }.boxed()),
+                ..Default::default()
+            };
+            match session
+                .add_torrent(AddTorrent::from_bytes(record.torrent_bytes), Some(options))
+                .await
+            {
+                Ok(_) => crate::nexus::log::clog!(
+                    "torrent",
+                    "rehydrated linked torrent {} from original sources",
+                    record.info_hash
+                ),
+                Err(error) => crate::nexus::log::clog!(
+                    "torrent",
+                    "could not rehydrate linked torrent {}: {error:#}",
+                    record.info_hash
+                ),
+            }
+        }
+        Ok(())
     }
 
     /// Where downloaded files land, chosen so the user can actually find
