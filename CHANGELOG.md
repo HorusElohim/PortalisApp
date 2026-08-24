@@ -25,9 +25,11 @@
 
 ### Fixed
 
-- Upgraded the Android build baseline to Gradle 9.1.0, Android Gradle Plugin
-  9.0.1, and Kotlin 2.3.20 so Java 25 is supported by the local Flutter build.
-  The FRB parser notices remain non-fatal diagnostics for internal,
+- Upgraded the Android build baseline to Gradle 9.1.0 and Android Gradle Plugin
+  9.0.1 so Java 25 is supported by the local Flutter build, and migrated the
+  app to AGP's built-in Kotlin mode. This also lets Kotlin-based plugins such
+  as `file_picker` compile without the app applying a separate Kotlin Gradle
+  Plugin. The FRB parser notices remain non-fatal diagnostics for internal,
   non-bridged Rust types.
 - Fixed `tool/build.sh android` invoking the nonexistent `flutter build android`
   command. Android builds now invoke `flutter build apk`, matching the CI
