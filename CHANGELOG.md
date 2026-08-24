@@ -17,6 +17,11 @@
   the remaining configured port range instead of leaving the entire torrent
   engine unavailable. The selected bound port is logged and remains the port
   advertised in shared QR peer hints.
+- A stale zero-copy source during startup rehydration no longer tears down
+  the live librqbit session or causes repeated listener creation attempts. The
+  source error remains logged while the singleton session stays available for
+  new collections and imports.
+
 
 - Collection publication now uses one referenced-storage path for every
   source. Portalis reads and hashes the original files directly; it never
