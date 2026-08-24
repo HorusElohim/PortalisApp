@@ -25,6 +25,11 @@
 
 ### Fixed
 
+- Removed the OpenSSL-backed `crypto-hash` path from the librqbit SHA wrapper
+  used by native builds. The patched `sha1-ring` compatibility feature now uses
+  portable Rust SHA-1/SHA-256 implementations, so Android cross-compilation no
+  longer tries to build `openssl-sys` for `aarch64-linux-android`; Apple builds
+  also avoid platform crypto objects.
 - Made collection publication and torrent-import wakes lossless for arbitrary
   numbers of collections by using durable-state scans with `Notify` rather
   than a bounded channel whose `try_send` result was ignored. Referenced

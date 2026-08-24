@@ -54,8 +54,8 @@ postgres = [
 prometheus = ["metrics-exporter-prometheus"]
 rust-tls = [
     "reqwest/rustls-no-provider",
-    "sha1w/sha1-crypto-hash",
-    "librqbit-core/sha1-crypto-hash",
+    "sha1w/sha1-ring",
+    "librqbit-core/sha1-ring",
     "dep:rustls",
     "rustls/ring",
 ]
