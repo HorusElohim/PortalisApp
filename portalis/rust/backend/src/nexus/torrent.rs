@@ -729,18 +729,7 @@ pub mod native {
                 // Every knob comes from the persisted settings now — see
                 // settings.rs. librqbit reads these once, here, which is why
                 // changing any of them needs a restart.
-                let peer_opts = librqbit::PeerConnectionOptions {
-                    connect_timeout: settings
-                        .peer_connect_timeout_secs
-                        .map(|s| std::time::Duration::from_secs(s as u64)),
-                    read_write_timeout: settings
-                        .peer_read_write_timeout_secs
-                        .map(|s| std::time::Duration::from_secs(s as u64)),
-                    keep_alive_interval: settings
-                        .peer_keep_alive_interval_secs
-                        .map(|s| std::time::Duration::from_secs(s as u64)),
-                };
-                let trackers = settings
+                let trackers: std::collections::HashSet<_> = settings
                     .trackers
                     .iter()
                     .filter_map(|t| match t.parse() {
@@ -754,33 +743,33 @@ pub mod native {
                         }
                     })
                     .collect();
-                let connect = librqbit::ConnectionOptions {
+                let make_connect = || librqbit::ConnectionOptions {
                     proxy_url: settings.socks_proxy_url.clone(),
-                    peer_opts: Some(peer_opts),
+                    peer_opts: Some(librqbit::PeerConnectionOptions {
+                        connect_timeout: settings
+                            .peer_connect_timeout_secs
+                            .map(|s| std::time::Duration::from_secs(s as u64)),
+                        read_write_timeout: settings
+                            .peer_read_write_timeout_secs
+                            .map(|s| std::time::Duration::from_secs(s as u64)),
+                        keep_alive_interval: settings
+                            .peer_keep_alive_interval_secs
+                            .map(|s| std::time::Duration::from_secs(s as u64)),
+                    }),
                     ..Default::default()
                 };
-                let opts = librqbit::SessionOptions {
+                let make_opts = |port: u16| librqbit::SessionOptions {
                     // A range is mandatory, not optional: librqbit only binds
-                    // a TCP listener when `listen` is `Some(..)` — with
-                    // `None` it binds nothing, this device can never accept
-                    // an incoming peer connection, and UPnP forwarding has
-                    // no port to forward. settings.rs rejects an empty or
-                    // zero range for exactly that reason.
+                    // a TCP listener when `listen` is `Some(..)`.
                     listen: Some(librqbit::ListenerOptions {
                         mode: librqbit::ListenerMode::TcpOnly,
-                        listen_addr: (std::net::Ipv6Addr::UNSPECIFIED, settings.listen_port_start)
-                            .into(),
+                        listen_addr: (std::net::Ipv6Addr::UNSPECIFIED, port).into(),
                         enable_upnp_port_forwarding: settings.enable_upnp_port_forwarding,
                         ..Default::default()
                     }),
-                    connect: Some(connect),
-                    // Without persistence librqbit starts empty every launch,
-                    // so a collection you were seeding comes back with every
-                    // manifest entry unmatched and silently seeds nothing.
+                    connect: Some(make_connect()),
                     persistence: settings.persist_session.then_some(
                         librqbit::SessionPersistenceConfig::Json {
-                            // OS-specific default folder (inside the app's
-                            // container on macOS/iOS), like our other state.
                             folder: None,
                         },
                     ),
@@ -790,13 +779,9 @@ pub mod native {
                             .then(librqbit::dht::DhtPersistenceConfig::default),
                         ..Default::default()
                     }),
-                    // librqbit 9.0.1 removed the deferred-write-buffer knob
-                    // this mapped to (`defer_writes_up_to`) with no direct
-                    // replacement; `settings.defer_writes_up_to_mb` is kept
-                    // for the Settings screen but is now inert upstream.
                     concurrent_init_limit: settings.concurrent_init_limit.map(|n| n as usize),
                     blocklist_url: settings.blocklist_url.clone(),
-                    trackers,
+                    trackers: trackers.clone(),
                     ratelimits: librqbit::limits::LimitsConfig {
                         upload_bps: settings
                             .upload_limit_bps
@@ -807,11 +792,42 @@ pub mod native {
                     },
                     ..Default::default()
                 };
-                let session = Session::new_with_opts(dir.clone(), opts)
-                    .await
-                    .with_context(|| format!("starting librqbit session in {dir:?}"))?;
-                rehydrate_linked_torrents(&session).await?;
-                Ok(session)
+                let port_start = settings.listen_port_start;
+                let port_end = settings.listen_port_end.max(port_start);
+                let mut last_bind_error = None;
+                for port in port_start..=port_end {
+                    let attempt = make_opts(port);
+                    match Session::new_with_opts(dir.clone(), attempt).await {
+                        Ok(session) => {
+                            crate::nexus::log::clog!(
+                                "torrent",
+                                "librqbit session listening on TCP port {port}"
+                            );
+                            rehydrate_linked_torrents(&session).await?;
+                            return Ok(session);
+                        }
+                        Err(error)
+                            if format!("{error:#}").contains("Address already in use") =>
+                        {
+                            crate::nexus::log::clog!(
+                                "torrent",
+                                "TCP port {port} is already in use; trying the next configured port"
+                            );
+                            last_bind_error = Some(error);
+                        }
+                        Err(error) => {
+                            return Err(error)
+                                .with_context(|| format!("starting librqbit session in {dir:?}"));
+                        }
+                    }
+                }
+                Err(last_bind_error
+                    .unwrap_or_else(|| anyhow::anyhow!("no listen ports were configured")))
+                .with_context(|| {
+                    format!(
+                        "starting librqbit session in {dir:?}; ports {port_start}-{port_end} are unavailable"
+                    )
+                })
             })
             .await
             .cloned()

@@ -13,6 +13,11 @@
 
 ### Changed
 
+- When the configured BitTorrent listen port is occupied, the backend now tries
+  the remaining configured port range instead of leaving the entire torrent
+  engine unavailable. The selected bound port is logged and remains the port
+  advertised in shared QR peer hints.
+
 - Collection publication now uses one referenced-storage path for every
   source. Portalis reads and hashes the original files directly; it never
   creates hard-link, clone, or copied source layouts.
