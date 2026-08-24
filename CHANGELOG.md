@@ -25,6 +25,10 @@
 
 ### Fixed
 
+- Made Android builds select an installed JDK 17 automatically (or use
+  `PORTALIS_JAVA_HOME`) so local Java 25 installations do not fail Gradle 8.14
+  before Flutter compilation begins. The FRB parser notices remain non-fatal
+  diagnostics for internal, non-bridged Rust types.
 - Fixed `tool/build.sh android` invoking the nonexistent `flutter build android`
   command. Android builds now invoke `flutter build apk`, matching the CI
   artifact pipeline.
