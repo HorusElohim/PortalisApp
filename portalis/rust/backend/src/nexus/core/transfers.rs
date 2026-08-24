@@ -108,7 +108,7 @@ pub(crate) async fn follow_transfers(
         // for somebody to notice.
         let claimed: std::collections::HashSet<&str> = carried
             .iter()
-            .map(|(_, handle, _, _)| handle.as_str())
+            .map(|collection| collection.handle.as_str())
             .collect();
         for info in &reported {
             if !claimed.contains(info.info_hash.as_str())
@@ -122,7 +122,13 @@ pub(crate) async fn follow_transfers(
         }
 
         let mut current = HashMap::new();
-        for (key, handle, paused, local_source) in carried {
+        for CarriedCollection {
+            key,
+            handle,
+            paused,
+            local_source,
+        } in carried
+        {
             let Some(info) = by_handle.get(handle.as_str()) else {
                 continue;
             };
@@ -184,16 +190,26 @@ pub(crate) async fn follow_transfers(
 }
 
 /// Every collection something is currently carrying, with its pause flag.
+struct CarriedCollection {
+    key: Vec<u8>,
+    handle: String,
+    paused: bool,
+    local_source: bool,
+}
+
 fn carried_collections(
     store: &Store,
-) -> Result<Vec<(Vec<u8>, String, bool, bool)>, crate::nexus::store::StoreError> {
+) -> Result<Vec<CarriedCollection>, crate::nexus::store::StoreError> {
     Ok(store
         .collections()?
         .into_iter()
         .filter_map(|(key, stored)| {
-            stored
-                .substrate_handle
-                .map(|handle| (key, handle, stored.paused, !stored.sources.is_empty()))
+            stored.substrate_handle.map(|handle| CarriedCollection {
+                key,
+                handle,
+                paused: stored.paused,
+                local_source: !stored.sources.is_empty(),
+            })
         })
         .collect())
 }
