@@ -93,7 +93,7 @@ librqbit = { version = "9.0.1", default-features = false, features = ["rust-tls"
 bencode = { package = "librqbit-bencode", version = "9.0.1", default-features = false }
 buffers = { package = "librqbit-buffers", version = "9.0.1" }
 librqbit-core = { version = "9.0.1", default-features = false }
-sha1w = { package = "librqbit-sha1-wrapper", version = "9.0.1", default-features = false, features = ["sha1-crypto-hash"] }
+sha1w = { package = "librqbit-sha1-wrapper", version = "9.0.1", default-features = false, features = ["sha1-ring"] }
 bytes = "1"
 dirs = "6"
 serde_json = "1.0"
@@ -133,6 +133,7 @@ cc = "1"
 [patch.crates-io]
 librqbit = { path = "../vendor/librqbit" }
 librqbit-dualstack-sockets = { path = "../vendor/librqbit-dualstack-sockets" }
+librqbit-sha1-wrapper = { path = "../vendor/librqbit-sha1-wrapper" }
 
 # The domain layer's randomness (device keygen, invite secrets, collection
 # ids) has no OS RNG to call into on wasm32 — route it through the browser's
