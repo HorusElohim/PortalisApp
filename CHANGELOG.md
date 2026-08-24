@@ -35,6 +35,11 @@
   projections rehydrate after restart. Publication recovery now keys off the
   durable substrate handle, allowing an interrupted collection with a revision
   but no handle to leave `Preparing` and publish again.
+- Fixed subsequent zero-copy collections staying in `Preparing`: librqbit's
+  persisted-ID allocator cannot see zero-copy torrents, so it reused the first
+  live torrent ID and returned the first torrent as `AlreadyManaged`. Portalis
+  now serializes managed torrent admission and allocates from the live session
+  ID set for publishers, rehydration, downloads, and recovery.
 
 - Broke the iOS Xcode dependency cycle between `ProcessXCFramework
   backend.xcframework` and the `Build Rust (iOS)` script phase. The Rust

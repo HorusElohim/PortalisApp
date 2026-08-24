@@ -567,7 +567,7 @@ pub mod native {
     };
     use network_interface::{Addr, NetworkInterface, NetworkInterfaceConfig};
     use sha1w::{ISha1, Sha1};
-    use tokio::sync::OnceCell;
+    use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
     use super::{
         PieceRun, PublishProgress, RawStorageEntry, SourceFile, TORRENT_PIECE_LENGTH, TorrentFile,
@@ -575,6 +575,10 @@ pub mod native {
     };
 
     static SESSION: OnceCell<Arc<Session>> = OnceCell::const_new();
+    /// librqbit's JSON persistence allocates IDs from persisted rows. A
+    /// zero-copy torrent intentionally has no such row, so every managed add
+    /// must allocate against the live session while holding one admission lock.
+    static SESSION_ADMISSION: AsyncMutex<()> = AsyncMutex::const_new(());
 
     pub(super) fn local_peer_hints() -> crate::nexus::substrate::PeerHints {
         let Some(port) = SESSION.get().and_then(|session| session.announce_port()) else {
@@ -863,9 +867,12 @@ pub mod native {
                 storage_factory: Some(ReferencedStorageFactory { sources, lengths }.boxed()),
                 ..Default::default()
             };
-            match session
-                .add_torrent(AddTorrent::from_bytes(record.torrent_bytes), Some(options))
-                .await
+            match add_managed_torrent(
+                session,
+                AddTorrent::from_bytes(record.torrent_bytes),
+                options,
+            )
+            .await
             {
                 Ok(_) => crate::nexus::log::clog!(
                     "torrent",
@@ -951,6 +958,29 @@ pub mod native {
             initial_peers: (!initial_peers.is_empty()).then_some(initial_peers),
             ..Default::default()
         }
+    }
+
+    fn next_live_torrent_id(session: &Session) -> anyhow::Result<usize> {
+        let used = session.with_torrents(|torrents| {
+            torrents
+                .map(|(id, _)| id)
+                .collect::<std::collections::HashSet<_>>()
+        });
+        (0..)
+            .find(|id| !used.contains(id))
+            .ok_or_else(|| anyhow::anyhow!("no torrent IDs remain available"))
+    }
+
+    async fn add_managed_torrent(
+        session: &Arc<Session>,
+        add: AddTorrent<'_>,
+        mut options: AddTorrentOptions,
+    ) -> anyhow::Result<AddTorrentResponse> {
+        let _admission = SESSION_ADMISSION.lock().await;
+        let id = next_live_torrent_id(session)?;
+        options.preferred_id = Some(id);
+        crate::nexus::log::clog!("torrent", "admitting torrent with live session id={id}");
+        session.add_torrent(add, Some(options)).await
     }
 
     pub fn peer_hints_from_source(
@@ -1179,6 +1209,16 @@ pub mod native {
         .await
         .context("referenced source hashing task failed")??;
 
+        let parsed = librqbit::torrent_from_bytes(&torrent_bytes)
+            .context("validating generated zero-copy torrent metainfo")?;
+        anyhow::ensure!(
+            parsed
+                .info_hash
+                .as_string()
+                .eq_ignore_ascii_case(&info_hash),
+            "generated zero-copy torrent metainfo has a different info hash: expected={info_hash} actual={}",
+            parsed.info_hash.as_string()
+        );
         progress.ensure_active()?;
         progress.set_stage("seeding");
         let metadata_dir = referenced_metadata_dir(&info_hash);
@@ -1205,24 +1245,25 @@ pub mod native {
                 sources: files,
             },
         )?;
-        let response = match session
-            .add_torrent(AddTorrent::from_bytes(torrent_bytes), Some(options))
-            .await
-            .context("adding gallery-linked torrent")
-        {
-            Ok(response) => response,
-            Err(error) => {
-                let _ = crate::nexus::linked_source_store::remove(&info_hash);
-                return Err(error);
-            }
-        };
+        let response =
+            match add_managed_torrent(&session, AddTorrent::from_bytes(torrent_bytes), options)
+                .await
+                .context("adding gallery-linked torrent")
+            {
+                Ok(response) => response,
+                Err(error) => {
+                    let _ = crate::nexus::linked_source_store::remove(&info_hash);
+                    return Err(error);
+                }
+            };
         let mut info = response_to_info(&api(session), response)?;
         for (torrent_file, source_path) in info.files.iter_mut().zip(source_paths) {
             torrent_file.absolute_path = source_path;
         }
         anyhow::ensure!(
             info.info_hash.eq_ignore_ascii_case(&info_hash),
-            "created torrent info hash disagrees with its metainfo"
+            "created torrent info hash disagrees with its metainfo: expected={info_hash} actual={}",
+            info.info_hash
         );
         Ok(info)
     }
@@ -1692,8 +1733,7 @@ pub mod native {
         );
         options.only_files = Some(files.to_vec());
         options.output_folder = Some(destination.to_string_lossy().into_owned());
-        let response = session
-            .add_torrent(add_torrent_for(source).await?, Some(options))
+        let response = add_managed_torrent(&session, add_torrent_for(source).await?, options)
             .await
             .with_context(|| format!("starting the download of {source:?}"))?;
         // An `AlreadyManaged` answer means the engine still carries this info
@@ -1879,8 +1919,7 @@ pub mod native {
             return session.unpause(&handle).await.context("restarting torrent");
         }
 
-        session
-            .add_torrent(AddTorrent::from_url(info_hash_hex), Some(add_opts()))
+        add_managed_torrent(&session, AddTorrent::from_url(info_hash_hex), add_opts())
             .await
             .with_context(|| format!("re-adding torrent {info_hash_hex}"))?;
         Ok(())
@@ -1955,7 +1994,8 @@ pub mod native {
     #[cfg(test)]
     mod referenced_storage_tests {
         use super::{
-            PublishProgress, ReferencedStorageFactory, SourceFile, create_referenced_metainfo,
+            PublishProgress, ReferencedStorageFactory, SourceFile, create_referenced_collection,
+            create_referenced_metainfo, install_rustls_ring_provider,
         };
 
         #[test]
@@ -2016,6 +2056,68 @@ pub mod native {
             assert_eq!(persisted.len(), 1);
             assert_eq!(persisted[0].path, files[0].path);
             crate::nexus::linked_source_store::remove(&info_hash).unwrap();
+            std::fs::remove_dir_all(root).unwrap();
+        }
+
+        #[tokio::test]
+        async fn persistent_session_admits_multiple_zero_copy_collections() {
+            let _state = crate::nexus::paths::redirect_to_temp();
+            install_rustls_ring_provider();
+            let root =
+                std::env::temp_dir().join(format!("portalis-referenced-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&root).unwrap();
+            let session = librqbit::Session::new_with_opts(
+                root.join("session"),
+                librqbit::SessionOptions {
+                    dht: None,
+                    persistence: Some(librqbit::SessionPersistenceConfig::Json {
+                        folder: Some(root.join("persistence")),
+                    }),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("starts the persistent session");
+
+            let first_path = root.join("first.mov");
+            let second_path = root.join("second.mov");
+            std::fs::write(&first_path, b"first collection").unwrap();
+            std::fs::write(&second_path, b"second collection").unwrap();
+            let first_file = SourceFile {
+                name: "first.mov".into(),
+                path: first_path.to_string_lossy().into_owned(),
+                length_bytes: Some(16),
+            };
+            let second_file = SourceFile {
+                name: "second.mov".into(),
+                path: second_path.to_string_lossy().into_owned(),
+                length_bytes: Some(17),
+            };
+
+            let first = create_referenced_collection(
+                session.clone(),
+                "First".into(),
+                vec![first_file],
+                vec![crate::nexus::content_location::ContentLocation::Filesystem(
+                    first_path,
+                )],
+                PublishProgress::new(16),
+            )
+            .await
+            .expect("admits the first zero-copy collection");
+            let second = create_referenced_collection(
+                session,
+                "Second".into(),
+                vec![second_file],
+                vec![crate::nexus::content_location::ContentLocation::Filesystem(
+                    second_path,
+                )],
+                PublishProgress::new(17),
+            )
+            .await
+            .expect("admits the subsequent zero-copy collection");
+
+            assert_ne!(first.info_hash, second.info_hash);
             std::fs::remove_dir_all(root).unwrap();
         }
     }
