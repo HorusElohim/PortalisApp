@@ -63,10 +63,9 @@ class Collection {
   /// collection is empty is the kind of claim this interface must not make.
   bool get isSharing => isComplete && entryCount > 0;
 
-  /// May offer the share-QR action. A paused or downloading collection can
-  /// already have a stable torrent identity; only a draft has not yet been
-  /// published and therefore cannot truthfully offer one.
-  bool get canShareQr => !isDraft && entryCount > 0;
+  /// A published revision remains shareable while the list/detail projections
+  /// catch up after a restart. Entry count alone is transient during hydration.
+  bool get canShareQr => !isDraft && (entryCount > 0 || revision > 0);
 
   bool get isComplete => state == 'Available';
   bool get isMoving =>
