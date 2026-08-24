@@ -323,10 +323,6 @@ fn publish(
 /// byte of is still moving while somebody is pulling it, and that is exactly
 /// when an owner wants to see the numbers — hiding the tier the moment a
 /// download completes is what makes seeding look like nothing happening.
-fn transfer_of(info: &TorrentInfo, rates: Rates) -> Option<Transfer> {
-    transfer_of_for(info, rates, false)
-}
-
 fn transfer_of_for(info: &TorrentInfo, rates: Rates, local_source: bool) -> Option<Transfer> {
     let idle = if local_source {
         info.finished && info.live_peers == 0 && rates.down == 0 && rates.up == 0
@@ -378,10 +374,6 @@ fn transfer_of_for(info: &TorrentInfo, rates: Rates, local_source: bool) -> Opti
 /// the same screen.
 /// The poller is the one caller with a live reading, which is what makes its
 /// answer the most informed one there is — see `status_for`.
-fn status_of(info: &TorrentInfo, paused: bool) -> Status {
-    status_of_for(info, paused, false)
-}
-
 fn status_of_for(info: &TorrentInfo, paused: bool, local_source: bool) -> Status {
     if paused {
         return Status::Paused;
@@ -645,7 +637,7 @@ mod tests {
     #[test]
     fn progress_does_not_reach_the_end_before_the_engine_says_so() {
         let every_byte = info(100, 100, false);
-        let transfer = transfer_of(&every_byte, Rates::default()).expect("still moving");
+        let transfer = transfer_of_for(&every_byte, Rates::default(), false).expect("still moving");
         assert!(
             transfer.progress < 1.0,
             "unfinished cannot report complete, got {}",
@@ -656,7 +648,7 @@ mod tests {
         let mut done = info(100, 100, true);
         done.live_peers = 1;
         assert_eq!(
-            transfer_of(&done, Rates::default())
+            transfer_of_for(&done, Rates::default(), false)
                 .expect("still serving")
                 .progress,
             1.0,
@@ -709,7 +701,7 @@ mod tests {
     fn a_finished_transfer_reports_nothing_only_once_it_is_also_idle() {
         let mut done = info(100, 100, true);
         done.live_peers = 0;
-        assert_eq!(transfer_of(&done, Rates::default()), None);
+        assert_eq!(transfer_of_for(&done, Rates::default(), false), None);
 
         // Serving somebody: measured upload, so it is genuinely not idle.
         let seeding = TorrentInfo {
@@ -720,7 +712,7 @@ mod tests {
             down: 0,
             up: 500_000,
         };
-        let seeding = transfer_of(&seeding, uploading).expect("still moving");
+        let seeding = transfer_of_for(&seeding, uploading, false).expect("still moving");
         assert!((seeding.progress - 1.0).abs() < f32::EPSILON);
         assert_eq!(seeding.up_bytes_per_second, 500_000);
         assert_eq!(seeding.eta_secs, None, "nothing left to arrive");
@@ -729,7 +721,8 @@ mod tests {
             down: 1_000_000,
             up: 0,
         };
-        let moving = transfer_of(&info(50, 100, false), downloading).expect("still moving");
+        let moving =
+            transfer_of_for(&info(50, 100, false), downloading, false).expect("still moving");
         assert!((moving.progress - 0.5).abs() < f32::EPSILON);
         assert_eq!(moving.peers, 3);
         assert_eq!(moving.eta_secs, Some(50 / 1_000_000));
@@ -776,7 +769,8 @@ mod tests {
     /// it would be a progress bar full of NaN.
     #[test]
     fn a_transfer_with_no_known_total_reports_no_progress_rather_than_nan() {
-        let unknown = transfer_of(&info(0, 0, false), Rates::default()).expect("carried");
+        let unknown =
+            transfer_of_for(&info(0, 0, false), Rates::default(), false).expect("carried");
 
         assert!((unknown.progress - 0.0).abs() < f32::EPSILON);
         assert_eq!(unknown.eta_secs, None, "nothing to estimate from");
@@ -787,12 +781,24 @@ mod tests {
     /// other.
     #[test]
     fn a_pause_outranks_whatever_the_numbers_are_doing() {
-        assert_eq!(status_of(&info(50, 100, false), true), Status::Paused);
-        assert_eq!(status_of(&info(50, 100, false), false), Status::Downloading);
-        assert_eq!(status_of(&info(0, 100, false), false), Status::Preparing);
-        assert_eq!(status_of(&info(100, 100, true), false), Status::Available);
         assert_eq!(
-            status_of(&info(100, 100, true), true),
+            status_of_for(&info(50, 100, false), true, false),
+            Status::Paused
+        );
+        assert_eq!(
+            status_of_for(&info(50, 100, false), false, false),
+            Status::Downloading
+        );
+        assert_eq!(
+            status_of_for(&info(0, 100, false), false, false),
+            Status::Preparing
+        );
+        assert_eq!(
+            status_of_for(&info(100, 100, true), false, false),
+            Status::Available
+        );
+        assert_eq!(
+            status_of_for(&info(100, 100, true), true, false),
             Status::Paused,
             "a finished collection a person paused is still paused"
         );
