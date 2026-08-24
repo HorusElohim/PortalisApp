@@ -88,6 +88,7 @@ class Collection {
   /// app at eight times its real value.
   int get downBytesPerSecond => source.transfer?.downBytesPerSecond ?? 0;
   int get upBytesPerSecond => source.transfer?.upBytesPerSecond ?? 0;
+  bool get isSourceReading => source.transfer?.sourceReading ?? false;
   int get livePeers => source.transfer?.peers ?? torrentPeers.length;
   int? get etaSecs => source.transfer?.etaSecs;
 

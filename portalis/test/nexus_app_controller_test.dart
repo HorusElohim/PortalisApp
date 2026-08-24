@@ -392,6 +392,7 @@ void main() {
             uploadedBytes: BigInt.zero,
             transfer: const AppTransfer(
               progress: 0.5,
+              sourceReading: false,
               downBytesPerSecond: 125000,
               upBytesPerSecond: 250000,
               peers: 3,

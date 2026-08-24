@@ -187,6 +187,9 @@ pub struct StatusFacts<'a> {
 pub struct Transfer {
     /// Zero to one. Computed here so the interface does not divide.
     pub progress: f32,
+    /// True when the bytes are being read from this device's original linked
+    /// source while publishing or verifying, rather than received from peers.
+    pub source_reading: bool,
     pub down_bytes_per_second: u32,
     pub up_bytes_per_second: u32,
     pub peers: u16,

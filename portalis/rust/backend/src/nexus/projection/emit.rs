@@ -231,6 +231,7 @@ mod tests {
     fn moving(done: f32) -> Option<Transfer> {
         Some(Transfer {
             progress: done,
+            source_reading: false,
             down_bytes_per_second: 4_096,
             up_bytes_per_second: 1_024,
             peers: 3,

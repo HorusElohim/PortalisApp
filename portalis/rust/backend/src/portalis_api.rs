@@ -74,6 +74,7 @@ pub struct AppCollection {
 #[derive(Clone, Debug)]
 pub struct AppTransfer {
     pub progress: f32,
+    pub source_reading: bool,
     pub down_bytes_per_second: u32,
     pub up_bytes_per_second: u32,
     pub peers: u16,
@@ -562,6 +563,7 @@ fn snapshot(state: &PortalisState) -> AppSnapshot {
                 completed_at: collection.completed_at,
                 transfer: collection.transfer.map(|transfer| AppTransfer {
                     progress: transfer.progress,
+                    source_reading: transfer.source_reading,
                     down_bytes_per_second: transfer.down_bytes_per_second,
                     up_bytes_per_second: transfer.up_bytes_per_second,
                     peers: transfer.peers,

@@ -78,6 +78,7 @@ Collection buildCollection({
       transfer: moving
           ? AppTransfer(
               progress: totalBytes == 0 ? 0 : downloadedBytes / totalBytes,
+              sourceReading: false,
               downBytesPerSecond: downBytesPerSecond,
               upBytesPerSecond: upBytesPerSecond,
               peers: livePeers,

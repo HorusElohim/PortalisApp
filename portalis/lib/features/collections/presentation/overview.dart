@@ -117,6 +117,7 @@ class CollectionOverview extends StatelessWidget {
             totalBytes: collection.totalBytes,
             downBytesPerSecond: collection.downBytesPerSecond,
             upBytesPerSecond: collection.upBytesPerSecond,
+            sourceReading: collection.isSourceReading,
             history: transferHistory,
             // The core's own moments, not the span of surviving readings.
             startedAt: collection.startedAt ?? history?.startedAt,

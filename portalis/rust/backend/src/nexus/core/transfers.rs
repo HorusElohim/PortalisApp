@@ -108,7 +108,7 @@ pub(crate) async fn follow_transfers(
         // for somebody to notice.
         let claimed: std::collections::HashSet<&str> = carried
             .iter()
-            .map(|(_, handle, _)| handle.as_str())
+            .map(|(_, handle, _, _)| handle.as_str())
             .collect();
         for info in &reported {
             if !claimed.contains(info.info_hash.as_str())
@@ -122,16 +122,23 @@ pub(crate) async fn follow_transfers(
         }
 
         let mut current = HashMap::new();
-        for (key, handle, paused) in carried {
+        for (key, handle, paused, local_source) in carried {
             let Some(info) = by_handle.get(handle.as_str()) else {
                 continue;
             };
             // A torrent still checking itself has no progress to report, and
             // recording the placeholder zero put a false restart in the middle
             // of the chart every time the app reopened.
-            let rates = measured_rates(info, written.get(&key));
-            if info.knows_progress() {
-                mark_moments(&store, &key, info);
+            let measured = measured_rates(info, written.get(&key));
+            // Reads performed by ReferencedStorage while an owner torrent is
+            // being checked are local source I/O. Keep the rate visible, but
+            // carry the explicit source_reading marker so the UI does not call
+            // it a download.
+            let rates = measured;
+            if info.knows_progress() && (!local_source || rates.down > 0 || rates.up > 0) {
+                if !local_source {
+                    mark_moments(&store, &key, info);
+                }
                 let now = unix_time_ns();
                 let sample = record(
                     &store,
@@ -156,7 +163,7 @@ pub(crate) async fn follow_transfers(
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .handle(&key);
             if let Some(projected) = projected {
-                publish(&states, projected, info, rates, paused);
+                publish(&states, projected, info, rates, paused, local_source);
             }
         }
         // A collection that stopped being carried must not keep its last
@@ -179,14 +186,14 @@ pub(crate) async fn follow_transfers(
 /// Every collection something is currently carrying, with its pause flag.
 fn carried_collections(
     store: &Store,
-) -> Result<Vec<(Vec<u8>, String, bool)>, crate::nexus::store::StoreError> {
+) -> Result<Vec<(Vec<u8>, String, bool, bool)>, crate::nexus::store::StoreError> {
     Ok(store
         .collections()?
         .into_iter()
         .filter_map(|(key, stored)| {
             stored
                 .substrate_handle
-                .map(|handle| (key, handle, stored.paused))
+                .map(|handle| (key, handle, stored.paused, !stored.sources.is_empty()))
         })
         .collect())
 }
@@ -272,9 +279,11 @@ fn publish(
     info: &TorrentInfo,
     rates: Rates,
     paused: bool,
+    local_source: bool,
 ) {
-    let transfer = transfer_of(info, rates);
-    let status = status_of(info, paused);
+    let transfer = transfer_of_for(info, rates, local_source);
+    let status = status_of_for(info, paused, local_source);
+    let on_disk_bytes = info.progress_bytes;
     states.send_if_modified(|state| {
         let Some(collection) = state
             .collections
@@ -288,7 +297,7 @@ fn publish(
         // nothing is what makes an idle app warm.
         if collection.transfer == transfer
             && collection.status == status
-            && collection.on_disk_bytes == info.progress_bytes
+            && collection.on_disk_bytes == on_disk_bytes
             && collection.total_bytes == info.total_bytes
             && collection.uploaded_bytes == info.uploaded_bytes
         {
@@ -296,7 +305,7 @@ fn publish(
         }
         collection.transfer = transfer;
         collection.status = status;
-        collection.on_disk_bytes = info.progress_bytes;
+        collection.on_disk_bytes = on_disk_bytes;
         // The same reading the fraction is measured against. It used to be
         // summed from the stored descriptor by a different worker on a
         // different schedule, so the percentage and the "x of y" beside it had
@@ -315,7 +324,15 @@ fn publish(
 /// when an owner wants to see the numbers — hiding the tier the moment a
 /// download completes is what makes seeding look like nothing happening.
 fn transfer_of(info: &TorrentInfo, rates: Rates) -> Option<Transfer> {
-    let idle = info.finished && info.live_peers == 0 && rates.up == 0;
+    transfer_of_for(info, rates, false)
+}
+
+fn transfer_of_for(info: &TorrentInfo, rates: Rates, local_source: bool) -> Option<Transfer> {
+    let idle = if local_source {
+        info.finished && info.live_peers == 0 && rates.down == 0 && rates.up == 0
+    } else {
+        info.finished && info.live_peers == 0 && rates.up == 0
+    };
     if idle {
         return None;
     }
@@ -341,6 +358,7 @@ fn transfer_of(info: &TorrentInfo, rates: Rates) -> Option<Transfer> {
     };
     Some(Transfer {
         progress: complete.clamp(0.0, 1.0),
+        source_reading: local_source,
         down_bytes_per_second: down,
         up_bytes_per_second: rates.up,
         peers: u16::try_from(info.live_peers).unwrap_or(u16::MAX),
@@ -361,6 +379,20 @@ fn transfer_of(info: &TorrentInfo, rates: Rates) -> Option<Transfer> {
 /// The poller is the one caller with a live reading, which is what makes its
 /// answer the most informed one there is — see `status_for`.
 fn status_of(info: &TorrentInfo, paused: bool) -> Status {
+    status_of_for(info, paused, false)
+}
+
+fn status_of_for(info: &TorrentInfo, paused: bool, local_source: bool) -> Status {
+    if paused {
+        return Status::Paused;
+    }
+    if local_source {
+        return if info.finished {
+            Status::Available
+        } else {
+            Status::Preparing
+        };
+    }
     crate::nexus::projection::state::status_for(crate::nexus::projection::state::StatusFacts {
         draft: false,
         paused,
@@ -701,6 +733,43 @@ mod tests {
         assert!((moving.progress - 0.5).abs() < f32::EPSILON);
         assert_eq!(moving.peers, 3);
         assert_eq!(moving.eta_secs, Some(50 / 1_000_000));
+        assert!(!moving.source_reading);
+    }
+
+    #[test]
+    fn linked_source_verification_is_not_reported_as_a_download() {
+        let checking = info(61, 547, false);
+        let source_read = Rates {
+            down: 6_300_000,
+            up: 0,
+        };
+
+        let reading = transfer_of_for(&checking, source_read, true)
+            .expect("owner source reads remain visible");
+        assert!((reading.progress - (61.0 / 547.0)).abs() < f32::EPSILON);
+        assert_eq!(reading.down_bytes_per_second, 6_300_000);
+        assert!(reading.source_reading);
+        assert_eq!(
+            status_of_for(&checking, false, true),
+            Status::Preparing,
+            "source verification should remain preparation"
+        );
+
+        let mut seeded = info(547, 547, true);
+        seeded.live_peers = 1;
+        let upload = transfer_of_for(
+            &seeded,
+            Rates {
+                down: 0,
+                up: 500_000,
+            },
+            true,
+        )
+        .expect("an owner serving a peer is active");
+        assert_eq!(upload.down_bytes_per_second, 0);
+        assert_eq!(upload.up_bytes_per_second, 500_000);
+        assert_eq!(upload.progress, 1.0);
+        assert!(upload.source_reading);
     }
 
     /// A total of zero is a torrent whose metadata has not arrived. Dividing by

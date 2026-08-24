@@ -16,6 +16,7 @@ class TransferPanel extends StatelessWidget {
     required this.totalBytes,
     this.downBytesPerSecond = 0,
     this.upBytesPerSecond = 0,
+    this.sourceReading = false,
     this.livePeers = 0,
     this.etaLabel,
     this.history = const [],
@@ -33,6 +34,7 @@ class TransferPanel extends StatelessWidget {
   final int totalBytes;
   final int downBytesPerSecond;
   final int upBytesPerSecond;
+  final bool sourceReading;
   final int livePeers;
   final String? etaLabel;
   final List<TransferPoint> history;
@@ -61,6 +63,7 @@ class TransferPanel extends StatelessWidget {
       progress: progress,
       downBytesPerSecond: downBytesPerSecond,
       upBytesPerSecond: upBytesPerSecond,
+      sourceReading: sourceReading,
       history: history,
       startedAt: startedAt,
       completedAt: completedAt,
@@ -104,6 +107,7 @@ class TransferPanel extends StatelessWidget {
               progress: progress,
               downBytesPerSecond: downBytesPerSecond,
               upBytesPerSecond: upBytesPerSecond,
+              sourceReading: sourceReading,
               history: history,
               startedAt: startedAt,
               completedAt: completedAt,
