@@ -555,6 +555,7 @@ class AppStorageEntry {
 /// A coalesced transfer sample.
 class AppTransfer {
   final double progress;
+  final bool sourceReading;
   final int downBytesPerSecond;
   final int upBytesPerSecond;
   final int peers;
@@ -562,6 +563,7 @@ class AppTransfer {
 
   const AppTransfer({
     required this.progress,
+    required this.sourceReading,
     required this.downBytesPerSecond,
     required this.upBytesPerSecond,
     required this.peers,
@@ -571,6 +573,7 @@ class AppTransfer {
   @override
   int get hashCode =>
       progress.hashCode ^
+      sourceReading.hashCode ^
       downBytesPerSecond.hashCode ^
       upBytesPerSecond.hashCode ^
       peers.hashCode ^
@@ -582,6 +585,7 @@ class AppTransfer {
       other is AppTransfer &&
           runtimeType == other.runtimeType &&
           progress == other.progress &&
+          sourceReading == other.sourceReading &&
           downBytesPerSecond == other.downBytesPerSecond &&
           upBytesPerSecond == other.upBytesPerSecond &&
           peers == other.peers &&

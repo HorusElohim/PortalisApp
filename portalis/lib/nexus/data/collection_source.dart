@@ -134,8 +134,20 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
       );
 
   @override
-  Future<int> fetchMedia(String id) async =>
-      throw const SourceUnsupported('Fetching is not wired to Nexus yet.');
+  Future<int> fetchMedia(String id) async {
+    final pending = [
+      for (final entry in _detail?.entries ?? const <AppEntry>[])
+        if (entry.selected && !entry.available) entry.id,
+    ]..sort();
+    if (pending.isEmpty) return 0;
+
+    await setSelection(id, pending.toSet());
+    // Fetch is also the recovery action for a paused or disconnected import.
+    // The command is idempotent, so explicitly resume after recording the
+    // selection rather than leaving the user with a dead retry button.
+    await restart(id);
+    return pending.length;
+  }
 
   /// Restart resumes — the same thing it meant against the legacy backend's
   /// `restart_collection`, not a retry of a stalled transfer.

@@ -42,6 +42,7 @@ void main() {
           status: 'Downloading',
           transfer: const AppTransfer(
             progress: 0.4,
+            sourceReading: false,
             downBytesPerSecond: 1500000,
             upBytesPerSecond: 500000,
             peers: 1,

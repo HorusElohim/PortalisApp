@@ -24,6 +24,7 @@ class TransferGraph extends StatelessWidget {
     required this.progress,
     required this.downBytesPerSecond,
     required this.upBytesPerSecond,
+    this.sourceReading = false,
     this.history = const [],
     this.startedAt,
     this.completedAt,
@@ -34,6 +35,7 @@ class TransferGraph extends StatelessWidget {
   final double progress;
   final int downBytesPerSecond;
   final int upBytesPerSecond;
+  final bool sourceReading;
   final List<TransferPoint> history;
   final DateTime? startedAt;
   final DateTime? completedAt;
@@ -46,6 +48,7 @@ class TransferGraph extends StatelessWidget {
       progress: progress,
       downBytesPerSecond: downBytesPerSecond,
       upBytesPerSecond: upBytesPerSecond,
+      sourceReading: sourceReading,
       history: history,
       startedAt: startedAt,
       completedAt: completedAt,
@@ -68,7 +71,9 @@ class TransferGraph extends StatelessWidget {
                 Expanded(
                   child: Text(
                     graph.complete
-                        ? 'No non-zero download-session samples were recorded.'
+                        ? (graph.sourceReading
+                            ? 'No non-zero source-read samples were recorded.'
+                            : 'No non-zero download-session samples were recorded.')
                         : 'Waiting for the first non-zero speed sample.',
                     style: monoLabel(size: 10, color: AppColors.textDim),
                   ),
@@ -80,7 +85,7 @@ class TransferGraph extends StatelessWidget {
           Semantics(
             label: 'Transfer speed on a logarithmic scale from '
                 '${_dateTimeLabel(graph.start)} to '
-                '${_dateTimeLabel(graph.end)}. Peak download '
+                '${_dateTimeLabel(graph.end)}. Peak ${graph.sourceReading ? 'source-read' : 'download'} '
                 '${formatRate(graph.peakDownload)}${graph.hasUpload ? ', peak upload ${formatRate(graph.peakUpload)}' : ''}.',
             child: SizedBox(
               height: 86,
@@ -160,6 +165,7 @@ class TransferGraphHeader extends StatelessWidget {
     required this.progress,
     required this.downBytesPerSecond,
     required this.upBytesPerSecond,
+    this.sourceReading = false,
     this.history = const [],
     this.startedAt,
     this.completedAt,
@@ -169,6 +175,7 @@ class TransferGraphHeader extends StatelessWidget {
   final double progress;
   final int downBytesPerSecond;
   final int upBytesPerSecond;
+  final bool sourceReading;
   final List<TransferPoint> history;
   final DateTime? startedAt;
   final DateTime? completedAt;
@@ -180,6 +187,7 @@ class TransferGraphHeader extends StatelessWidget {
           progress: progress,
           downBytesPerSecond: downBytesPerSecond,
           upBytesPerSecond: upBytesPerSecond,
+          sourceReading: sourceReading,
           history: history,
           startedAt: startedAt,
           completedAt: completedAt,
@@ -201,7 +209,9 @@ class _TransferGraphHeading extends StatelessWidget {
           Row(
             children: [
               Text(
-                graph.complete ? 'DOWNLOAD SESSION' : 'TRANSFER SPEED',
+                graph.sourceReading
+                    ? 'SOURCE READ'
+                    : (graph.complete ? 'DOWNLOAD SESSION' : 'TRANSFER SPEED'),
                 style: monoLabel(
                   size: 10,
                   color: AppColors.textDim,
@@ -224,7 +234,7 @@ class _TransferGraphHeading extends StatelessWidget {
             children: [
               _SeriesSummary(
                 color: color,
-                label: 'DOWNLOAD',
+                label: graph.sourceReading ? 'READING' : 'DOWNLOAD',
                 value: graph.complete
                     ? 'peak ${formatRate(graph.peakDownload)}'
                     : 'now ${formatRate(graph.downBytesPerSecond)} · peak ${formatRate(graph.peakDownload)}',
@@ -246,6 +256,7 @@ class _TransferGraphHeading extends StatelessWidget {
 class _TransferGraphState {
   const _TransferGraphState({
     required this.complete,
+    required this.sourceReading,
     required this.downBytesPerSecond,
     required this.upBytesPerSecond,
     required this.points,
@@ -262,6 +273,7 @@ class _TransferGraphState {
     required int downBytesPerSecond,
     required int upBytesPerSecond,
     required List<TransferPoint> history,
+    required bool sourceReading,
     DateTime? startedAt,
     DateTime? completedAt,
   }) {
@@ -303,6 +315,7 @@ class _TransferGraphState {
         positiveRates.isEmpty ? 0 : positiveRates.reduce(math.min);
     return _TransferGraphState(
       complete: complete,
+      sourceReading: sourceReading,
       downBytesPerSecond: downBytesPerSecond,
       upBytesPerSecond: upBytesPerSecond,
       points: points,
@@ -316,6 +329,7 @@ class _TransferGraphState {
   }
 
   final bool complete;
+  final bool sourceReading;
   final int downBytesPerSecond;
   final int upBytesPerSecond;
   final List<TransferPoint> points;

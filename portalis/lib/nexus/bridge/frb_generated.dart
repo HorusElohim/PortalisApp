@@ -889,14 +889,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppTransfer dco_decode_app_transfer(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return AppTransfer(
       progress: dco_decode_f_32(arr[0]),
-      downBytesPerSecond: dco_decode_u_32(arr[1]),
-      upBytesPerSecond: dco_decode_u_32(arr[2]),
-      peers: dco_decode_u_16(arr[3]),
-      etaSecs: dco_decode_opt_box_autoadd_u_32(arr[4]),
+      sourceReading: dco_decode_bool(arr[1]),
+      downBytesPerSecond: dco_decode_u_32(arr[2]),
+      upBytesPerSecond: dco_decode_u_32(arr[3]),
+      peers: dco_decode_u_16(arr[4]),
+      etaSecs: dco_decode_opt_box_autoadd_u_32(arr[5]),
     );
   }
 
@@ -1356,12 +1357,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppTransfer sse_decode_app_transfer(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_progress = sse_decode_f_32(deserializer);
+    var var_sourceReading = sse_decode_bool(deserializer);
     var var_downBytesPerSecond = sse_decode_u_32(deserializer);
     var var_upBytesPerSecond = sse_decode_u_32(deserializer);
     var var_peers = sse_decode_u_16(deserializer);
     var var_etaSecs = sse_decode_opt_box_autoadd_u_32(deserializer);
     return AppTransfer(
         progress: var_progress,
+        sourceReading: var_sourceReading,
         downBytesPerSecond: var_downBytesPerSecond,
         upBytesPerSecond: var_upBytesPerSecond,
         peers: var_peers,
@@ -1871,6 +1874,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_app_transfer(AppTransfer self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_f_32(self.progress, serializer);
+    sse_encode_bool(self.sourceReading, serializer);
     sse_encode_u_32(self.downBytesPerSecond, serializer);
     sse_encode_u_32(self.upBytesPerSecond, serializer);
     sse_encode_u_16(self.peers, serializer);

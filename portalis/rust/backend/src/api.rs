@@ -1070,12 +1070,14 @@ impl SseDecode for crate::portalis_api::AppTransfer {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_progress = <f32>::sse_decode(deserializer);
+        let mut var_sourceReading = <bool>::sse_decode(deserializer);
         let mut var_downBytesPerSecond = <u32>::sse_decode(deserializer);
         let mut var_upBytesPerSecond = <u32>::sse_decode(deserializer);
         let mut var_peers = <u16>::sse_decode(deserializer);
         let mut var_etaSecs = <Option<u32>>::sse_decode(deserializer);
         return crate::portalis_api::AppTransfer {
             progress: var_progress,
+            source_reading: var_sourceReading,
             down_bytes_per_second: var_downBytesPerSecond,
             up_bytes_per_second: var_upBytesPerSecond,
             peers: var_peers,
@@ -1718,6 +1720,7 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppTransfer {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.progress.into_into_dart().into_dart(),
+            self.source_reading.into_into_dart().into_dart(),
             self.down_bytes_per_second.into_into_dart().into_dart(),
             self.up_bytes_per_second.into_into_dart().into_dart(),
             self.peers.into_into_dart().into_dart(),
@@ -1984,6 +1987,7 @@ impl SseEncode for crate::portalis_api::AppTransfer {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <f32>::sse_encode(self.progress, serializer);
+        <bool>::sse_encode(self.source_reading, serializer);
         <u32>::sse_encode(self.down_bytes_per_second, serializer);
         <u32>::sse_encode(self.up_bytes_per_second, serializer);
         <u16>::sse_encode(self.peers, serializer);

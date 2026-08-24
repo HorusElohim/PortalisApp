@@ -144,6 +144,7 @@ fn transfer(progress: Progress) -> Transfer {
     };
     Transfer {
         progress: fraction.clamp(0.0, 1.0),
+        source_reading: false,
         down_bytes_per_second: progress.down_bytes_per_second,
         up_bytes_per_second: progress.up_bytes_per_second,
         peers: progress.peers,
