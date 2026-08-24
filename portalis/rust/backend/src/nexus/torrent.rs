@@ -799,11 +799,17 @@ pub mod native {
                     let attempt = make_opts(port);
                     match Session::new_with_opts(dir.clone(), attempt).await {
                         Ok(session) => {
+                            let rehydrate_result = rehydrate_linked_torrents(&session).await;
                             crate::nexus::log::clog!(
                                 "torrent",
                                 "librqbit session listening on TCP port {port}"
                             );
-                            rehydrate_linked_torrents(&session).await?;
+                            if let Err(error) = rehydrate_result {
+                                crate::nexus::log::clog!(
+                                    "torrent",
+                                    "linked torrent rehydration incomplete; keeping the live session: {error:#}"
+                                );
+                            }
                             return Ok(session);
                         }
                         Err(error)
