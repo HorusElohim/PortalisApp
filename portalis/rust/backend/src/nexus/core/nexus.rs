@@ -26,7 +26,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use thiserror::Error;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{Notify, watch};
 
 use super::supervisor::Supervisor;
 use crate::nexus::projection::emit::Projector;
@@ -86,9 +86,9 @@ pub struct Nexus {
     /// The substrate's latest word on each collection, so the detail tier and
     /// the progress tier answer from the same reading.
     holdings: super::transfers::Holdings,
-    publisher: mpsc::Sender<()>,
+    publisher: Arc<Notify>,
     /// Wakes the worker that resolves torrent sources and starts downloads.
-    torrents: mpsc::Sender<()>,
+    torrents: Arc<Notify>,
 }
 
 /// Everything the detail tier is assembled from.
@@ -397,8 +397,8 @@ impl Nexus {
 
         let states = watch::Sender::new(first);
         let collections = Arc::new(Mutex::new(collections));
-        let (publisher, pending) = mpsc::channel(1);
-        let (torrents, torrent_wakes) = mpsc::channel(1);
+        let publisher = Arc::new(Notify::new());
+        let torrents = Arc::new(Notify::new());
         let substrate_for_torrents = Arc::clone(&substrate);
         let holdings = super::transfers::Holdings::default();
         let details: Arc<Mutex<HashMap<Handle, watch::Sender<Option<Detail>>>>> =
@@ -415,13 +415,14 @@ impl Nexus {
             let states = states.clone();
             let collections = Arc::clone(&collections);
             let substrate = Arc::clone(&substrate);
+            let publisher = Arc::clone(&publisher);
             move |shutdown| {
                 publish_pending_collections(
                     store,
                     states,
                     collections,
                     substrate,
-                    pending,
+                    publisher,
                     shutdown,
                 )
             }
@@ -462,13 +463,14 @@ impl Nexus {
             let collections = Arc::clone(&collections);
             let substrate = Arc::clone(&substrate_for_torrents);
             let sources = sources.clone();
+            let torrents = Arc::clone(&torrents);
             move |shutdown| {
                 super::torrents::follow_torrent_imports(
                     store,
                     states,
                     collections,
                     substrate,
-                    torrent_wakes,
+                    torrents,
                     shutdown,
                     sources,
                 )
@@ -477,8 +479,8 @@ impl Nexus {
         // One coalesced wake each is enough: both workers scan durable
         // collection state, so restart recovery does not depend on an
         // in-memory job.
-        let _ = publisher.try_send(());
-        let _ = torrents.try_send(());
+        publisher.notify_one();
+        torrents.notify_one();
 
         Ok(Self {
             supervisor,
@@ -639,8 +641,9 @@ impl Nexus {
             Command::CreateCollection { files, .. } | Command::AddMedia { files, .. }
                 if !files.is_empty()
         ) {
-            // A full channel already contains the only wake the worker needs.
-            let _ = self.publisher.try_send(());
+            // Notify coalesces duplicate wakes without dropping a wake that
+            // arrives while the worker is busy publishing another collection.
+            self.publisher.notify_one();
         }
 
         // Deferrable commands are queued rather than refused, which is what
@@ -775,12 +778,11 @@ impl Nexus {
             .store
             .torrent_import(key)
             .is_ok_and(|source| source.is_some());
-        // A full channel already holds the one wake either worker needs.
-        let _ = if is_import {
-            self.torrents.try_send(())
+        if is_import {
+            self.torrents.notify_one();
         } else {
-            self.publisher.try_send(())
-        };
+            self.publisher.notify_one();
+        }
         self.refresh_detail(collection);
     }
 
@@ -912,8 +914,8 @@ impl Nexus {
             pending: None,
         });
         self.states.send_replace(state);
-        // A full channel already holds the one wake the worker needs.
-        let _ = self.torrents.try_send(());
+        // The import worker resolves the durable source asynchronously.
+        self.torrents.notify_one();
         Ok(handle)
     }
 
@@ -1151,11 +1153,8 @@ impl Nexus {
         // only ever repeats what the tap before it already said.
         self.publish_draft(collection)?;
         self.refresh_detail(collection);
-        // The worker is what tells the engine; this only recorded the choice.
-        // It starts the download the first time and revises a running one
-        // afterwards, so this path does not need to know which case it is in.
-        // A full channel already holds the one wake it needs.
-        let _ = self.torrents.try_send(());
+        // Notify coalesces duplicate wakes; it never reports a full queue.
+        self.torrents.notify_one();
         Ok(())
     }
 
@@ -1280,17 +1279,13 @@ async fn publish_pending_collections(
     states: watch::Sender<PortalisState>,
     collections: Arc<Mutex<LocalCollections>>,
     substrate: Arc<dyn crate::nexus::substrate::Substrate>,
-    mut wakes: mpsc::Receiver<()>,
+    wake: Arc<Notify>,
     mut shutdown: super::supervisor::Shutdown,
 ) {
     loop {
         tokio::select! {
             () = shutdown.requested() => return,
-            wake = wakes.recv() => {
-                if wake.is_none() {
-                    return;
-                }
-            }
+            _ = wake.notified() => {}
         }
 
         let pending = match store.collections() {
@@ -1315,6 +1310,14 @@ async fn publish_pending_collections(
 
         for (key, collection) in pending {
             let total = collection.sources.iter().map(|source| source.bytes).sum();
+            crate::nexus::log::clog!(
+                "nexus",
+                "publisher starting collection key={:?} name={:?} sources={} bytes={}",
+                key,
+                collection.name,
+                collection.sources.len(),
+                total
+            );
             let progress = crate::nexus::torrent::PublishProgress::new(total);
             let publishing = publish_collection_sources(
                 &store,
@@ -1333,6 +1336,12 @@ async fn publish_pending_collections(
             };
             match result {
                 Ok(revision) => {
+                    crate::nexus::log::clog!(
+                        "nexus",
+                        "publisher completed collection key={:?} name={:?} revision={revision}",
+                        key,
+                        collection.name
+                    );
                     let handle = collections
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1371,8 +1380,9 @@ async fn publish_pending_collections(
                 Err(error) => {
                     crate::nexus::log::clog!(
                         "nexus",
-                        "could not publish collection {:?}: {error:#}",
-                        key
+                        "publisher failed collection key={:?} name={:?}: {error:#}",
+                        key,
+                        collection.name
                     )
                 }
             }
@@ -1402,6 +1412,14 @@ async fn publish_collection_sources(
     let published_torrent = substrate
         .publish(stored.name.clone(), files, progress)
         .await?;
+    crate::nexus::log::clog!(
+        "nexus",
+        "publisher substrate returned collection key={:?} name={:?} info_hash={} descriptor_bytes={}",
+        key,
+        stored.name,
+        published_torrent.info.info_hash,
+        published_torrent.descriptor.len()
+    );
     let info_hash: [u8; INFO_HASH_BYTES] = hex::decode(&published_torrent.info.info_hash)?
         .try_into()
         .map_err(|_| anyhow::anyhow!("published torrent returned an invalid info hash"))?;

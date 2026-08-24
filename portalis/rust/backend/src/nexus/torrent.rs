@@ -898,12 +898,16 @@ pub mod native {
         output_dir_for(&settings)
     }
 
-    /// Holds librqbit's private metadata for a referenced collection, never a
+    /// Holds librqbit's private metadata for one referenced torrent, never a
     /// second representation of the person's source media.
-    fn referenced_metadata_dir(name: &str) -> PathBuf {
+    ///
+    /// The info hash is the stable identity here. A collection name is only a
+    /// label and is not unique, so using it as a directory would make two
+    /// collections with the same name overwrite one another's torrent state.
+    fn referenced_metadata_dir(info_hash: &str) -> PathBuf {
         crate::nexus::paths::state_dir()
             .join("referenced-torrents")
-            .join(name)
+            .join(info_hash)
     }
 
     fn output_dir_for(settings: &crate::nexus::settings::EngineSettings) -> PathBuf {
@@ -1033,7 +1037,9 @@ pub mod native {
 
     #[cfg(test)]
     mod peer_hint_tests {
-        use super::{peer_hints_from_source, torrent_descriptor_url_from_magnet};
+        use super::{
+            peer_hints_from_source, referenced_metadata_dir, torrent_descriptor_url_from_magnet,
+        };
 
         #[test]
         fn magnet_peer_hints_are_decoded_deduplicated_and_ordered() {
@@ -1058,6 +1064,21 @@ pub mod native {
             assert_eq!(
                 torrent_descriptor_url_from_magnet(COSMOS_LAUNDROMAT),
                 Some("https://webtorrent.io/torrents/cosmos-laundromat.torrent".to_owned())
+            );
+        }
+        #[test]
+        fn referenced_metadata_is_namespaced_by_torrent_identity_not_collection_name() {
+            let first = referenced_metadata_dir("1111111111111111111111111111111111111111");
+            let second = referenced_metadata_dir("2222222222222222222222222222222222222222");
+
+            assert_ne!(first, second);
+            assert_eq!(
+                first.file_name().and_then(|name| name.to_str()),
+                Some("1111111111111111111111111111111111111111")
+            );
+            assert_eq!(
+                second.file_name().and_then(|name| name.to_str()),
+                Some("2222222222222222222222222222222222222222")
             );
         }
     }
@@ -1160,7 +1181,7 @@ pub mod native {
 
         progress.ensure_active()?;
         progress.set_stage("seeding");
-        let metadata_dir = referenced_metadata_dir(&collection_name);
+        let metadata_dir = referenced_metadata_dir(&info_hash);
         std::fs::create_dir_all(&metadata_dir)?;
         let options = AddTorrentOptions {
             overwrite: true,
