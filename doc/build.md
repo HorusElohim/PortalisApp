@@ -1,15 +1,16 @@
 # Build Guide – Flutter + Rust (flutter_rust_bridge)
 
 ## Overview
-- This app integrates Rust into Flutter via flutter_rust_bridge (FRB) 2.11.1.
+- This app integrates Rust into Flutter via flutter_rust_bridge (FRB) 2.12.0.
 - Desktop, Web, iOS and Android work; see platform sections below for Windows and Linux notes.
-- Generated bindings live under `lib/bridge_generated` (Dart) and `rust/backend/src/api.rs` (Rust).
+- Generated bindings live under `lib/nexus/bridge` (Dart) and `rust/backend/src/api.rs` (Rust).
 
 ## Global prerequisites
 - Flutter SDK 3.32.x, Xcode (macOS), Android SDK + NDK, Chrome.
 - Rust toolchain (rustup) and cargo.
 - Run once in `portalis/`: `flutter pub get`.
-- Optional but recommended to sync codegen: `./tool/frb_build.sh <platform>`.
+- The canonical build helpers automatically regenerate FRB only when its input
+  fingerprint or generated outputs change. Use `--force-frb` to override.
 
 ## Testing
 - `./tests/nexus.sh` – validates and tests the complete Nexus workspace,
@@ -59,28 +60,24 @@ Prerequisites
 
 Dev run (recommended)
 - From repo root `portalis/` in PowerShell:
-  - `./tool/build_windows.ps1 -NoCodegen`  # builds Rust DLL, runs Flutter on Windows
-- ⚠️ Run it with `-NoCodegen`. Without the flag the script invokes the codegen with `--rust-input crate`, the bare wildcard described under "Regenerating FRB bindings" below, which does not compile. Use `./tool/frb_build.sh` (Git Bash) when you actually need to regenerate bindings.
+  - `./tool/build_windows.ps1`  # incremental FRB check, Rust DLL build, and Flutter Windows build
+  - Add `-Run` to launch the resulting Windows app, or `-ForceFrb` to force codegen.
 
 Manual steps (equivalent)
-- Build Rust DLL (release, required by FRB loader at runtime):
-  - `cargo build --release --manifest-path rust/backend/Cargo.toml`
-- Run Flutter on Windows:
-  - `flutter pub get`
-  - `flutter run -d windows`
+- The same `tool/build_windows.ps1` command is the supported build path; it
+  copies `backend.dll` beside the Windows runner executable.
 
 Release build (packaged app)
-- Build Rust DLL:
-  - `cargo build --release --manifest-path rust/backend/Cargo.toml`
-- Build Flutter bundle:
-  - `flutter build windows --release`
-- Copy the Rust DLL next to the runner exe so the loader can find it:
-  - Copy `rust/backend/target/release/backend.dll` to `build/windows/x64/runner/Release/`
+- Build and package with `./tool/build_windows.ps1 -Configuration Release`.
+- The script copies `rust/backend/target/release/backend.dll` to
+  `build/windows/x64/runner/Release/` automatically.
   - The final folder contains `portalis.exe`, Flutter DLLs, assets, and `backend.dll`.
 
 Notes
 - FRB’s generated config expects the DLL at `rust/backend/target/release/backend.dll` during `flutter run`; keep using `--release` for the Rust build.
-- To update bindings after Rust API changes, install the codegen: `cargo install flutter_rust_bridge_codegen`, then run `./tool/frb_build.sh windows` from Git Bash (not `build_windows.ps1` — see the warning above).
+- FRB generation is automatic when a bridge input changes. To force it on
+  Windows, use `./tool/frb_generate.ps1 -Force` or
+  `./tool/build_windows.ps1 -ForceFrb`.
 
 ## Linux (Desktop)
 
@@ -105,17 +102,22 @@ Release build (packaged app)
 
 Notes
 - The flutter_rust_bridge loader looks in `rust/backend/target/release/` during `flutter run`; keep the Rust build in `--release` mode for parity with other platforms.
-- If you change Rust APIs, rebuild bindings via `cargo install flutter_rust_bridge_codegen` (once) and rerun `./tool/frb_build.sh <platform>`.
+- If you change Rust APIs, the canonical build helpers detect the bridge input
+  change. Use `./tool/frb_build.sh --codegen-only` to check/regenerate without
+  building a platform, or `--force-frb` to override the fingerprint.
 
 ## Regenerating FRB bindings
-- One-shot codegen (and platform builds where relevant):
+- Conditional codegen only:
+  - `./tool/frb_build.sh --codegen-only`
+  - `./tool/frb_build.sh --codegen-only --force-frb`
+- Codegen plus an explicit native helper:
   - `./tool/frb_build.sh macos`
   - `./tool/frb_build.sh ios`
   - `./tool/frb_build.sh android`
   - `./tool/frb_build.sh web`
 - Notes:
-  - Uses `flutter_rust_bridge_codegen generate` with `--rust-root rust/backend` and an **explicit** `--rust-input` module list (`crate::bridge,crate::torrent,crate::device,crate::collections,crate::settings`). Never the bare `crate` wildcard: the codegen's module scan ignores Rust visibility, so a wildcard sweeps in internal-only modules like `domain` and fails to compile.
-  - FRB version pinned to 2.11.1; if you upgrade FRB crates, re-run codegen.
+  - Uses `flutter_rust_bridge_codegen generate` with `--rust-root rust/backend` and the explicit bridge boundary `crate::bridge,crate::portalis_api,crate::nexus::device,crate::nexus::settings`. Never use the bare `crate` wildcard.
+  - FRB version is pinned to 2.12.0; changing the generator or bridge inputs invalidates the fingerprint.
 
 ## Troubleshooting
 - iOS install error: missing or invalid CFBundleExecutable in `backend.framework`.

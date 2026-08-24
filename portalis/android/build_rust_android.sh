@@ -16,6 +16,26 @@ fi
 
 mkdir -p "$JNILIBS_DIR"
 
+STAMP="$JNILIBS_DIR/.portalis-rust-$BUILD_PROFILE.stamp"
+inputs_newer_than_stamp() {
+  [[ ! -f "$STAMP" ]] && return 0
+  for input in "$CRATE_DIR/Cargo.toml" "$CRATE_DIR/Cargo.lock" "$ROOT_DIR/android/build_rust_android.sh" "$CRATE_DIR/src" "$CRATE_DIR/vendor"; do
+    if [[ -d "$input" ]]; then
+      if find "$input" -type f -newer "$STAMP" -print -quit | grep -q .; then
+        return 0
+      fi
+    elif [[ -f "$input" && "$input" -nt "$STAMP" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+if ! inputs_newer_than_stamp; then
+  echo "==> Android Rust libraries are up to date ($BUILD_PROFILE); skipping cargo-ndk"
+  exit 0
+fi
+
 if command -v cargo-ndk >/dev/null 2>&1; then
   echo "==> Using cargo-ndk to build Android libs ($BUILD_PROFILE)"
   pushd "$CRATE_DIR" >/dev/null
@@ -30,6 +50,8 @@ else
   echo "        Then run: rustup target add aarch64-linux-android x86_64-linux-android armv7-linux-androideabi" >&2
   exit 1
 fi
+
+touch "$STAMP"
 
 echo "✅ JNI libs are in: $JNILIBS_DIR"
 

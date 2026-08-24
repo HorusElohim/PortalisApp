@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.32+33
+
+- Bumped the coordinated Flutter release to `1.0.32+33` and the Rust backend
+  to `0.1.30`.
+- Made FRB generation incremental: bridge bindings regenerate only when the
+  explicit bridge inputs or generated outputs change, with `--force-frb` and
+  `--no-frb` escape hatches.
+- Integrated the conditional FRB check into the canonical build/run tools and
+  aligned the Windows generator/build scripts with the current bridge inputs.
+- Added native build inputs/outputs and timestamp checks for macOS, iOS, and
+  Android so unchanged Rust backends are not rebuilt or repackaged.
+
 ## 1.0.31+32
 
 - Bumped the coordinated Flutter release to `1.0.31+32` and the Rust backend

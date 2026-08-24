@@ -49,11 +49,17 @@ def rustBuildScript = new File(rootProject.projectDir, "build_rust_android.sh")
 tasks.register("buildRustAndroidRelease", Exec) {
     workingDir rootProject.projectDir
     commandLine "bash", rustBuildScript.absolutePath, "release"
+    inputs.files(fileTree(dir: "${rootProject.projectDir}/../rust/backend/src"))
+    inputs.files(file("${rootProject.projectDir}/../rust/backend/Cargo.toml"), file("${rootProject.projectDir}/../rust/backend/Cargo.lock"))
+    outputs.dir(new File(projectDir, "src/main/jniLibs"))
 }
 
 tasks.register("buildRustAndroidDebug", Exec) {
     workingDir rootProject.projectDir
     commandLine "bash", rustBuildScript.absolutePath, "debug"
+    inputs.files(fileTree(dir: "${rootProject.projectDir}/../rust/backend/src"))
+    inputs.files(file("${rootProject.projectDir}/../rust/backend/Cargo.toml"), file("${rootProject.projectDir}/../rust/backend/Cargo.lock"))
+    outputs.dir(new File(projectDir, "src/main/jniLibs"))
 }
 
 afterEvaluate {

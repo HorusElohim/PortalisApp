@@ -17,6 +17,8 @@ PLATFORM="macos"
 CLEAN=0
 DRY_RUN=0
 AI_MODE=0
+FORCE_FRB=0
+NO_FRB=0
 MODE="--debug"
 FLUTTER_ARGS=()
 
@@ -31,6 +33,8 @@ Options:
   --profile  Build a profile application
   --release  Build a release application
   --dry-run  Print the commands without executing them
+  --force-frb Force Flutter-Rust Bridge regeneration
+  --no-frb    Skip Flutter-Rust Bridge generation
   --ai       Minimize successful output; replay full output on error
   -h, --help Show this help
 EOF
@@ -52,6 +56,12 @@ for argument in "$@"; do
       ;;
     --ai)
       AI_MODE=1
+      ;;
+    --force-frb)
+      FORCE_FRB=1
+      ;;
+    --no-frb)
+      NO_FRB=1
       ;;
     -h|--help)
       usage
@@ -113,12 +123,72 @@ clean_platform() {
 
 cd "$ROOT_DIR"
 
+# On native Windows shells, use the PowerShell pipeline so FRB generation,
+# incremental Rust compilation, Flutter packaging, and backend.dll placement
+# are one operation. Git Bash on Windows exposes either pwsh or powershell.exe.
+if [[ "$PLATFORM" == "windows" ]]; then
+  POWERSHELL=""
+  if command -v pwsh >/dev/null 2>&1; then
+    POWERSHELL="$(command -v pwsh)"
+  elif command -v powershell.exe >/dev/null 2>&1; then
+    POWERSHELL="$(command -v powershell.exe)"
+  fi
+  if [[ -n "$POWERSHELL" ]]; then
+    PS_ARGS=("-NoProfile" "-ExecutionPolicy" "Bypass" "-File" "$SCRIPT_DIR/build_windows.ps1")
+    case "$MODE" in
+      --debug) PS_ARGS+=("-Configuration" "Debug") ;;
+      --profile) PS_ARGS+=("-Configuration" "Profile") ;;
+      --release) PS_ARGS+=("-Configuration" "Release") ;;
+    esac
+    [[ "$CLEAN" -eq 1 ]] && PS_ARGS+=("-Clean")
+    [[ "$FORCE_FRB" -eq 1 ]] && PS_ARGS+=("-ForceFrb")
+    [[ "$NO_FRB" -eq 1 ]] && PS_ARGS+=("-NoCodegen")
+    run "$POWERSHELL" "${PS_ARGS[@]}"
+    exit $?
+  fi
+fi
+
 if [[ "$CLEAN" -eq 1 ]]; then
   clean_platform
 fi
 
-status "==> Resolving Dart packages"
-run flutter pub get
+needs_pub_get() {
+  local package_config="$ROOT_DIR/.dart_tool/package_config.json"
+  local pub_stamp="$ROOT_DIR/.dart_tool/portalis/pub-get.stamp"
+  [[ ! -f "$pub_stamp" ]] && return 0
+  [[ ! -f "$package_config" ]] && return 0
+  [[ "$ROOT_DIR/pubspec.yaml" -nt "$pub_stamp" ]] && return 0
+  [[ "$ROOT_DIR/pubspec.lock" -nt "$pub_stamp" ]] && return 0
+  return 1
+}
+
+if needs_pub_get; then
+  status "==> Resolving Dart packages"
+  run flutter pub get
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    mkdir -p "$ROOT_DIR/.dart_tool/portalis"
+    touch "$ROOT_DIR/.dart_tool/portalis/pub-get.stamp"
+  fi
+else
+  status "==> Dart packages are up to date"
+fi
+
+FRB_ARGS=("--codegen-only")
+if [[ "$FORCE_FRB" -eq 1 ]]; then
+  FRB_ARGS+=("--force-frb")
+fi
+if [[ "$NO_FRB" -eq 1 ]]; then
+  FRB_ARGS+=("--no-frb")
+fi
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  FRB_ARGS+=("--dry-run")
+fi
+if [[ "$AI_MODE" -eq 1 ]]; then
+  FRB_ARGS+=("--ai")
+fi
+
+status "==> Checking Flutter-Rust Bridge inputs"
+run "$SCRIPT_DIR/frb_build.sh" "${FRB_ARGS[@]}"
 
 status "==> Building $PLATFORM ($MODE)"
 BUILD_ARGS=("$MODE")

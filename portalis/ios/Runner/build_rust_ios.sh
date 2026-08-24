@@ -44,15 +44,38 @@ function ensure_target() {
 ensure_target aarch64-apple-ios
 ensure_target aarch64-apple-ios-sim || true
 
-pushd "$RUST_DIR" >/dev/null
-cargo build --release --target aarch64-apple-ios
-if rustup target list --installed | grep -q '^aarch64-apple-ios-sim$'; then
-  cargo build --release --target aarch64-apple-ios-sim
-fi
-popd >/dev/null
-
 DEVICE_DYLIB="$RUST_DIR/target/aarch64-apple-ios/release/libbackend.dylib"
 SIM_DYLIB_ARM64="$RUST_DIR/target/aarch64-apple-ios-sim/release/libbackend.dylib"
+
+inputs_newer_than() {
+  local target="$1" input
+  [[ ! -f "$target" ]] && return 0
+  for input in "$RUST_DIR/Cargo.toml" "$RUST_DIR/Cargo.lock" "$SCRIPT_DIR" "$RUST_DIR/src" "$RUST_DIR/vendor"; do
+    if [[ -d "$input" ]]; then
+      if find "$input" -type f -newer "$target" -print -quit | grep -q .; then
+        return 0
+      fi
+    elif [[ -f "$input" && "$input" -nt "$target" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+pushd "$RUST_DIR" >/dev/null
+if inputs_newer_than "$DEVICE_DYLIB"; then
+  cargo build --release --target aarch64-apple-ios
+else
+  echo "iOS device backend is up to date; skipping cargo build"
+fi
+if rustup target list --installed | grep -q '^aarch64-apple-ios-sim$'; then
+  if inputs_newer_than "$SIM_DYLIB_ARM64"; then
+    cargo build --release --target aarch64-apple-ios-sim
+  else
+    echo "iOS simulator backend is up to date; skipping cargo build"
+  fi
+fi
+popd >/dev/null
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -107,6 +130,10 @@ if [[ -f "$SIM_DYLIB_ARM64" ]]; then
 fi
 
 XC_OUT="$OUT_DIR/backend.xcframework"
+if [[ -d "$XC_OUT" && ! "$DEVICE_DYLIB" -nt "$XC_OUT" && ! "$SIM_DYLIB_ARM64" -nt "$XC_OUT" && ! "$SCRIPT_DIR" -nt "$XC_OUT" ]]; then
+  echo "iOS XCFramework is up to date; skipping packaging"
+  exit 0
+fi
 rm -rf "$XC_OUT"
 
 CMD=(xcodebuild -create-xcframework -framework "$FWK_DEV")

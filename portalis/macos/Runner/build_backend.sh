@@ -30,22 +30,48 @@ echo "Building Rust backend ($RUST_PROFILE) into: $OUTPUT_DIR"
 
 pushd "$RUST_DIR" >/dev/null
 if [[ "$RUST_PROFILE" == "release" ]]; then
-  cargo build --release
-else
-  cargo build
-fi
-popd >/dev/null
-
-# Ensure Framework destination exists
-rm -rf "$OUTPUT_DIR/backend.framework"
-mkdir -p "$OUTPUT_DIR/backend.framework/Versions/A/Resources"
-
-# Copy compiled dylib to the expected framework binary name
-if [[ "$RUST_PROFILE" == "release" ]]; then
   SRC_LIB="$RUST_DIR/target/release/libbackend.dylib"
 else
   SRC_LIB="$RUST_DIR/target/debug/libbackend.dylib"
 fi
+
+inputs_newer_than() {
+  local target="$1" input
+  [[ ! -f "$target" ]] && return 0
+  for input in "$RUST_DIR/Cargo.toml" "$RUST_DIR/Cargo.lock" "$SCRIPT_DIR" "$RUST_DIR/src" "$RUST_DIR/vendor"; do
+    if [[ -d "$input" ]]; then
+      if find "$input" -type f -newer "$target" -print -quit | grep -q .; then
+        return 0
+      fi
+    elif [[ -f "$input" && "$input" -nt "$target" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+if inputs_newer_than "$SRC_LIB"; then
+  if [[ "$RUST_PROFILE" == "release" ]]; then
+    cargo build --release
+  else
+    cargo build
+  fi
+else
+  echo "Rust backend is up to date; skipping cargo build"
+fi
+popd >/dev/null
+
+# Ensure Framework destination exists
+DEST_BINARY="$OUTPUT_DIR/backend.framework/Versions/A/backend"
+if [[ -f "$DEST_BINARY" && ! "$SRC_LIB" -nt "$DEST_BINARY" && ! "$SCRIPT_DIR" -nt "$DEST_BINARY" ]]; then
+  echo "Rust backend framework is up to date; skipping framework packaging"
+  exit 0
+fi
+
+rm -rf "$OUTPUT_DIR/backend.framework"
+mkdir -p "$OUTPUT_DIR/backend.framework/Versions/A/Resources"
+
+# Copy compiled dylib to the expected framework binary name
 cp "$SRC_LIB" "$OUTPUT_DIR/backend.framework/Versions/A/backend"
 
 # Ensure the framework binary has a valid install name for embedding

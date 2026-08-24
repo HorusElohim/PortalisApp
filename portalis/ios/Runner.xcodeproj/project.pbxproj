@@ -366,7 +366,6 @@
 		};
 		9740EEB61CF901F6004384FC /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -381,14 +380,19 @@
 		};
 		A1B2C3D71A2B3C4D5E6F7081 /* Build Rust (iOS) */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputPaths = (
+				"${SRCROOT}/../rust/backend/Cargo.toml",
+				"${SRCROOT}/../rust/backend/Cargo.lock",
+				"${SRCROOT}/../rust/backend/src",
+				"${SRCROOT}/../rust/backend/vendor",
+				"${SRCROOT}/Runner/build_rust_ios.sh",
 			);
 			name = "Build Rust (iOS)";
 			outputPaths = (
+				"${SRCROOT}/Frameworks/backend.xcframework",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
