@@ -25,10 +25,10 @@
 
 ### Fixed
 
-- Made Android builds select an installed JDK 17 automatically (or use
-  `PORTALIS_JAVA_HOME`) so local Java 25 installations do not fail Gradle 8.14
-  before Flutter compilation begins. The FRB parser notices remain non-fatal
-  diagnostics for internal, non-bridged Rust types.
+- Upgraded the Android build baseline to Gradle 9.1.0, Android Gradle Plugin
+  9.0.1, and Kotlin 2.3.20 so Java 25 is supported by the local Flutter build.
+  The FRB parser notices remain non-fatal diagnostics for internal,
+  non-bridged Rust types.
 - Fixed `tool/build.sh android` invoking the nonexistent `flutter build android`
   command. Android builds now invoke `flutter build apk`, matching the CI
   artifact pipeline.

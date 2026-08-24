@@ -38,8 +38,6 @@ Options:
   --ai       Minimize successful output; replay full output on error
   -h, --help Show this help
 
-Android uses JDK 17 when it is installed. Set PORTALIS_JAVA_HOME to override
-the automatic JDK selection.
 EOF
 }
 
@@ -106,43 +104,6 @@ status() {
   echo "$@"
 }
 
-configure_android_java() {
-  [[ "$PLATFORM" == "android" ]] || return 0
-  [[ "$DRY_RUN" -eq 1 ]] && return 0
-
-  local java_home="${PORTALIS_JAVA_HOME:-}"
-  if [[ -z "$java_home" && "$(uname -s)" == "Darwin" && -x /usr/libexec/java_home ]]; then
-    java_home="$(/usr/libexec/java_home -v 17 2>/dev/null || true)"
-  fi
-  if [[ -z "$java_home" ]]; then
-    for candidate in \
-      /usr/lib/jvm/java-17-openjdk \
-      /usr/lib/jvm/java-17-openjdk-amd64 \
-      /usr/lib/jvm/temurin-17-jdk-amd64; do
-      if [[ -x "$candidate/bin/java" ]]; then
-        java_home="$candidate"
-        break
-      fi
-    done
-  fi
-
-  if [[ -n "$java_home" && -x "$java_home/bin/java" ]]; then
-    export JAVA_HOME="$java_home"
-    export PATH="$JAVA_HOME/bin:$PATH"
-    status "==> Using Android JDK: $JAVA_HOME"
-    return 0
-  fi
-
-  local java_version java_major
-  java_version="$(java -version 2>&1 | head -n 1 || true)"
-  java_major="$(printf '%s\n' "$java_version" | sed -E 's/.*"([0-9]+).*/\1/' || true)"
-  if [[ "$java_major" == "25" ]]; then
-    echo "Android build requires JDK 17, but only Java 25 was found." >&2
-    echo "Install JDK 17, or set PORTALIS_JAVA_HOME to its installation path." >&2
-    exit 2
-  fi
-}
-
 clean_platform() {
   status "==> Cleaning $PLATFORM artifacts"
   run flutter clean
@@ -162,8 +123,6 @@ clean_platform() {
 }
 
 cd "$ROOT_DIR"
-
-configure_android_java
 
 # On native Windows shells, use the PowerShell pipeline so FRB generation,
 # incremental Rust compilation, Flutter packaging, and backend.dll placement
