@@ -6,6 +6,20 @@
 	objectVersion = 54;
 	objects = {
 
+/* Begin PBXAggregateTarget section */
+		A1B2C3E01A2B3C4D5E6F7081 /* RustBackend */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = A1B2C3E11A2B3C4D5E6F7081 /* Build configuration list for PBXAggregateTarget "RustBackend" */;
+			buildPhases = (
+				A1B2C3D71A2B3C4D5E6F7081 /* Build Rust (iOS) */,
+			);
+			dependencies = (
+			);
+			name = RustBackend;
+			productName = RustBackend;
+		};
+/* End PBXAggregateTarget section */
+
 /* Begin PBXBuildFile section */
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
@@ -30,6 +44,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
+		};
+		A1B2C3E51A2B3C4D5E6F7081 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1B2C3E01A2B3C4D5E6F7081;
+			remoteInfo = RustBackend;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -209,7 +230,6 @@
 			buildPhases = (
 				09D689D8B9585B50478C2118 /* [CP] Check Pods Manifest.lock */,
 				9740EEB61CF901F6004384FC /* Run Script */,
-				A1B2C3D71A2B3C4D5E6F7081 /* Build Rust (iOS) */,
 				97C146EA1CF9000F007C117D /* Sources */,
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
@@ -221,6 +241,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				A1B2C3E61A2B3C4D5E6F7081 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -267,6 +288,7 @@
 			projectRoot = "";
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
+				A1B2C3E01A2B3C4D5E6F7081 /* RustBackend */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
 			);
 		};
@@ -366,6 +388,7 @@
 		};
 		9740EEB61CF901F6004384FC /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 0;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -449,6 +472,11 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
+		};
+		A1B2C3E61A2B3C4D5E6F7081 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1B2C3E01A2B3C4D5E6F7081 /* RustBackend */;
+			targetProxy = A1B2C3E51A2B3C4D5E6F7081 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -752,9 +780,55 @@
 			};
 			name = Release;
 		};
+		A1B2C3E21A2B3C4D5E6F7081 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_NAME = RustBackend;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+			};
+			name = Debug;
+		};
+		A1B2C3E31A2B3C4D5E6F7081 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_NAME = RustBackend;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+			};
+			name = Release;
+		};
+		A1B2C3E41A2B3C4D5E6F7081 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_NAME = RustBackend;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+			};
+			name = Profile;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		A1B2C3E11A2B3C4D5E6F7081 /* Build configuration list for PBXAggregateTarget "RustBackend" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3E21A2B3C4D5E6F7081 /* Debug */,
+				A1B2C3E31A2B3C4D5E6F7081 /* Release */,
+				A1B2C3E41A2B3C4D5E6F7081 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		331C8087294A63A400263BE5 /* Build configuration list for PBXNativeTarget "RunnerTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
