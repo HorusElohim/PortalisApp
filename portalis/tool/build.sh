@@ -200,7 +200,12 @@ if [[ ${#FLUTTER_ARGS[@]} -gt 0 ]]; then
 fi
 
 case "$FLUTTER_PLATFORM" in
-  ios|macos|android|linux|windows|web)
+  android)
+    # Flutter has no `build android` command; APK is the canonical Android
+    # artifact and matches the CI build action.
+    run flutter build apk "${BUILD_ARGS[@]}"
+    ;;
+  ios|macos|linux|windows|web)
     run flutter build "$FLUTTER_PLATFORM" "${BUILD_ARGS[@]}"
     ;;
   *)

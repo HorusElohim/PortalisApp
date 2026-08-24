@@ -25,6 +25,9 @@
 
 ### Fixed
 
+- Fixed `tool/build.sh android` invoking the nonexistent `flutter build android`
+  command. Android builds now invoke `flutter build apk`, matching the CI
+  artifact pipeline.
 - Removed the OpenSSL-backed `crypto-hash` path from the librqbit SHA wrapper
   used by native builds. The patched `sha1-ring` compatibility feature now uses
   portable Rust SHA-1/SHA-256 implementations, so Android cross-compilation no
