@@ -17,6 +17,8 @@ DEVICE=""
 CLEAN=0
 DRY_RUN=0
 AI_MODE=0
+FORCE_FRB=0
+NO_FRB=0
 MODE="--debug"
 FLUTTER_ARGS=()
 
@@ -33,6 +35,8 @@ Options:
   --device <id>     Explicit Flutter device ID; useful for iOS/Android
   --dry-run         Print build/run commands without executing them
   --ai              Minimize successful output; replay full output on error
+  --force-frb       Force Flutter-Rust Bridge regeneration
+  --no-frb          Skip Flutter-Rust Bridge generation
   -h, --help        Show this help
 EOF
 }
@@ -53,6 +57,12 @@ for argument in "$@"; do
       ;;
     --ai)
       AI_MODE=1
+      ;;
+    --force-frb)
+      FORCE_FRB=1
+      ;;
+    --no-frb)
+      NO_FRB=1
       ;;
     --device)
       # The next argument is consumed below by the indexed parser instead.
@@ -79,7 +89,7 @@ for argument in "$@"; do
     continue
   fi
   case "$argument" in
-    ios|macos|android|linux|windows|web|chrome|--clean|--debug|--profile|--release|--dry-run|--ai)
+    ios|macos|android|linux|windows|web|chrome|--clean|--debug|--profile|--release|--dry-run|--ai|--force-frb|--no-frb)
       ;;
     *)
       POSITIONAL+=("$argument")
@@ -128,6 +138,12 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 if [[ "$AI_MODE" -eq 1 ]]; then
   BUILD_ARGS+=("--ai")
+fi
+if [[ "$FORCE_FRB" -eq 1 ]]; then
+  BUILD_ARGS+=("--force-frb")
+fi
+if [[ "$NO_FRB" -eq 1 ]]; then
+  BUILD_ARGS+=("--no-frb")
 fi
 if [[ ${#FLUTTER_ARGS[@]} -gt 0 ]]; then
   BUILD_ARGS+=("${FLUTTER_ARGS[@]}")

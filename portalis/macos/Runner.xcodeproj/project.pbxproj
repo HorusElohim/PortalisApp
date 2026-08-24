@@ -424,10 +424,16 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"${SRCROOT}/../rust/backend/Cargo.toml",
+				"${SRCROOT}/../rust/backend/Cargo.lock",
+				"${SRCROOT}/../rust/backend/src",
+				"${SRCROOT}/../rust/backend/vendor",
+				"${SRCROOT}/Runner/build_backend.sh",
 			);
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/backend.framework",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;

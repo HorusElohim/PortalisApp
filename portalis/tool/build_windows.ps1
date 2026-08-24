@@ -1,76 +1,121 @@
 <#
 .SYNOPSIS
-  Build the Rust backend DLL and run the Flutter Windows app.
+  Incrementally build the Portalis Windows backend and Flutter application.
 .DESCRIPTION
-  - Optionally regenerates flutter_rust_bridge bindings if codegen is available
-  - Builds the Rust crate at rust/backend as a cdylib (backend.dll)
-  - Runs `flutter pub get` then `flutter run -d windows`
-
-  Requires: Rust toolchain, Visual Studio Build Tools C++ workload, Flutter SDK.
+  FRB generation is conditional and shared with frb_generate.ps1. Rust and
+  Flutter builds retain their normal incremental caches. The backend DLL is
+  copied beside the Windows runner so the generated FFI loader can find it.
 .EXAMPLE
-  ./tool/build_windows.ps1              # codegen (if available), build Rust, run Flutter (Windows)
+  ./tool/build_windows.ps1
 .EXAMPLE
-  ./tool/build_windows.ps1 -NoCodegen   # skip codegen, build Rust, run Flutter (Windows)
+  ./tool/build_windows.ps1 -ForceFrb -Configuration Release -Run
 #>
 
+[CmdletBinding()]
 param(
-  [switch]$NoCodegen
+  [switch]$ForceFrb,
+  [switch]$NoCodegen,
+  [switch]$Clean,
+  [switch]$Run,
+  [ValidateSet('Debug', 'Profile', 'Release')]
+  [string]$Configuration = 'Debug'
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Write-Info($m) { Write-Host "[INFO ] $m" -ForegroundColor Cyan }
-function Write-Ok($m)   { Write-Host "[ OK  ] $m" -ForegroundColor Green }
-function Write-Warn($m) { Write-Host "[WARN ] $m" -ForegroundColor Yellow }
-function Write-Err($m)  { Write-Host "[ERROR] $m" -ForegroundColor Red }
+function Write-Info($message) { Write-Host "[INFO ] $message" -ForegroundColor Cyan }
+function Write-Ok($message) { Write-Host "[ OK  ] $message" -ForegroundColor Green }
 
-$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$repoRoot   = Resolve-Path (Join-Path $scriptRoot '..')
+$toolRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$repoRoot = (Resolve-Path (Join-Path $toolRoot '..')).Path
+$crateRoot = Join-Path $repoRoot 'rust/backend'
+# Keep the native DLL in release mode for parity with the FRB loader's
+# configured rust/backend/target/release lookup. Flutter may still be Debug.
+$profile = 'release'
 Set-Location $repoRoot
 
-Write-Info "Repo: $repoRoot"
-
-function Test-Cmd($name) { $null -ne (Get-Command $name -ErrorAction SilentlyContinue) }
-
-if (-not (Test-Cmd cargo))   { Write-Err "cargo not found in PATH"; exit 1 }
-if (-not (Test-Cmd flutter)) { Write-Err "flutter not found in PATH"; exit 1 }
-
-function Maybe-Codegen {
-  if ($NoCodegen) { Write-Info "Skipping flutter_rust_bridge codegen (per flag)."; return }
-  if (-not (Test-Cmd flutter_rust_bridge_codegen)) {
-    Write-Warn "flutter_rust_bridge_codegen not installed; skipping codegen."
-    return
-  }
-  Write-Info "Regenerating flutter_rust_bridge bindings..."
-  flutter_rust_bridge_codegen generate `
-    --rust-root "rust/backend" `
-    --rust-input "crate::bridge,crate::portalis_api,crate::device,crate::collections::legacy,crate::settings,crate::nexus_settings" `
-    --dart-output "lib/nexus/bridge" `
-    --rust-output "rust/backend/src/api.rs" `
-    --no-add-mod-to-lib
-  Write-Ok "Codegen complete."
+if ($Clean) {
+  Write-Info 'Cleaning Flutter Windows artifacts.'
+  flutter clean
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $repoRoot 'build/windows')
 }
 
-function Build-Rust {
-  Write-Info "Building Rust backend (release)..."
-  Push-Location "rust/backend"
-  cargo build --release
-  Pop-Location
-  $dll = Join-Path "rust/backend/target/release" "backend.dll"
-  if (Test-Path $dll) { Write-Ok "Built: $dll" }
-  else { Write-Warn "backend.dll not found where expected: $dll" }
+if (-not $NoCodegen) {
+  if ($ForceFrb) { & (Join-Path $toolRoot 'frb_generate.ps1') -Force }
+  else { & (Join-Path $toolRoot 'frb_generate.ps1') }
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} else {
+  Write-Info 'Skipping Flutter-Rust Bridge generation.'
 }
 
-function Run-Flutter {
-  Write-Info "Running Flutter app (Windows desktop)..."
+$packageConfig = Join-Path $repoRoot '.dart_tool/package_config.json'
+$pubStamp = Join-Path $repoRoot '.dart_tool/portalis/pub-get.stamp'
+$pubspec = Join-Path $repoRoot 'pubspec.yaml'
+$lockfile = Join-Path $repoRoot 'pubspec.lock'
+$needPubGet = -not (Test-Path -LiteralPath $packageConfig) -or -not (Test-Path -LiteralPath $pubStamp)
+if (-not $needPubGet) {
+  $stampTime = (Get-Item -LiteralPath $pubStamp).LastWriteTimeUtc
+  $needPubGet = ((Get-Item -LiteralPath $pubspec).LastWriteTimeUtc -gt $stampTime) -or
+    ((Get-Item -LiteralPath $lockfile).LastWriteTimeUtc -gt $stampTime)
+}
+if ($needPubGet) {
+  Write-Info 'Resolving Dart packages.'
   flutter pub get
-  flutter run -d windows
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $pubStamp) | Out-Null
+  Set-Content -NoNewline -LiteralPath $pubStamp -Value (Get-Date -Format o)
+} else {
+  Write-Info 'Dart packages are up to date.'
 }
 
-Maybe-Codegen
-Build-Rust
-Run-Flutter
+$dll = Join-Path $crateRoot "target/$profile/backend.dll"
+$rustInputs = @(
+  (Join-Path $crateRoot 'Cargo.toml'),
+  (Join-Path $crateRoot 'Cargo.lock'),
+  (Join-Path $crateRoot 'src'),
+  (Join-Path $crateRoot 'vendor')
+)
+$needsRust = -not (Test-Path -LiteralPath $dll)
+if (-not $needsRust) {
+  $dllTime = (Get-Item -LiteralPath $dll).LastWriteTimeUtc
+  foreach ($input in $rustInputs) {
+    if (Test-Path -LiteralPath $input -PathType Container) {
+      $newer = Get-ChildItem -LiteralPath $input -Recurse -File | Where-Object { $_.LastWriteTimeUtc -gt $dllTime } | Select-Object -First 1
+      if ($null -ne $newer) { $needsRust = $true; break }
+    } elseif ((Get-Item -LiteralPath $input).LastWriteTimeUtc -gt $dllTime) {
+      $needsRust = $true; break
+    }
+  }
+}
+if ($needsRust) {
+  Write-Info "Building Rust backend ($profile)."
+  Push-Location $crateRoot
+  if ($profile -eq 'release') { cargo build --release } else { cargo build }
+  $cargoStatus = $LASTEXITCODE
+  Pop-Location
+  if ($cargoStatus -ne 0) { exit $cargoStatus }
+} else {
+  Write-Info "Rust backend is up to date ($profile)."
+}
 
-Write-Ok "Done."
+Write-Info "Building Flutter Windows application ($Configuration)."
+$flutterMode = $Configuration.ToLowerInvariant()
+flutter build windows "--$flutterMode"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+$runnerDir = Join-Path $repoRoot "build/windows/x64/runner/$Configuration"
+if (-not (Test-Path -LiteralPath $runnerDir)) {
+  throw "Flutter Windows output directory not found: $runnerDir"
+}
+Copy-Item -Force -LiteralPath $dll -Destination (Join-Path $runnerDir 'backend.dll')
+Write-Ok "Windows backend copied to $runnerDir/backend.dll"
+
+if ($Run) {
+  Write-Info 'Running Flutter Windows application.'
+  flutter run -d windows "--$flutterMode"
+  exit $LASTEXITCODE
+}
+
+Write-Ok 'Windows build complete.'
