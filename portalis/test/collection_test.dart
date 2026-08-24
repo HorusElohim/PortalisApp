@@ -233,6 +233,32 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets(
+        'a restarted published collection keeps QR sharing while entries rehydrate',
+        (tester) async {
+      // The durable revision and torrent identity are already present after a
+      // restart, while the inexpensive list projection may briefly report no
+      // entries until the detail tier is rehydrated.
+      final collection = buildCollection(
+        name: 'Reopened trip',
+        status: 'Downloading',
+      );
+      await tester.binding.setSurfaceSize(phoneSize);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CollectionScreen(
+            collection: collection,
+            source: _FixedSource(collection),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byKey(const Key('collectionShareQr')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('sharing a collection renders its magnet URI as a QR code',
         (tester) async {
       const uri =

@@ -705,25 +705,29 @@ impl Nexus {
             .collection(&key)
             .map_err(persistence)?
             .ok_or_else(|| missing_collection(collection))?;
-        if !stored.draft {
+        let needs_publication = !stored.sources.is_empty() && stored.substrate_handle.is_none();
+        if !stored.draft && !needs_publication {
             return Ok(());
         }
-        self.store
-            .put_collection(
-                &key,
-                &StoredCollection {
-                    draft: false,
-                    started_at: None,
-                    completed_at: None,
-                    // Sharing is the explicit instruction to publish and
-                    // seed. Stopping it remains a separate Pause action;
-                    // confirming while leaving it paused produced no usable
-                    // torrent or link until an undocumented second tap.
-                    paused: false,
-                    ..stored
-                },
-            )
-            .map_err(persistence)?;
+        if stored.draft {
+            self.store
+                .put_collection(
+                    &key,
+                    &StoredCollection {
+                        draft: false,
+                        started_at: None,
+                        completed_at: None,
+                        // Sharing is the explicit instruction to publish and
+                        // seed. Stopping it remains a separate Pause action;
+                        // confirming while leaving it paused produced no
+                        // usable torrent or link until an undocumented second
+                        // tap.
+                        paused: false,
+                        ..stored
+                    },
+                )
+                .map_err(persistence)?;
+        }
         // The projection has to say so too. Writing the pause and leaving the
         // status alone left the interface offering Pause on something already
         // paused — the button read as inverted because the state behind it
@@ -1291,15 +1295,13 @@ async fn publish_pending_collections(
         let pending = match store.collections() {
             Ok(collections) => collections
                 .into_iter()
-                .filter(|(key, collection)| {
+                .filter(|(_, collection)| {
                     // A draft is deliberately skipped: its files are chosen
                     // but not offered, and hashing them would start seeding
                     // something the person has not said to share.
                     !collection.draft
                         && !collection.sources.is_empty()
-                        && store
-                            .current_revision(key)
-                            .is_ok_and(|revision| revision.is_none())
+                        && collection.substrate_handle.is_none()
                 })
                 .collect::<Vec<_>>(),
             Err(error) => {
@@ -1908,6 +1910,37 @@ mod tests {
         nexus
             .command(&Command::PublishDraft { collection })
             .expect("stays accepting");
+
+        // Simulate a crash after the publication revision was durable but
+        // before the collection's substrate handle was recorded. A reopened
+        // collection must remain recoverable rather than staying Preparing
+        // forever because it is no longer a draft.
+        let key = nexus.collection_key(collection).expect("collection key");
+        let stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("collection exists");
+        nexus
+            .store
+            .put_collection(
+                &key,
+                &StoredCollection {
+                    substrate_handle: None,
+                    ..stored
+                },
+            )
+            .expect("clears the simulated incomplete handle");
+        nexus
+            .command(&Command::PublishDraft { collection })
+            .expect("retries an incomplete publication");
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while substrate.published.lock().unwrap().len() < 2 {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("republication completes");
         nexus.close().await;
     }
 

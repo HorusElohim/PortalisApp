@@ -31,6 +31,10 @@
   torrent metadata is now namespaced by info hash, so collections with the
   same display name cannot overwrite one another. Sender and receiver
   transitions now log the collection key and torrent identity for diagnosis.
+- Kept the Share QR action visible while a published collection's list/detail
+  projections rehydrate after restart. Publication recovery now keys off the
+  durable substrate handle, allowing an interrupted collection with a revision
+  but no handle to leave `Preparing` and publish again.
 
 - Broke the iOS Xcode dependency cycle between `ProcessXCFramework
   backend.xcframework` and the `Build Rust (iOS)` script phase. The Rust
