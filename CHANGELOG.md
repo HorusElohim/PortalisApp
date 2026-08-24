@@ -23,6 +23,16 @@
 
 ## Unreleased
 
+### Fixed
+
+- Broke the iOS Xcode dependency cycle between `ProcessXCFramework
+  backend.xcframework` and the `Build Rust (iOS)` script phase. The Rust
+  XCFramework is now produced by a dedicated `RustBackend` aggregate target
+  that `Runner` depends on, so the framework exists before Xcode plans the
+  Runner target instead of being written by a phase inside it. UPnP port
+  forwarding, HTTPS, and the embedded/signed `backend.framework` topology are
+  unchanged.
+
 ### Changed
 
 - When the configured BitTorrent listen port is occupied, the backend now tries
