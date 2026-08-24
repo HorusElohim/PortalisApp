@@ -29,9 +29,10 @@
   9.0.1 so Java 25 is supported by the local Flutter build, and migrated the
   app to AGP's built-in Kotlin mode. This also lets Kotlin-based plugins such
   as `file_picker` compile without the app applying a separate Kotlin Gradle
-  Plugin. The Android build remains opted out of AGP 9's new DSL while
-  Flutter and the Rust task wiring use the legacy variant API. The FRB parser
-  notices remain non-fatal diagnostics for internal, non-bridged Rust types.
+  Plugin and removes the legacy `kotlinOptions` block it no longer supports.
+  The Android build remains opted out of AGP 9's new DSL while Flutter and the
+  Rust task wiring use the legacy variant API. The FRB parser notices remain
+  non-fatal diagnostics for internal, non-bridged Rust types.
 - Fixed `tool/build.sh android` invoking the nonexistent `flutter build android`
   command. Android builds now invoke `flutter build apk`, matching the CI
   artifact pipeline.
