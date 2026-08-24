@@ -25,6 +25,13 @@
 
 ### Fixed
 
+- Made collection publication and torrent-import wakes lossless for arbitrary
+  numbers of collections by using durable-state scans with `Notify` rather
+  than a bounded channel whose `try_send` result was ignored. Referenced
+  torrent metadata is now namespaced by info hash, so collections with the
+  same display name cannot overwrite one another. Sender and receiver
+  transitions now log the collection key and torrent identity for diagnosis.
+
 - Broke the iOS Xcode dependency cycle between `ProcessXCFramework
   backend.xcframework` and the `Build Rust (iOS)` script phase. The Rust
   XCFramework is now produced by a dedicated `RustBackend` aggregate target

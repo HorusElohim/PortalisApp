@@ -27,7 +27,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{Notify, watch};
 
 use crate::nexus::projection::state::{Handle, PortalisState};
 use crate::nexus::store::Store;
@@ -66,18 +66,14 @@ pub(crate) async fn follow_torrent_imports(
     states: watch::Sender<PortalisState>,
     collections: Arc<Mutex<super::nexus::LocalCollections>>,
     substrate: Arc<dyn Substrate>,
-    mut wakes: mpsc::Receiver<()>,
+    wake: Arc<Notify>,
     mut shutdown: super::supervisor::Shutdown,
     details: super::nexus::DetailSources,
 ) {
     loop {
         tokio::select! {
             () = shutdown.requested() => return,
-            wake = wakes.recv() => {
-                if wake.is_none() {
-                    return;
-                }
-            }
+            _ = wake.notified() => {}
         }
 
         // Scanned rather than carried in the wake: a wake says "something
@@ -97,9 +93,15 @@ pub(crate) async fn follow_torrent_imports(
         );
 
         for work in pending {
+            let key = match &work {
+                Pending::Resolve { key, .. }
+                | Pending::Acquire { key, .. }
+                | Pending::Reconcile { key, .. } => key.clone(),
+            };
             crate::nexus::log::clog!(
                 "nexus",
-                "torrent worker performing {}",
+                "torrent worker performing key={:?} {}",
+                key,
                 match &work {
                     Pending::Resolve { source, .. } => {
                         format!("resolve source_len={}", source.len())
@@ -116,15 +118,11 @@ pub(crate) async fn follow_torrent_imports(
                 () = shutdown.requested() => return,
                 done = perform(&store, substrate.as_ref(), &work) => done,
             };
-            let key = match work {
-                Pending::Resolve { key, .. }
-                | Pending::Acquire { key, .. }
-                | Pending::Reconcile { key, .. } => key,
-            };
             if let Err(error) = done {
-                crate::nexus::log::clog!("nexus", "torrent import failed: {error:#}");
+                crate::nexus::log::clog!("nexus", "torrent worker failed key={:?}: {error:#}", key);
                 continue;
             }
+            crate::nexus::log::clog!("nexus", "torrent worker completed key={:?}", key);
             let handle = collections
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
