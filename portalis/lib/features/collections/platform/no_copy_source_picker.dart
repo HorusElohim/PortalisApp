@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../domain/picked_file.dart';
 
-/// Opens an iOS Files document in place.
+/// Opens an iOS Files document or Android SAF document in place.
 ///
-/// The native picker returns only stable, security-scoped filesystem metadata.
+/// The native picker returns only stable, access-scoped source metadata.
 /// It never materialises file bytes in Dart or a plugin cache. Rust can then
 /// hash and seed that same location directly.
 class NoCopySourcePicker {
@@ -14,9 +14,10 @@ class NoCopySourcePicker {
   static const _channel = MethodChannel('app.portalis/no-copy-source-picker');
 
   static Future<List<PickedFile>> pickFiles() async {
-    if (defaultTargetPlatform != TargetPlatform.iOS) {
+    if (defaultTargetPlatform != TargetPlatform.iOS &&
+        defaultTargetPlatform != TargetPlatform.android) {
       throw UnsupportedError(
-          'The native Files picker is only available on iOS');
+          'The native Files picker is only available on iOS and Android');
     }
     final values = await _channel.invokeListMethod<dynamic>('pickFiles') ?? [];
     return values.map(_fromNative).toList(growable: false);
