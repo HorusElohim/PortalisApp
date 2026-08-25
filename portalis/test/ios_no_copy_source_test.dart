@@ -68,14 +68,32 @@ void main() {
     expect(photos.single.lengthBytes, 6000000000);
   });
 
-  test('Android keeps gallery media disabled until it can be linked directly',
-      () {
+  test('Android exposes persistent Files URIs without asking Flutter for bytes',
+      () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'pickFiles');
+      return [
+        {
+          'name': 'clip.mov',
+          'path': 'content://media/external/video/media/42',
+          'lengthBytes': 6000000000,
+        },
+      ];
+    });
 
     expect(supportsDirectPathSources, isFalse);
-    expect(supportsNativeFilesSources, isFalse);
+    expect(supportsNativeFilesSources, isTrue);
     expect(supportsMobileGallerySources, isFalse);
-    expect(supportsNoCopySources, isFalse);
-    expect(supportsMediaSources, isFalse);
+    expect(supportsNoCopySources, isTrue);
+    expect(supportsMediaSources, isTrue);
+
+    final files = await NoCopySourcePicker.pickFiles();
+
+    expect(files, hasLength(1));
+    expect(files.single.name, 'clip.mov');
+    expect(files.single.path, 'content://media/external/video/media/42');
+    expect(files.single.lengthBytes, 6000000000);
   });
 }

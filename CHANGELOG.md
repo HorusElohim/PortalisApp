@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.34+35
+
+- Bumped the coordinated Flutter release to `1.0.34+35` and the Rust backend
+  to `0.1.32`.
+- Added an Android Files picker backed by Storage Access Framework document
+  URIs. Read permission is persisted and the Rust torrent storage opens the
+  original provider descriptor for each range read; selected media is never
+  copied into a Portalis cache or staged as a duplicate source.
+- Retried failed durable torrent metadata resolves with a bounded backoff, so
+  a temporarily unavailable magnet no longer remains indefinitely at
+  `Import torrent` until the app restarts.
+
 ## 1.0.32+33
 
 - Bumped the coordinated Flutter release to `1.0.32+33` and the Rust backend

@@ -12,6 +12,8 @@ use std::path::PathBuf;
 #[derive(Debug, Clone)]
 pub(crate) enum ContentLocation {
     Filesystem(PathBuf),
+    #[cfg(target_os = "android")]
+    AndroidContent(String),
     #[cfg(target_os = "ios")]
     PhotoAsset(String),
 }
@@ -19,6 +21,10 @@ pub(crate) enum ContentLocation {
 impl ContentLocation {
     /// Converts the Flutter bridge representation to a native location.
     pub(crate) fn from_source_path(source: &str) -> anyhow::Result<Self> {
+        #[cfg(target_os = "android")]
+        if source.starts_with("content://") {
+            return Ok(Self::AndroidContent(source.into()));
+        }
         #[cfg(target_os = "ios")]
         if let Some(identifier) = source.strip_prefix("phasset://") {
             anyhow::ensure!(
@@ -27,6 +33,7 @@ impl ContentLocation {
             );
             return Ok(Self::PhotoAsset(identifier.into()));
         }
+        #[cfg(not(target_os = "android"))]
         anyhow::ensure!(
             !source.starts_with("content://"),
             "Android media URIs need Portalis' native no-copy storage adapter"
@@ -45,6 +52,11 @@ impl ContentLocation {
             Self::Filesystem(path) => std::fs::metadata(path)
                 .map(|metadata| metadata.len())
                 .map_err(|error| anyhow::anyhow!("cannot read source {path:?}: {error}")),
+            #[cfg(target_os = "android")]
+            Self::AndroidContent(uri) => crate::nexus::platform::android_content::open(uri)
+                .and_then(|file| file.metadata().map_err(anyhow::Error::from))
+                .map(|metadata| metadata.len())
+                .map_err(|error| anyhow::anyhow!("cannot read Android source {uri:?}: {error}")),
             #[cfg(target_os = "ios")]
             Self::PhotoAsset(identifier) => {
                 anyhow::ensure!(
@@ -81,6 +93,13 @@ impl ContentLocation {
                     Ok(())
                 }
             }
+            #[cfg(target_os = "android")]
+            Self::AndroidContent(uri) => {
+                use std::os::unix::fs::FileExt;
+                crate::nexus::platform::android_content::open(uri)?
+                    .read_exact_at(buffer, offset)?;
+                Ok(())
+            }
             #[cfg(target_os = "ios")]
             Self::PhotoAsset(identifier) => {
                 crate::nexus::platform::ios_photo::read_asset(identifier, offset, buffer)
@@ -93,6 +112,7 @@ impl ContentLocation {
 mod tests {
     use super::ContentLocation;
 
+    #[cfg(not(target_os = "android"))]
     #[test]
     fn rejects_an_android_uri_instead_of_turning_it_into_a_cache_path() {
         assert!(ContentLocation::from_source_path("content://media/external/images/1").is_err());

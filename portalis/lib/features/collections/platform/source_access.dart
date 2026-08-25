@@ -13,9 +13,12 @@ bool get supportsDirectPathSources =>
 bool get supportsMobileGallerySources =>
     defaultTargetPlatform == TargetPlatform.iOS;
 
-/// iOS uses its native Files picker, which returns a security-scoped location.
+/// iOS and Android use their native Files pickers. iOS returns a
+/// security-scoped location; Android returns a persistable SAF `content://`
+/// URI that Rust reads through the native content adapter.
 bool get supportsNativeFilesSources =>
-    defaultTargetPlatform == TargetPlatform.iOS;
+    defaultTargetPlatform == TargetPlatform.iOS ||
+    defaultTargetPlatform == TargetPlatform.android;
 
 bool get supportsNoCopySources =>
     supportsDirectPathSources || supportsNativeFilesSources;
@@ -25,7 +28,7 @@ bool get supportsMediaSources =>
 
 String get noCopySourceUnavailableMessage =>
     defaultTargetPlatform == TargetPlatform.android
-        ? 'Android gallery linking is being added without copying media into '
-            'Portalis. Choose a supported source for now.'
+        ? 'Choose files from Android Files. Gallery linking is being added '
+            'without copying media into Portalis.'
         : 'Choose files from Files. Photos assets stay in Apple Photos and '
             'cannot be seeded without making a second copy.';

@@ -34,6 +34,15 @@ use crate::nexus::store::Store;
 use crate::nexus::store::records::{StoredCollection, StoredImportEntry};
 use crate::nexus::substrate::Substrate;
 
+/// A failed resolve remains durable work. Back off before scanning it again so
+/// a temporarily unreachable magnet can recover without a restart, while a
+/// malformed source cannot hot-loop the runtime.
+const RETRY_AFTER_FAILURE: std::time::Duration = std::time::Duration::from_secs(5);
+
+fn retry_delay_after(failed: bool) -> Option<std::time::Duration> {
+    failed.then_some(RETRY_AFTER_FAILURE)
+}
+
 /// One collection this worker has something to do for.
 enum Pending {
     /// The source has never been resolved: no file list exists yet.
@@ -70,10 +79,12 @@ pub(crate) async fn follow_torrent_imports(
     mut shutdown: super::supervisor::Shutdown,
     details: super::nexus::DetailSources,
 ) {
+    let mut retry_delay = None;
     loop {
         tokio::select! {
             () = shutdown.requested() => return,
             _ = wake.notified() => {}
+            () = tokio::time::sleep(retry_delay.unwrap_or(RETRY_AFTER_FAILURE)), if retry_delay.is_some() => {}
         }
 
         // Scanned rather than carried in the wake: a wake says "something
@@ -92,6 +103,7 @@ pub(crate) async fn follow_torrent_imports(
             pending.len()
         );
 
+        let mut failed = false;
         for work in pending {
             let key = match &work {
                 Pending::Resolve { key, .. }
@@ -120,6 +132,7 @@ pub(crate) async fn follow_torrent_imports(
             };
             if let Err(error) = done {
                 crate::nexus::log::clog!("nexus", "torrent worker failed key={:?}: {error:#}", key);
+                failed = true;
                 continue;
             }
             crate::nexus::log::clog!("nexus", "torrent worker completed key={:?}", key);
@@ -135,6 +148,7 @@ pub(crate) async fn follow_torrent_imports(
                 details.refresh(handle);
             }
         }
+        retry_delay = retry_delay_after(failed);
     }
 }
 
@@ -358,6 +372,12 @@ fn republish(store: &Store, states: &watch::Sender<PortalisState>, handle: Handl
 mod tests {
     use super::*;
     use crate::nexus::store::records::Role as StoredRole;
+
+    #[test]
+    fn failed_durable_imports_are_retried_with_a_bounded_backoff() {
+        assert_eq!(retry_delay_after(true), Some(RETRY_AFTER_FAILURE));
+        assert_eq!(retry_delay_after(false), None);
+    }
 
     fn store() -> (Store, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!(
