@@ -47,6 +47,8 @@
 	<string>Portalis uses your local network to find nearby devices and share media directly, without a server.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Portalis reads selected original photos and videos to share them directly with collaborators.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Portalis automatically saves completed received photos and videos to your library.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_portalis._tcp</string>

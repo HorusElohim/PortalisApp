@@ -9,6 +9,11 @@ pub(crate) struct LinkedSourceRecord {
     pub(crate) info_hash: String,
     pub(crate) torrent_bytes: Vec<u8>,
     pub(crate) sources: Vec<SourceFile>,
+    /// Receiver collections may have intentionally unselected files whose
+    /// filesystem destination does not exist yet. Their declared torrent
+    /// lengths remain authoritative until a future selection writes them.
+    #[serde(default)]
+    pub(crate) allow_missing_files: bool,
 }
 
 #[derive(Default, Serialize, Deserialize)]

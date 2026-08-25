@@ -269,6 +269,10 @@ pub struct StoredImportEntry {
     /// All resolved files start selected. The person's later selection is
     /// durable so restarting before confirmation cannot widen a download.
     pub selected: bool,
+    /// The platform-owned location after a completed received file is moved
+    /// out of Portalis' download folder. Local-only: an iOS `phasset://` or a
+    /// future Android `content://` URI never leaves this device.
+    pub native_location: Option<String>,
 }
 
 /// One original file selected for an owner-created collection.
@@ -324,6 +328,10 @@ impl StoredImportEntry {
         bytes.extend_from_slice(&self.bytes.to_be_bytes());
         write_string(&mut bytes, &self.label);
         bytes.push(u8::from(self.selected));
+        bytes.push(u8::from(self.native_location.is_some()));
+        if let Some(location) = &self.native_location {
+            write_string(&mut bytes, location);
+        }
         bytes
     }
 
@@ -341,11 +349,21 @@ impl StoredImportEntry {
         } else {
             reader.byte()? != 0
         };
+        // Rows written before native gallery ownership existed end after the
+        // selection bit. They remain app-folder downloads until a new move.
+        let native_location = if reader.bytes.is_empty() {
+            None
+        } else if reader.byte()? == 0 {
+            None
+        } else {
+            Some(reader.string()?)
+        };
         reader.finish()?;
         Ok(Self {
             label,
             bytes,
             selected,
+            native_location,
         })
     }
 }
@@ -684,11 +702,12 @@ mod tests {
     }
 
     #[test]
-    fn an_imported_file_keeps_its_selection_and_old_rows_default_to_selected() {
+    fn an_imported_file_keeps_its_selection_and_native_gallery_location() {
         let selected = StoredImportEntry {
             label: "episode.mp4".to_owned(),
             bytes: 34,
             selected: true,
+            native_location: Some("phasset://A1B2C3/L0/001".to_owned()),
         };
         let skipped = StoredImportEntry {
             selected: false,
@@ -708,6 +727,7 @@ mod tests {
                 label: "episode.mp4".to_owned(),
                 bytes: 34,
                 selected: true,
+                native_location: None,
             })
         );
     }

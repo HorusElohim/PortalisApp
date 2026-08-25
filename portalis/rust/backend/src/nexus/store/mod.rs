@@ -1080,14 +1080,16 @@ mod tests {
 
         let entries = vec![
             StoredImportEntry {
-                label: "cover.jpg".to_owned(),
-                bytes: 12,
+                label: "one.mkv".to_owned(),
+                bytes: 1,
                 selected: true,
+                native_location: None,
             },
             StoredImportEntry {
-                label: "episode.mp4".to_owned(),
-                bytes: 34,
+                label: "two.jpg".to_owned(),
+                bytes: 2,
                 selected: false,
+                native_location: None,
             },
         ];
         store

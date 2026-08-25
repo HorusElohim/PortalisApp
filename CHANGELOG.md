@@ -57,6 +57,14 @@
 
 ## Unreleased
 
+### Added
+
+- On iPhone, Portalis now automatically imports each hash-verified received
+  photo or video into the system Photos library. The collection retains the
+  corresponding `phasset://` reference for resume and seeding; unsupported
+  files stay in Portalis storage, and the original app-local media is removed
+  only after the Photos-backed storage rebind succeeds.
+
 ### Fixed
 
 - Upgraded the Android build baseline to Gradle 9.1.0 and Android Gradle Plugin

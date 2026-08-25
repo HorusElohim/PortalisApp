@@ -106,6 +106,43 @@ impl ContentLocation {
             }
         }
     }
+
+    /// Writes newly acquired torrent bytes only where Portalis still owns a
+    /// filesystem destination. Gallery-backed entries remain read-only: the
+    /// native gallery is the finished asset, not an output folder.
+    pub(crate) fn write_all_at(&self, offset: u64, buffer: &[u8]) -> anyhow::Result<()> {
+        match self {
+            Self::Filesystem(path) => {
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                let file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .open(path)?;
+                #[cfg(target_family = "unix")]
+                {
+                    use std::os::unix::fs::FileExt;
+                    file.write_all_at(buffer, offset)?;
+                    Ok(())
+                }
+                #[cfg(not(target_family = "unix"))]
+                {
+                    use std::io::{Seek, SeekFrom, Write};
+                    let mut file = file;
+                    file.seek(SeekFrom::Start(offset))?;
+                    file.write_all(buffer)?;
+                    Ok(())
+                }
+            }
+            #[cfg(target_os = "android")]
+            Self::AndroidContent(_) => anyhow::bail!(
+                "Android gallery-backed received media needs Portalis' native MediaStore writer"
+            ),
+            #[cfg(target_os = "ios")]
+            Self::PhotoAsset(_) => anyhow::bail!("Photos-backed received media is read-only"),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -125,5 +162,22 @@ mod tests {
             location,
             ContentLocation::Filesystem(path) if path == std::path::Path::new("C:/Media/photo.jpg")
         ));
+    }
+
+    #[test]
+    fn a_filesystem_location_can_receive_missing_torrent_bytes() {
+        let directory = std::env::temp_dir().join(format!(
+            "portalis-content-location-test-{}",
+            std::process::id()
+        ));
+        let target = directory.join("nested").join("clip.mp4");
+        let location = ContentLocation::Filesystem(target.clone());
+
+        location
+            .write_all_at(2, b"media")
+            .expect("writes an incomplete received file");
+
+        assert_eq!(std::fs::read(target).expect("reads"), b"\0\0media");
+        std::fs::remove_dir_all(directory).expect("cleans up");
     }
 }
