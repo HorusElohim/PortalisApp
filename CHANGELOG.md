@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.35+36
+
+- Bumped the coordinated Flutter release to `1.0.35+36` and the Rust backend
+  to `0.1.33`.
+- Upgraded the matched Flutter/Rust Bridge runtime and generator from `2.12.0`
+  to `2.13.0`, then regenerated the tracked bindings. The remaining newer
+  package notices are SDK or direct-parent constraints: Flutter `3.47.1` pins
+  its tooling transitive versions, while the latest `qr_flutter` still uses
+  `qr` `3.x`; the AGP-9 compatibility overrides already select the latest
+  `package_info_plus` and `wakelock_plus` releases.
+
 ## 1.0.34+35
 
 - Bumped the coordinated Flutter release to `1.0.34+35` and the Rust backend

@@ -1,6 +1,6 @@
 [package]
 name = "backend"
-version = "0.1.32"
+version = "0.1.33"
 edition = "2024"
 
 [workspace]
@@ -55,7 +55,7 @@ crate-type = ["cdylib", "staticlib", "rlib"]  # rlib is used by the local peer h
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-flutter_rust_bridge = "=2.12.0"
+flutter_rust_bridge = "=2.13.0"
 tokio = { version = "1", features = ["rt"] }
 anyhow = "1.0"
 # Object-safe async methods, so a port can be an Arc<dyn Trait> and a test can
