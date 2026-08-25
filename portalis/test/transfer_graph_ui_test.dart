@@ -40,7 +40,7 @@ void main() {
       ),
     );
 
-    expect(find.text('DOWNLOAD SESSION'), findsOneWidget);
+    expect(find.text('RECEIVE SESSION'), findsOneWidget);
     expect(find.text('COMPLETED IN 7s'), findsOneWidget);
     expect(find.text('peak 5.0 MB/s'), findsOneWidget);
     expect(find.text('5.0 MB/s'), findsOneWidget); // top of the y-axis
@@ -116,12 +116,44 @@ void main() {
       ),
     );
 
-    expect(find.text('TRANSFER SPEED'), findsOneWidget);
+    expect(find.text('RECEIVING SPEED'), findsOneWidget);
     expect(find.textContaining('LIVE ·'), findsOneWidget);
     expect(find.text('now 2.5 MB/s · peak 4.0 MB/s'), findsOneWidget);
     expect(find.text('now 400 KB/s · peak 400 KB/s'), findsOneWidget);
     expect(find.text('LATEST'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'live native receive activity is labeled separately from progress',
+      (tester) async {
+    final start = DateTime.now().subtract(const Duration(seconds: 3));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 900,
+            child: TransferGraph(
+              progress: 0.6,
+              downBytesPerSecond: 2000000,
+              upBytesPerSecond: 0,
+              startedAt: start,
+              history: [
+                TransferPoint(
+                  at: start,
+                  downBytesPerSecond: 1000000,
+                  upBytesPerSecond: 0,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('RECEIVING SPEED'), findsOneWidget);
+    expect(find.text('RECEIVING'), findsOneWidget);
+    expect(find.textContaining('now 2.0 MB/s'), findsOneWidget);
   });
 
   testWidgets('either transfer direction keeps a logarithmic timeline visible',
@@ -145,7 +177,7 @@ void main() {
       ),
     );
 
-    expect(find.text('DOWNLOAD'), findsOneWidget);
+    expect(find.text('RECEIVING'), findsOneWidget);
     expect(find.text('UPLOAD'), findsOneWidget);
     expect(find.text('START'), findsOneWidget);
     expect(find.text('LATEST'), findsOneWidget);
@@ -192,7 +224,7 @@ void main() {
     );
 
     expect(find.text('100%'), findsOneWidget);
-    expect(find.text('DOWNLOAD SESSION'), findsNothing);
+    expect(find.text('RECEIVE SESSION'), findsNothing);
   });
 
   testWidgets('the labeled chart remains readable at phone width',
@@ -221,7 +253,7 @@ void main() {
       ),
     );
 
-    expect(find.text('DOWNLOAD'), findsOneWidget);
+    expect(find.text('RECEIVING'), findsOneWidget);
     expect(find.text('UPLOAD'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

@@ -158,6 +158,7 @@ pub(crate) async fn follow_transfers(
                     LastReading {
                         sample,
                         at: now,
+                        fetched: info.fetched_bytes,
                         uploaded: info.uploaded_bytes,
                     },
                 );
@@ -411,41 +412,31 @@ fn status_of_for(info: &TorrentInfo, paused: bool, local_source: bool) -> Status
     })
 }
 
-/// What actually moved since the last reading, per second.
+/// Native receive and upload activity since the last reading, per second.
 ///
-/// Measured from the byte counters rather than taken from the engine's own
-/// figure, which is a smoothed average: after the last byte of a one-second
-/// download it went on reporting five megabytes a second, then three, then
-/// two, decaying to nothing over six seconds. Every one of those readings
-/// said bytes were moving while `progress_bytes` did not change once — a
-/// chart of a transfer that was already over, and a rate beside it claiming
-/// throughput that no longer existed.
+/// Download activity is measured from librqbit's per-torrent `fetched_bytes`
+/// counter rather than verified progress or its session-wide smoothed-speed
+/// estimator. `fetched_bytes` advances as bytes arrive from peers, while
+/// `progress_bytes` advances later when a full piece passes hash verification.
+/// This preserves verified progress as the completion truth while showing a
+/// receiver the actual per-torrent network activity that caused it.
 ///
-/// Bytes are the one number that cannot be smoothed into saying something
-/// untrue. When nothing arrives, this is exactly zero.
+/// The rate is still a delta over real elapsed time: when librqbit reports no
+/// received bytes in an interval, this is exactly zero.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Rates {
     pub down: u32,
     pub up: u32,
 }
 
-/// What was last written for one collection, and the counters it was written
-/// against — a rate is a difference, so it needs both ends.
+/// What was last written for one collection and the native counters it was
+/// measured against — a rate is a difference, so it needs both ends.
 #[derive(Clone)]
 struct LastReading {
     sample: StoredSample,
     at: u64,
+    fetched: u64,
     uploaded: u64,
-}
-
-#[cfg(test)]
-impl LastReading {
-    /// The same reading, as though it had counted `done` bytes.
-    fn starting_from(&self, done: u64) -> Self {
-        let mut copy = self.clone();
-        copy.sample.done = done;
-        copy
-    }
 }
 
 fn measured_rates(info: &TorrentInfo, last: Option<&LastReading>) -> Rates {
@@ -459,10 +450,7 @@ fn measured_rates(info: &TorrentInfo, last: Option<&LastReading>) -> Rates {
         return Rates::default();
     }
     Rates {
-        down: rate(
-            info.progress_bytes.saturating_sub(previous.sample.done),
-            elapsed,
-        ),
+        down: rate(info.fetched_bytes.saturating_sub(previous.fetched), elapsed),
         up: rate(
             info.uploaded_bytes.saturating_sub(previous.uploaded),
             elapsed,
@@ -496,6 +484,7 @@ mod tests {
             name: "Iceland".to_owned(),
             state: "live".to_owned(),
             progress_bytes: progress,
+            fetched_bytes: 0,
             total_bytes: total,
             uploaded_bytes: 0,
             finished,
@@ -521,13 +510,13 @@ mod tests {
         assert!(live.knows_progress());
     }
 
-    /// The engine's own figure is a smoothed average. After the last byte of a
-    /// one-second download it went on reporting five megabytes a second, then
-    /// three, then two, decaying to nothing over six more seconds — six
-    /// readings claiming throughput while the byte counter did not move once.
-    /// Bytes cannot be smoothed into saying something untrue.
+    /// Receive activity must come from librqbit's native per-torrent counter,
+    /// not verified-piece progress. A connected peer can be delivering chunks
+    /// for a piece while verified progress stays unchanged until its hash
+    /// passes, so a verified-byte delta would falsely present that active
+    /// receive interval as zero.
     #[test]
-    fn a_rate_is_what_moved_not_what_the_engine_averaged() {
+    fn a_rate_uses_librqbit_native_received_byte_counter() {
         let arrived = info(56_070_710, 56_070_710, true);
 
         let a_second_ago = LastReading {
@@ -539,21 +528,16 @@ mod tests {
                 peers: 3,
             },
             at: unix_time_ns().saturating_sub(1_000_000_000),
+            fetched: 0,
             uploaded: 0,
         };
 
-        assert_eq!(
-            measured_rates(&arrived, Some(&a_second_ago)),
-            Rates::default(),
-            "nothing arrived, so nothing was moving"
-        );
-
-        // And what did arrive is measured against the time it took.
-        let moving = info(2_000_000, 56_070_710, false);
-        let measured = measured_rates(&moving, Some(&a_second_ago.starting_from(0)));
+        let mut receiving = arrived;
+        receiving.fetched_bytes = 2_000_000;
+        let measured = measured_rates(&receiving, Some(&a_second_ago));
         assert!(
             (1_900_000..=2_100_000).contains(&measured.down),
-            "about two megabytes in about a second, got {}",
+            "about two native-received megabytes in about a second, got {}",
             measured.down
         );
     }
