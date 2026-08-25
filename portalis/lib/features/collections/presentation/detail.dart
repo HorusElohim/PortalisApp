@@ -171,13 +171,11 @@ class _CollectionDetailState extends State<CollectionDetail> {
               )),
         );
       } else {
-        final result = await FilePicker.pickFiles(
-          withData: false,
-          allowMultiple: true,
+        final files = await FilePicker.pickFiles(
           type: FileType.any,
         );
         picked = await Future.wait(
-          (result?.files ?? []).map((file) => pickedFileFrom(
+          files.map((file) => pickedFileFrom(
                 name: file.name,
                 nativePath: file.path,
               )),

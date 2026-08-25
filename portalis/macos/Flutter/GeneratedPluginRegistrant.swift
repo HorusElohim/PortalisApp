@@ -7,7 +7,7 @@ import Foundation
 
 import app_links
 import desktop_drop
-import file_picker
+import file_picker_darwin
 import file_selector_macos
 import media_kit_libs_macos_video
 import media_kit_video
