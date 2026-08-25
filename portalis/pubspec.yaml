@@ -45,7 +45,7 @@ dependencies:
 
   # Cross-platform file picker, used by the Torrent tab to pick a .torrent
   # file (magnet links are just a text field).
-  file_picker: ^11.0.2
+  file_picker: ^12.0.0
 
   # Opens a downloaded torrent file with the OS default app (image viewer,
   # video player, etc.) from the Torrent tab's detail screen.
@@ -65,7 +65,7 @@ dependencies:
   shared_preferences: ^2.5.5
   image_picker: ^1.2.3
   qr_flutter: ^4.1.0
-  desktop_drop: ^0.7.1
+  desktop_drop: ^0.8.0
 
 dev_dependencies:
   flutter_test:
@@ -81,6 +81,13 @@ dev_dependencies:
   # Generates platform-native app icons from assets/PortalisNature.png.
   # Run with: dart run flutter_launcher_icons
   flutter_launcher_icons: ^0.14.4
+
+# The media stack constrains these Android plugins to legacy KGP releases.
+# Keep the AGP 9-compatible implementations until those upstream constraints
+# catch up; neither package is called directly by Portalis.
+dependency_overrides:
+  package_info_plus: ^10.2.1
+  wakelock_plus: ^1.7.0
 
 flutter_launcher_icons:
   image_path: "assets/PortalisNature.png"

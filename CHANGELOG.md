@@ -32,7 +32,11 @@
   Plugin and removes the legacy `kotlinOptions` block it no longer supports.
   The Android build remains opted out of AGP 9's new DSL while Flutter and the
   Rust task wiring use the legacy variant API. The FRB parser notices remain
-  non-fatal diagnostics for internal, non-bridged Rust types.
+  non-fatal diagnostics for internal, non-bridged Rust types. Updated
+  `desktop_drop` to 0.8.0 for AGP 9 built-in Kotlin and explicit compile-SDK
+  support. Overrode legacy transitive `package_info_plus` and `wakelock_plus`
+  releases with their AGP 9-compatible implementations. Updated `file_picker`
+  to 12.0.0 so the Windows FFI implementation natively supports `win32` 6.
 - Fixed `tool/build.sh android` invoking the nonexistent `flutter build android`
   command. Android builds now invoke `flutter build apk`, matching the CI
   artifact pipeline.
