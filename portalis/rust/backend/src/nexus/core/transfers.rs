@@ -27,14 +27,14 @@ use crate::nexus::torrent::TorrentInfo;
 /// How often the substrate is asked. Also the spacing of the history, so a
 /// chart's x axis is this constant rather than whatever the interface managed
 /// to observe.
-pub const POLL_INTERVAL: Duration = Duration::from_secs(1);
+pub const POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 /// How many readings one collection keeps.
 ///
 /// Half an hour at [`POLL_INTERVAL`]. Bounded because this is a ring for a
 /// chart, not an audit log: the oldest reading a person can see is the oldest
 /// one worth keeping.
-pub const HISTORY_LENGTH: usize = 1800;
+pub const HISTORY_LENGTH: usize = 3600;
 
 /// The most recent reading for each collection, by collection key.
 ///
