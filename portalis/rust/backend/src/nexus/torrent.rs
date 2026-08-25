@@ -93,6 +93,77 @@ pub struct SourceFile {
     pub length_bytes: Option<u64>,
 }
 
+/// The media formats Portalis may automatically hand to a native gallery.
+/// This explicit allow-list is shared with the future Android MediaStore path.
+#[cfg(any(target_os = "ios", test))]
+pub(crate) fn is_gallery_media_filename(name: &str) -> bool {
+    let extension = name
+        .rsplit_once('.')
+        .map(|(_, extension)| extension.to_ascii_lowercase());
+    matches!(
+        extension.as_deref(),
+        Some(
+            "jpg"
+                | "jpeg"
+                | "png"
+                | "gif"
+                | "webp"
+                | "heic"
+                | "bmp"
+                | "tif"
+                | "tiff"
+                | "mp4"
+                | "mov"
+                | "m4v"
+                | "avi"
+                | "mkv"
+                | "webm"
+        )
+    )
+}
+
+#[cfg(any(target_os = "ios", test))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GalleryMoveCandidate {
+    pub(crate) index: usize,
+    pub(crate) path: String,
+    pub(crate) video: bool,
+}
+
+/// Identifies receiver-side entries that are individually verified and ready
+/// for native-gallery ownership. The plan is per entry so documents and later
+/// selected files keep their writable Portalis locations.
+#[cfg(any(target_os = "ios", test))]
+pub(crate) fn gallery_move_plan(
+    info: &TorrentInfo,
+    entries: &[crate::nexus::store::records::StoredImportEntry],
+) -> Vec<GalleryMoveCandidate> {
+    entries
+        .iter()
+        .enumerate()
+        .filter_map(|(index, entry)| {
+            let file = info.files.iter().find(|file| file.name == entry.label)?;
+            (entry.selected
+                && entry.native_location.is_none()
+                && file.length_bytes == entry.bytes
+                && file.length_bytes > 0
+                && file.downloaded_bytes >= file.length_bytes
+                && is_gallery_media_filename(&file.name))
+            .then(|| GalleryMoveCandidate {
+                index,
+                path: file.absolute_path.clone(),
+                video: matches!(
+                    file.name
+                        .rsplit_once('.')
+                        .map(|(_, extension)| extension.to_ascii_lowercase())
+                        .as_deref(),
+                    Some("mp4" | "mov" | "m4v" | "avi" | "mkv" | "webm")
+                ),
+            })
+        })
+        .collect()
+}
+
 /// Metadata obtained from a `.torrent` descriptor before any payload bytes
 /// are requested. It is deliberately smaller than the live torrent DTO: the
 /// collection workflow needs a selection list, not an engine session.
@@ -204,9 +275,11 @@ impl PublishProgress {
 #[cfg(test)]
 mod validation_tests {
     use super::{
-        SourceFile, is_magnet, is_remote_source, is_torrent_path, magnet_for_share,
-        make_source_names_unique, native, native::sanitize_component,
+        SourceFile, TorrentFile, TorrentInfo, gallery_move_plan, is_gallery_media_filename,
+        is_magnet, is_remote_source, is_torrent_path, magnet_for_share, make_source_names_unique,
+        native, native::sanitize_component,
     };
+    use crate::nexus::store::records::StoredImportEntry;
 
     /// The magnet that broke this: its `xs=` web-seed hint ends in
     /// `big-buck-bunny.torrent`, so judging by the tail of the string reads a
@@ -287,6 +360,88 @@ mod validation_tests {
         assert_eq!(sanitize_component("../bad:name?.jpg"), "_bad_name_.jpg");
         assert_eq!(sanitize_component("CON.txt"), "_CON.txt");
         assert_eq!(sanitize_component("..."), "untitled");
+    }
+
+    #[test]
+    fn only_supported_photo_and_video_filenames_are_gallery_media() {
+        for name in ["photo.HEIC", "cover.jpg", "clip.MP4", "movie.mov"] {
+            assert!(is_gallery_media_filename(name), "{name}");
+        }
+        for name in ["notes.pdf", "archive.zip", "photo.heic.tmp", "no-extension"] {
+            assert!(!is_gallery_media_filename(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn gallery_move_plan_includes_only_completed_unregistered_media_entries() {
+        let info = TorrentInfo {
+            id: 1,
+            info_hash: "a".repeat(40),
+            name: "Trip".into(),
+            state: "live".into(),
+            progress_bytes: 50,
+            fetched_bytes: 50,
+            total_bytes: 50,
+            uploaded_bytes: 0,
+            finished: false,
+            error: None,
+            files: vec![
+                TorrentFile {
+                    name: "photo.heic".into(),
+                    absolute_path: "/app/photo.heic".into(),
+                    length_bytes: 10,
+                    downloaded_bytes: 10,
+                    piece_runs: Vec::new(),
+                },
+                TorrentFile {
+                    name: "notes.pdf".into(),
+                    absolute_path: "/app/notes.pdf".into(),
+                    length_bytes: 20,
+                    downloaded_bytes: 20,
+                    piece_runs: Vec::new(),
+                },
+                TorrentFile {
+                    name: "clip.mp4".into(),
+                    absolute_path: "/app/clip.mp4".into(),
+                    length_bytes: 20,
+                    downloaded_bytes: 20,
+                    piece_runs: Vec::new(),
+                },
+            ],
+            live_peers: 0,
+            live_peer_addrs: Vec::new(),
+        };
+        let entries = vec![
+            StoredImportEntry {
+                label: "photo.heic".into(),
+                bytes: 10,
+                selected: true,
+                native_location: None,
+            },
+            StoredImportEntry {
+                label: "notes.pdf".into(),
+                bytes: 20,
+                selected: true,
+                native_location: None,
+            },
+            StoredImportEntry {
+                label: "clip.mp4".into(),
+                bytes: 20,
+                selected: true,
+                native_location: None,
+            },
+        ];
+
+        assert_eq!(
+            gallery_move_plan(&info, &entries)
+                .into_iter()
+                .map(|candidate| (candidate.index, candidate.path, candidate.video))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, "/app/photo.heic".to_owned(), false),
+                (2, "/app/clip.mp4".to_owned(), true),
+            ]
+        );
     }
 
     #[test]
@@ -527,6 +682,80 @@ pub(crate) async fn forget_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Rebinds one received torrent to durable native/gallery and filesystem
+/// locations without changing its info hash or selected-file intent.
+#[cfg(target_os = "ios")]
+pub(crate) async fn rebind_received_storage(
+    info_hash: &str,
+    descriptor: &[u8],
+    sources: Vec<SourceFile>,
+    selected: Vec<usize>,
+) -> anyhow::Result<()> {
+    native::rebind_received_storage(info_hash, descriptor, sources, selected).await
+}
+
+/// Imports every newly verified media entry, records its Photos identifier,
+/// then rebinds the original torrent to those identifiers before dropping the
+/// now-redundant sandbox copies.
+#[cfg(target_os = "ios")]
+pub(crate) async fn move_completed_import_entries(
+    store: &crate::nexus::store::Store,
+    key: &[u8],
+    info: &TorrentInfo,
+) -> anyhow::Result<usize> {
+    let mut entries = store.torrent_import_entries(key)?;
+    let moves = gallery_move_plan(info, &entries);
+    if moves.is_empty() {
+        return Ok(0);
+    }
+    for candidate in &moves {
+        let identifier = crate::nexus::platform::ios_photo::import_completed_media(
+            &candidate.path,
+            candidate.video,
+        )?;
+        entries[candidate.index].native_location = Some(format!("phasset://{identifier}"));
+        // Durable before the next file: a crash leaves the original sandbox
+        // file intact, so recovery never has to re-download completed bytes.
+        store.put_torrent_import_entries(key, &entries)?;
+    }
+    let descriptor = store
+        .torrent_import_descriptor(key)?
+        .ok_or_else(|| anyhow::anyhow!("completed import has no torrent descriptor"))?;
+    let sources = info
+        .files
+        .iter()
+        .map(|file| {
+            let entry = entries
+                .iter()
+                .find(|entry| entry.label == file.name)
+                .ok_or_else(|| anyhow::anyhow!("received file is absent from stored entries"))?;
+            Ok(SourceFile {
+                name: file.name.clone(),
+                path: entry
+                    .native_location
+                    .clone()
+                    .unwrap_or_else(|| file.absolute_path.clone()),
+                length_bytes: Some(file.length_bytes),
+            })
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let selected = entries
+        .iter()
+        .enumerate()
+        .filter_map(|(index, entry)| entry.selected.then_some(index))
+        .collect::<Vec<_>>();
+    rebind_received_storage(&info.info_hash, &descriptor, sources, selected).await?;
+    for candidate in &moves {
+        if let Err(error) = std::fs::remove_file(&candidate.path) {
+            crate::nexus::log::clog!(
+                "torrent",
+                "could not remove imported sandbox media: {error}"
+            );
+        }
+    }
+    Ok(moves.len())
+}
+
 /// Revises what an already-running torrent is fetching.
 ///
 /// Doing nothing when the engine already agrees is what makes this safe to
@@ -691,8 +920,11 @@ pub mod native {
                 .read_exact_at(offset, buffer)
         }
 
-        fn pwrite_all(&self, _file_id: usize, _offset: u64, _buffer: &[u8]) -> anyhow::Result<()> {
-            anyhow::bail!("gallery-linked source storage is read-only")
+        fn pwrite_all(&self, file_id: usize, offset: u64, buffer: &[u8]) -> anyhow::Result<()> {
+            self.sources
+                .get(file_id)
+                .context("no such referenced source file")?
+                .write_all_at(offset, buffer)
         }
 
         fn remove_file(&self, _file_id: usize, _filename: &std::path::Path) -> anyhow::Result<()> {
@@ -861,12 +1093,24 @@ pub mod native {
                     crate::nexus::content_location::ContentLocation::from_source_path(&source.path)
                 })
                 .collect::<anyhow::Result<Vec<_>>>()?;
-            let lengths = record
-                .sources
-                .iter()
-                .zip(&sources)
-                .map(|(source, location)| location.length(source.length_bytes))
-                .collect::<anyhow::Result<Vec<_>>>()?;
+            let lengths = if record.allow_missing_files {
+                record
+                    .sources
+                    .iter()
+                    .map(|source| {
+                        source.length_bytes.ok_or_else(|| {
+                            anyhow::anyhow!("gallery-linked receiver source has no declared length")
+                        })
+                    })
+                    .collect::<anyhow::Result<Vec<_>>>()?
+            } else {
+                record
+                    .sources
+                    .iter()
+                    .zip(&sources)
+                    .map(|(source, location)| location.length(source.length_bytes))
+                    .collect::<anyhow::Result<Vec<_>>>()?
+            };
             let options = AddTorrentOptions {
                 overwrite: true,
                 storage_factory: Some(ReferencedStorageFactory { sources, lengths }.boxed()),
@@ -1248,6 +1492,7 @@ pub mod native {
                 info_hash: info_hash.clone(),
                 torrent_bytes: persisted_bytes,
                 sources: files,
+                allow_missing_files: false,
             },
         )?;
         let response =
@@ -1890,6 +2135,68 @@ pub mod native {
         Ok(())
     }
 
+    #[cfg(target_os = "ios")]
+    pub(super) async fn rebind_received_storage(
+        info_hash: &str,
+        descriptor: &[u8],
+        files: Vec<SourceFile>,
+        selected: Vec<usize>,
+    ) -> anyhow::Result<()> {
+        let parsed = librqbit::torrent_from_bytes(descriptor)
+            .context("validating the received torrent descriptor")?;
+        anyhow::ensure!(
+            parsed.info_hash.as_string().eq_ignore_ascii_case(info_hash),
+            "received gallery descriptor does not match {info_hash}"
+        );
+        let sources = files
+            .iter()
+            .map(|file| {
+                crate::nexus::content_location::ContentLocation::from_source_path(&file.path)
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let lengths = files
+            .iter()
+            .map(|file| {
+                file.length_bytes
+                    .ok_or_else(|| anyhow::anyhow!("received source has no length"))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        crate::nexus::linked_source_store::upsert(
+            crate::nexus::linked_source_store::LinkedSourceRecord {
+                info_hash: info_hash.to_owned(),
+                torrent_bytes: descriptor.to_vec(),
+                sources: files,
+                allow_missing_files: true,
+            },
+        )?;
+        let session = session().await?;
+        let id = TorrentIdOrHash::try_from(info_hash)
+            .map_err(|error| anyhow::anyhow!("invalid received info hash {info_hash}: {error}"))?;
+        if session.get(id).is_some() {
+            session
+                .delete(id, false)
+                .await
+                .context("replacing received torrent storage")?;
+        }
+        let metadata_dir = referenced_metadata_dir(info_hash);
+        std::fs::create_dir_all(&metadata_dir)?;
+        let options = AddTorrentOptions {
+            overwrite: true,
+            only_files: Some(selected),
+            output_folder: Some(metadata_dir.to_string_lossy().into_owned()),
+            storage_factory: Some(ReferencedStorageFactory { sources, lengths }.boxed()),
+            ..Default::default()
+        };
+        add_managed_torrent(
+            &session,
+            AddTorrent::from_bytes(descriptor.to_vec()),
+            options,
+        )
+        .await
+        .context("re-adding received torrent from native gallery references")?;
+        Ok(())
+    }
+
     pub(super) async fn set_selection(info_hash_hex: &str, files: &[usize]) -> anyhow::Result<()> {
         let session = session().await?;
         let id = TorrentIdOrHash::try_from(info_hash_hex)
@@ -2003,8 +2310,8 @@ pub mod native {
     #[cfg(test)]
     mod referenced_storage_tests {
         use super::{
-            PublishProgress, ReferencedStorageFactory, SourceFile, create_referenced_collection,
-            create_referenced_metainfo, install_rustls_ring_provider,
+            PublishProgress, ReferencedStorage, ReferencedStorageFactory, SourceFile,
+            create_referenced_collection, create_referenced_metainfo, install_rustls_ring_provider,
         };
 
         #[test]
@@ -2018,6 +2325,30 @@ pub mod native {
                 }
                 .supports_persistence()
             );
+        }
+
+        #[test]
+        fn referenced_storage_keeps_filesystem_entries_writable() {
+            use librqbit::storage::TorrentStorage;
+
+            let root = std::env::temp_dir().join(format!(
+                "portalis-referenced-write-{}",
+                uuid::Uuid::new_v4()
+            ));
+            let target = root.join("later-selected.mov");
+            let storage = ReferencedStorage {
+                sources: vec![crate::nexus::content_location::ContentLocation::Filesystem(
+                    target.clone(),
+                )],
+                lengths: vec![5],
+            };
+
+            storage
+                .pwrite_all(0, 0, b"movie")
+                .expect("writes a later-selected filesystem entry");
+
+            assert_eq!(std::fs::read(target).expect("reads"), b"movie");
+            std::fs::remove_dir_all(root).expect("cleans up");
         }
 
         #[test]
@@ -2050,6 +2381,7 @@ pub mod native {
                     info_hash: info_hash.clone(),
                     torrent_bytes: descriptor.to_vec(),
                     sources: files.to_vec(),
+                    allow_missing_files: false,
                 },
             )
             .expect("persists descriptor before session admission");

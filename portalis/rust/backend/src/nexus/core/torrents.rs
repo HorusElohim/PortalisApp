@@ -260,6 +260,7 @@ async fn resolve(
             // Everything, until the person narrows it. A selection screen
             // that opens with nothing chosen makes "download" look broken.
             selected: true,
+            native_location: None,
         })
         .collect::<Vec<_>>();
     store.put_torrent_import_entries(key, &entries)?;
@@ -434,6 +435,7 @@ mod tests {
                     label: "one.mkv".to_owned(),
                     bytes: 10,
                     selected: false,
+                    native_location: None,
                 }],
             )
             .expect("writes");
@@ -454,11 +456,13 @@ mod tests {
                         label: "one.mkv".to_owned(),
                         bytes: 10,
                         selected: false,
+                        native_location: None,
                     },
                     StoredImportEntry {
                         label: "two.mkv".to_owned(),
                         bytes: 20,
                         selected: true,
+                        native_location: None,
                     },
                 ],
             )
@@ -500,11 +504,13 @@ mod tests {
                         label: "one.mkv".to_owned(),
                         bytes: 10,
                         selected: true,
+                        native_location: None,
                     },
                     StoredImportEntry {
                         label: "two.mkv".to_owned(),
                         bytes: 20,
                         selected: true,
+                        native_location: None,
                     },
                 ],
             )

@@ -40,6 +40,34 @@ pub(crate) fn read_asset(identifier: &str, offset: u64, buffer: &mut [u8]) -> an
     Ok(())
 }
 
+/// Imports one verified received file into Photos and returns the durable
+/// identifier. The caller persists and rebinds that identifier before it
+/// removes the app-owned download, so an interruption never loses content.
+pub(crate) fn import_completed_media(path: &str, video: bool) -> anyhow::Result<String> {
+    let path = CString::new(path)?;
+    let mut identifier = vec![0_i8; 512];
+    let result = unsafe {
+        portalis_photo_asset_import(
+            path.as_ptr(),
+            video,
+            identifier.as_mut_ptr(),
+            identifier.len(),
+        )
+    };
+    anyhow::ensure!(
+        result == 0,
+        "PhotoKit could not import the completed media ({result})"
+    );
+    let identifier = unsafe { std::ffi::CStr::from_ptr(identifier.as_ptr()) }
+        .to_str()?
+        .to_owned();
+    anyhow::ensure!(
+        !identifier.is_empty(),
+        "PhotoKit created an asset without an identifier"
+    );
+    Ok(identifier)
+}
+
 unsafe extern "C" {
     fn portalis_photo_asset_available(identifier: *const std::ffi::c_char) -> bool;
     fn portalis_photo_asset_length(identifier: *const std::ffi::c_char) -> i64;
@@ -48,5 +76,11 @@ unsafe extern "C" {
         offset: u64,
         buffer: *mut u8,
         length: usize,
+    ) -> i32;
+    fn portalis_photo_asset_import(
+        path: *const std::ffi::c_char,
+        video: bool,
+        identifier: *mut std::ffi::c_char,
+        identifier_capacity: usize,
     ) -> i32;
 }

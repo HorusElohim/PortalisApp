@@ -7,6 +7,62 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+int portalis_photo_asset_import(
+    const char *path,
+    bool video,
+    char *identifier,
+    size_t identifier_capacity) {
+  @autoreleasepool {
+    if (path == NULL || identifier == NULL || identifier_capacity == 0) return -1;
+    identifier[0] = '\0';
+    NSString *sourcePath = [NSString stringWithUTF8String:path];
+    if (sourcePath == nil || ![[NSFileManager defaultManager] fileExistsAtPath:sourcePath]) return -2;
+    NSURL *sourceURL = [NSURL fileURLWithPath:sourcePath];
+
+    __block PHAuthorizationStatus authorization =
+        [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly];
+    if (authorization == PHAuthorizationStatusNotDetermined) {
+      dispatch_semaphore_t permission = dispatch_semaphore_create(0);
+      [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly
+        handler:^(PHAuthorizationStatus status) {
+          authorization = status;
+          dispatch_semaphore_signal(permission);
+        }];
+      dispatch_semaphore_wait(permission, DISPATCH_TIME_FOREVER);
+    }
+    if (authorization != PHAuthorizationStatusAuthorized) return -3;
+
+    __block NSString *assetIdentifier = nil;
+    __block BOOL success = NO;
+    dispatch_semaphore_t completed = dispatch_semaphore_create(0);
+    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+      PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
+      PHAssetResourceCreationOptions *options = [[PHAssetResourceCreationOptions alloc] init];
+      options.originalFilename = sourceURL.lastPathComponent;
+      // Copy first. Rust persists and rebinds the returned asset before the
+      // sandbox source is removed, which makes the move recoverable.
+      options.shouldMoveFile = NO;
+      [request addResourceWithType:(video ? PHAssetResourceTypeVideo : PHAssetResourceTypePhoto)
+                            fileURL:sourceURL
+                            options:options];
+      assetIdentifier = request.placeholderForCreatedAsset.localIdentifier;
+    } completionHandler:^(BOOL didSucceed, NSError *error) {
+      if (!didSucceed && error != nil) {
+        fprintf(stderr, "Portalis could not import media into Photos: %s\\n", error.localizedDescription.UTF8String);
+      }
+      success = didSucceed;
+      dispatch_semaphore_signal(completed);
+    }];
+    dispatch_semaphore_wait(completed, DISPATCH_TIME_FOREVER);
+    if (!success || assetIdentifier.length == 0) return -4;
+    const char *utf8 = assetIdentifier.UTF8String;
+    size_t length = strlen(utf8);
+    if (length + 1 > identifier_capacity) return -5;
+    memcpy(identifier, utf8, length + 1);
+    return 0;
+  }
+}
+
 static PHAssetResource *PortalisPrimaryResource(PHAsset *asset) {
   NSArray<PHAssetResource *> *resources = [PHAssetResource assetResourcesForAsset:asset];
   NSArray<NSNumber *> *preferred = asset.mediaType == PHAssetMediaTypeVideo

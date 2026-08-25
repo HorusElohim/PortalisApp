@@ -163,6 +163,15 @@ pub(crate) async fn follow_transfers(
                     },
                 );
             }
+            #[cfg(target_os = "ios")]
+            if let Err(error) =
+                crate::nexus::torrent::move_completed_import_entries(&store, &key, info).await
+            {
+                crate::nexus::log::clog!(
+                    "torrent",
+                    "could not move verified received media into Photos: {error:#}"
+                );
+            }
             current.insert(key.clone(), (*info).clone());
 
             let projected = collections
