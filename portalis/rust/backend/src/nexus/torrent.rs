@@ -22,6 +22,11 @@ pub struct TorrentInfo {
     /// and does not yet know. Use [`TorrentInfo::knows_progress`] before
     /// treating a zero here as a measurement.
     pub progress_bytes: u64,
+    /// Bytes librqbit has received from peers for this torrent. Unlike
+    /// [`Self::progress_bytes`], this advances before a complete piece is
+    /// hash-verified, so it represents live network receive activity rather
+    /// than verified download completion.
+    pub fetched_bytes: u64,
     pub total_bytes: u64,
     pub uploaded_bytes: u64,
     pub finished: bool,
@@ -1502,11 +1507,14 @@ pub mod native {
         // Paused/Live, so until then this reports nothing rather than a
         // number that lies in the optimistic direction.
         let initializing = state == "Initializing";
-        // Deliberately no rate. librqbit reports a smoothed average, which
-        // goes on claiming throughput for seconds after the last byte lands —
-        // a rate is not a property of a torrent at all, but of two
-        // observations of its counters over time. The one thing that observes
-        // over time derives it: see `core::transfers::measured_rates`.
+        // The live snapshot's `fetched_bytes` is the per-torrent native
+        // receive counter. It is intentionally kept distinct from verified
+        // progress: the latter advances only after a whole piece passes hash
+        // verification, while this counter exposes wire receive activity.
+        let fetched_bytes = stats
+            .live
+            .as_ref()
+            .map_or(0, |live| live.snapshot.fetched_bytes);
         let live_peers = stats
             .live
             .as_ref()
@@ -1560,6 +1568,7 @@ pub mod native {
             } else {
                 stats.progress_bytes
             },
+            fetched_bytes,
             total_bytes: stats.total_bytes,
             uploaded_bytes: stats.uploaded_bytes,
             finished: stats.finished,

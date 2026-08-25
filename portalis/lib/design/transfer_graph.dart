@@ -17,7 +17,7 @@ class TransferPoint {
   final int upBytesPerSecond;
 }
 
-/// A real download/upload history sampled by the collections controller.
+/// A real per-torrent receive/upload history sampled by the collections core.
 class TransferGraph extends StatelessWidget {
   TransferGraph({
     super.key,
@@ -73,8 +73,8 @@ class TransferGraph extends StatelessWidget {
                     graph.complete
                         ? (graph.sourceReading
                             ? 'No non-zero source-read samples were recorded.'
-                            : 'No non-zero download-session samples were recorded.')
-                        : 'Waiting for the first non-zero speed sample.',
+                            : 'No non-zero receive-session samples were recorded.')
+                        : 'Waiting for the first non-zero receive sample.',
                     style: monoLabel(size: 10, color: AppColors.textDim),
                   ),
                 ),
@@ -85,7 +85,7 @@ class TransferGraph extends StatelessWidget {
           Semantics(
             label: 'Transfer speed on a logarithmic scale from '
                 '${_dateTimeLabel(graph.start)} to '
-                '${_dateTimeLabel(graph.end)}. Peak ${graph.sourceReading ? 'source-read' : 'download'} '
+                '${_dateTimeLabel(graph.end)}. Peak ${graph.sourceReading ? 'source-read' : 'receive'} '
                 '${formatRate(graph.peakDownload)}${graph.hasUpload ? ', peak upload ${formatRate(graph.peakUpload)}' : ''}.',
             child: SizedBox(
               height: 86,
@@ -211,7 +211,7 @@ class _TransferGraphHeading extends StatelessWidget {
               Text(
                 graph.sourceReading
                     ? 'SOURCE READ'
-                    : (graph.complete ? 'DOWNLOAD SESSION' : 'TRANSFER SPEED'),
+                    : (graph.complete ? 'RECEIVE SESSION' : 'RECEIVING SPEED'),
                 style: monoLabel(
                   size: 10,
                   color: AppColors.textDim,
@@ -234,7 +234,7 @@ class _TransferGraphHeading extends StatelessWidget {
             children: [
               _SeriesSummary(
                 color: color,
-                label: graph.sourceReading ? 'READING' : 'DOWNLOAD',
+                label: graph.sourceReading ? 'READING' : 'RECEIVING',
                 value: graph.complete
                     ? 'peak ${formatRate(graph.peakDownload)}'
                     : 'now ${formatRate(graph.downBytesPerSecond)} · peak ${formatRate(graph.peakDownload)}',

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.36+37
+
+- Bumped the coordinated Flutter release to `1.0.36+37` and the Rust backend
+  to `0.1.34`.
+- Live collection speed now uses librqbit's native, per-torrent
+  `fetched_bytes` counter over the actual polling interval. This shows peer
+  receive activity before a whole piece has completed hash verification, while
+  collection progress, completion, and the piece map remain based exclusively
+  on verified bytes. Live telemetry is labeled `RECEIVING`/`RECEIVING SPEED`
+  so received bytes are never represented as verified download completion.
+
 ## 1.0.35+36
 
 - Bumped the coordinated Flutter release to `1.0.35+36` and the Rust backend
