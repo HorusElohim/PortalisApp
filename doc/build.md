@@ -36,9 +36,13 @@
 - Prereqs (once):
   - `rustup target add aarch64-apple-ios`
   - `rustup target add aarch64-apple-ios-sim`
-- Build/run: `flutter run -d ios`.
+- Build: `./tool/build.sh ios --release` (add `--clean` for a clean native
+  rebuild); run with `flutter run -d ios`.
 - What happens:
-  - Xcode build phase runs `ios/Runner/build_rust_ios.sh` to build `libbackend.dylib` for device/simulator, wrap as frameworks, then package `ios/Frameworks/backend.xcframework`.
+  - The canonical build helper runs `ios/Runner/build_rust_ios.sh` before
+    Flutter invokes Xcode, so `backend.xcframework` exists while Xcode plans
+    the Runner target. This matters after `--clean`, which deliberately
+    removes the generated framework.
   - The XCFramework is linked and embedded (CodeSignOnCopy) into the app; FRB loads `backend.framework/backend` automatically.
 - If needed, build once manually: `sh ios/Runner/build_rust_ios.sh` and verify `ios/Frameworks/backend.xcframework` exists.
 
