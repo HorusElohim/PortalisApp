@@ -60,11 +60,11 @@ void main() {
     expect(repository.detailCollections, [9]);
   });
 
-  /// Choosing files happens on the collection itself, for as long as the
-  /// collection exists — not on a preparation screen passed through once. The
-  /// whole selection is sent each time, so the backend never has to reconcile
-  /// a delta against what a screen believed it last saw.
-  testWidgets('a torrent collection deselects a file in place', (tester) async {
+  /// Before receiving starts, checkboxes are a local editing decision. The
+  /// only action that may cross the command boundary is the explicit Download
+  /// button, which sends the final whole selection.
+  testWidgets('a torrent draft stages deselection until Download is clicked',
+      (tester) async {
     final repository = _Repository();
     final controller = AppController(repository: repository);
     await controller.start();
@@ -108,6 +108,12 @@ void main() {
     expect(find.text('trailer.mp4'), findsOneWidget);
     expect(find.text('feature.mp4'), findsOneWidget);
     await tester.tap(find.byKey(const Key('mediaWanted:1')));
+    await tester.pump();
+
+    expect(find.text('skipped'), findsOneWidget);
+    expect(repository.commands, isEmpty);
+
+    await tester.tap(find.byKey(const Key('editFinish')));
     await tester.pump();
 
     expect(repository.commands, hasLength(1));

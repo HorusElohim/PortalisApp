@@ -87,6 +87,11 @@ class CollectionScreen extends StatelessWidget {
 class _CollectionDetailState extends State<CollectionDetail> {
   bool _busy = false;
 
+  /// A torrent draft has not started a transfer yet. Its checkbox changes stay
+  /// here until the person explicitly presses Download; the engine's stored
+  /// selection remains the initial all-selected file list in the meantime.
+  Set<int>? _stagedDownloadEntries;
+
   /// Whether the collection is open for changes.
   ///
   /// `null` until the first build decides, because the answer depends on the
@@ -331,16 +336,19 @@ class _CollectionDetailState extends State<CollectionDetail> {
   }
 
   Future<void> _downloadSelected() async {
-    final entries = {
-      for (final media in _collection.media)
-        if (media.selected && media.entryId != null) media.entryId!,
-    };
+    final collection = _collection;
+    final entries = _wantedEntries(collection);
     if (entries.isEmpty) {
       _toast('Waiting for this torrent\'s file list');
       return;
     }
-    await _run(() => widget.source.setSelection(_collection.id, entries));
-    if (mounted) setState(() => _editing = false);
+    await _run(() => widget.source.setSelection(collection.id, entries));
+    if (mounted) {
+      setState(() {
+        _editing = false;
+        _stagedDownloadEntries = null;
+      });
+    }
   }
 
   void _toggleEditing(Collection collection) {
@@ -422,6 +430,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
               child: CollectionContents(
                 collection: collection,
                 onOpenMedia: (media) => _openMedia(collection, media),
+                stagedSelection: collection.isTorrent && collection.isDraft
+                    ? _wantedEntries(collection)
+                    : null,
                 // Only while editing: a tap that changes what downloads is
                 // not something a person should be able to do by brushing
                 // past a tile they were only looking at.
@@ -446,26 +457,38 @@ class _CollectionDetailState extends State<CollectionDetail> {
     );
   }
 
-  /// Adds or removes one file from what the collection is fetching.
+  /// Adds or removes one file from the selection screen.
   ///
   /// The whole selection is sent every time rather than a delta: the backend
   /// stores a set, and a delta would need this screen to agree about what it
-  /// last saw. Nothing is kept here — the answer comes back through the
-  /// source like every other fact, so a rejected change simply never appears
-  /// rather than leaving a checkbox saying something untrue.
+  /// last saw. Before an imported torrent starts, the set remains local until
+  /// Download confirms it; once moving, the same control updates the engine's
+  /// live selection.
   void _toggleWanted(Collection collection, MediaItem media) {
     final entry = media.entryId;
     if (entry == null) return;
-    final wanted = {
-      for (final item in collection.media)
-        if (item.entryId != null && item.selected) item.entryId!,
-    };
+    final wanted = _wantedEntries(collection);
     if (!wanted.remove(entry)) wanted.add(entry);
     if (wanted.isEmpty) {
       _toast('Keep at least one file, or delete the collection');
       return;
     }
+    if (collection.isTorrent && collection.isDraft) {
+      setState(() => _stagedDownloadEntries = wanted);
+      return;
+    }
     unawaited(_run(() => widget.source.setSelection(collection.id, wanted)));
+  }
+
+  Set<int> _wantedEntries(Collection collection) {
+    final staged = _stagedDownloadEntries;
+    if (collection.isTorrent && collection.isDraft && staged != null) {
+      return {...staged};
+    }
+    return {
+      for (final media in collection.media)
+        if (media.selected && media.entryId != null) media.entryId!,
+    };
   }
 
   void _command(CollectionCommand command) {
