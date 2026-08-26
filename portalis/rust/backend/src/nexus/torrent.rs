@@ -22,6 +22,12 @@ pub struct TorrentInfo {
     /// and does not yet know. Use [`TorrentInfo::knows_progress`] before
     /// treating a zero here as a measurement.
     pub progress_bytes: u64,
+    /// The local-source checksum cursor while librqbit is initializing.
+    ///
+    /// It is separate from [`Self::progress_bytes`]: scanning a source is
+    /// useful progress for an owner preparing a seed, but it is not verified
+    /// payload progress and must never be presented as a download.
+    pub source_check_bytes: Option<u64>,
     /// Bytes librqbit has received from peers for this torrent. Unlike
     /// [`Self::progress_bytes`], this advances before a complete piece is
     /// hash-verified, so it represents live network receive activity rather
@@ -378,8 +384,9 @@ mod validation_tests {
             id: 1,
             info_hash: "a".repeat(40),
             name: "Trip".into(),
-            state: "live".into(),
+            state: "live".to_string(),
             progress_bytes: 50,
+            source_check_bytes: None,
             fetched_bytes: 50,
             total_bytes: 50,
             uploaded_bytes: 0,
@@ -1813,6 +1820,7 @@ pub mod native {
             } else {
                 stats.progress_bytes
             },
+            source_check_bytes: initializing.then_some(stats.progress_bytes),
             fetched_bytes,
             total_bytes: stats.total_bytes,
             uploaded_bytes: stats.uploaded_bytes,

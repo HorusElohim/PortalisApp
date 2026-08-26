@@ -1907,8 +1907,8 @@ mod tests {
         // claims it is shared while the engine has been told to remain idle.
         assert_eq!(
             nexus.state().collections[0].status,
-            Status::Available,
-            "the owner already has the source and is ready to seed"
+            Status::Seeding,
+            "the owner already has the source and is preparing its seed"
         );
 
         // Confirming twice is a second tap on a button, not an error.
@@ -2172,8 +2172,9 @@ mod tests {
             id: 1,
             info_hash: "a1".to_owned(),
             name: "Iceland".to_owned(),
-            state: "live".to_owned(),
+            state: "live".into(),
             progress_bytes: 50,
+            source_check_bytes: None,
             fetched_bytes: 50,
             total_bytes: 100,
             uploaded_bytes: 0,
@@ -2465,8 +2466,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_reopened_published_owner_collection_is_available_while_its_zero_copy_seed_rehydrates()
-     {
+    async fn a_reopened_published_owner_collection_is_seeding_while_its_zero_copy_seed_rehydrates()
+    {
         let scratch = Scratch::new("reopened-owner-seed-status");
         let source = scratch.0.join("episode.mp4");
         std::fs::write(&source, b"episode").expect("writes source");
@@ -2506,8 +2507,8 @@ mod tests {
         let reopened = open(&scratch);
         assert_eq!(
             reopened.state().collections[0].status,
-            Status::Available,
-            "the owner already has the referenced source; startup rehydration must not present it as a receiver download"
+            Status::Seeding,
+            "the owner already has the referenced source; startup rehydration must present its seed rather than a receiver download"
         );
         reopened.close().await;
     }
@@ -2976,6 +2977,7 @@ mod tests {
                 name: "Iceland".to_owned(),
                 state: "live".to_owned(),
                 progress_bytes: progress,
+                source_check_bytes: None,
                 fetched_bytes: progress,
                 total_bytes: 100,
                 uploaded_bytes: 0,

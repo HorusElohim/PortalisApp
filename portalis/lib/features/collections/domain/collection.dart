@@ -57,6 +57,7 @@ class Collection {
   bool get isConnecting => state == 'WaitingForOwner';
   bool get isDownloading => state == 'Downloading';
   bool get isPreparing => state == 'Preparing';
+  bool get isSeeding => state == 'Seeding';
 
   /// Complete, and with something to serve. Nothing to serve means nothing is
   /// being served — telling somebody their photos are available when the
@@ -67,7 +68,7 @@ class Collection {
   /// catch up after a restart. Entry count alone is transient during hydration.
   bool get canShareQr => !isDraft && (entryCount > 0 || revision > 0);
 
-  bool get isComplete => state == 'Available';
+  bool get isComplete => state == 'Available' || isSeeding;
   bool get isMoving =>
       isDownloading || downBytesPerSecond > 0 || upBytesPerSecond > 0;
 
@@ -79,8 +80,13 @@ class Collection {
   /// Zero to one. The engine's own reading while a transfer is live, and the
   /// recorded history's last reading once it is not — never an arithmetic
   /// guess of this interface's own.
-  double get progress =>
-      source.transfer?.progress ?? lastReading?.progress ?? 0;
+  double get progress {
+    final live = source.transfer;
+    if (live != null) return live.progress;
+    // A zero-copy owner already has the original source. An idle seed has no
+    // transfer sample by design, so history cannot stand in for ownership.
+    return isSeeding ? 1 : (lastReading?.progress ?? 0);
+  }
 
   /// Bytes per second, as the engine counts them. Never megabits: converting
   /// to them and then labelling the result "MB/s" showed every rate in the

@@ -25,6 +25,7 @@ class TransferGraph extends StatelessWidget {
     required this.downBytesPerSecond,
     required this.upBytesPerSecond,
     this.sourceReading = false,
+    this.seeding = false,
     this.history = const [],
     this.startedAt,
     this.completedAt,
@@ -36,6 +37,7 @@ class TransferGraph extends StatelessWidget {
   final int downBytesPerSecond;
   final int upBytesPerSecond;
   final bool sourceReading;
+  final bool seeding;
   final List<TransferPoint> history;
   final DateTime? startedAt;
   final DateTime? completedAt;
@@ -49,6 +51,7 @@ class TransferGraph extends StatelessWidget {
       downBytesPerSecond: downBytesPerSecond,
       upBytesPerSecond: upBytesPerSecond,
       sourceReading: sourceReading,
+      seeding: seeding,
       history: history,
       startedAt: startedAt,
       completedAt: completedAt,
@@ -168,6 +171,7 @@ class TransferGraphHeader extends StatelessWidget {
     required this.downBytesPerSecond,
     required this.upBytesPerSecond,
     this.sourceReading = false,
+    this.seeding = false,
     this.history = const [],
     this.startedAt,
     this.completedAt,
@@ -178,6 +182,7 @@ class TransferGraphHeader extends StatelessWidget {
   final int downBytesPerSecond;
   final int upBytesPerSecond;
   final bool sourceReading;
+  final bool seeding;
   final List<TransferPoint> history;
   final DateTime? startedAt;
   final DateTime? completedAt;
@@ -190,6 +195,7 @@ class TransferGraphHeader extends StatelessWidget {
           downBytesPerSecond: downBytesPerSecond,
           upBytesPerSecond: upBytesPerSecond,
           sourceReading: sourceReading,
+          seeding: seeding,
           history: history,
           startedAt: startedAt,
           completedAt: completedAt,
@@ -212,12 +218,14 @@ class _TransferGraphHeading extends StatelessWidget {
             children: [
               Text(
                 graph.sourceReading
-                    ? 'SOURCE READ'
-                    : (graph.active
-                        ? 'RECEIVING SPEED'
-                        : (graph.complete
-                            ? 'RECEIVE SESSION'
-                            : 'RECEIVE HISTORY')),
+                    ? 'SOURCE VERIFICATION'
+                    : (graph.seeding
+                        ? 'SEEDING SPEED'
+                        : (graph.active
+                            ? 'RECEIVING SPEED'
+                            : (graph.complete
+                                ? 'RECEIVE SESSION'
+                                : 'RECEIVE HISTORY'))),
                 style: monoLabel(
                   size: 10,
                   color: AppColors.textDim,
@@ -242,7 +250,9 @@ class _TransferGraphHeading extends StatelessWidget {
             children: [
               _SeriesSummary(
                 color: color,
-                label: graph.sourceReading ? 'READING' : 'RECEIVING',
+                label: graph.sourceReading
+                    ? 'VERIFYING'
+                    : (graph.seeding ? 'SEEDING' : 'RECEIVING'),
                 value: graph.active
                     ? 'now ${formatRate(graph.downBytesPerSecond)} · peak ${formatRate(graph.peakDownload)}'
                     : 'peak ${formatRate(graph.peakDownload)}',
@@ -266,6 +276,7 @@ class _TransferGraphState {
     required this.complete,
     required this.active,
     required this.sourceReading,
+    required this.seeding,
     required this.downBytesPerSecond,
     required this.upBytesPerSecond,
     required this.points,
@@ -283,6 +294,7 @@ class _TransferGraphState {
     required int upBytesPerSecond,
     required List<TransferPoint> history,
     required bool sourceReading,
+    required bool seeding,
     DateTime? startedAt,
     DateTime? completedAt,
   }) {
@@ -331,6 +343,7 @@ class _TransferGraphState {
       complete: complete,
       active: active,
       sourceReading: sourceReading,
+      seeding: seeding,
       downBytesPerSecond: downBytesPerSecond,
       upBytesPerSecond: upBytesPerSecond,
       points: points,
@@ -346,6 +359,7 @@ class _TransferGraphState {
   final bool complete;
   final bool active;
   final bool sourceReading;
+  final bool seeding;
   final int downBytesPerSecond;
   final int upBytesPerSecond;
   final List<TransferPoint> points;

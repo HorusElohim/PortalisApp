@@ -17,6 +17,7 @@ class TransferPanel extends StatelessWidget {
     this.downBytesPerSecond = 0,
     this.upBytesPerSecond = 0,
     this.sourceReading = false,
+    this.seeding = false,
     this.livePeers = 0,
     this.etaLabel,
     this.history = const [],
@@ -24,6 +25,7 @@ class TransferPanel extends StatelessWidget {
     this.completedAt,
     Color? color,
     this.pendingLabel,
+    this.progressSummaryLabel,
     this.leading,
     this.status,
     this.actions,
@@ -35,6 +37,7 @@ class TransferPanel extends StatelessWidget {
   final int downBytesPerSecond;
   final int upBytesPerSecond;
   final bool sourceReading;
+  final bool seeding;
   final int livePeers;
   final String? etaLabel;
   final List<TransferPoint> history;
@@ -42,6 +45,7 @@ class TransferPanel extends StatelessWidget {
   final DateTime? completedAt;
   final Color color;
   final String? pendingLabel;
+  final String? progressSummaryLabel;
   final Widget? leading;
   final Widget? status;
   final Widget? actions;
@@ -64,6 +68,7 @@ class TransferPanel extends StatelessWidget {
       downBytesPerSecond: downBytesPerSecond,
       upBytesPerSecond: upBytesPerSecond,
       sourceReading: sourceReading,
+      seeding: seeding,
       history: history,
       startedAt: startedAt,
       completedAt: completedAt,
@@ -84,6 +89,7 @@ class TransferPanel extends StatelessWidget {
                 downloadedBytes: downloadedBytes,
                 totalBytes: totalBytes,
                 pendingLabel: pendingLabel,
+                progressSummaryLabel: progressSummaryLabel,
                 color: color,
                 metrics: metrics,
               ),
@@ -98,6 +104,7 @@ class TransferPanel extends StatelessWidget {
               downloadedBytes: downloadedBytes,
               totalBytes: totalBytes,
               pendingLabel: pendingLabel,
+              progressSummaryLabel: progressSummaryLabel,
               color: color,
               metrics: metrics,
             ),
@@ -108,6 +115,7 @@ class TransferPanel extends StatelessWidget {
               downBytesPerSecond: downBytesPerSecond,
               upBytesPerSecond: upBytesPerSecond,
               sourceReading: sourceReading,
+              seeding: seeding,
               history: history,
               startedAt: startedAt,
               completedAt: completedAt,
@@ -212,6 +220,7 @@ class _StandaloneSummary extends StatelessWidget {
     required this.color,
     required this.metrics,
     this.pendingLabel,
+    this.progressSummaryLabel,
   });
 
   final double progress;
@@ -219,6 +228,7 @@ class _StandaloneSummary extends StatelessWidget {
   final int downloadedBytes;
   final int totalBytes;
   final String? pendingLabel;
+  final String? progressSummaryLabel;
   final Color color;
   final List<Widget> metrics;
 
@@ -231,6 +241,7 @@ class _StandaloneSummary extends StatelessWidget {
             downloadedBytes: downloadedBytes,
             totalBytes: totalBytes,
             pendingLabel: pendingLabel,
+            progressSummaryLabel: progressSummaryLabel,
             color: color,
           );
           if (constraints.maxWidth < 560) {
@@ -277,6 +288,7 @@ class _ProgressBlock extends StatelessWidget {
     required this.color,
     required this.metrics,
     this.pendingLabel,
+    this.progressSummaryLabel,
   });
 
   final double progress;
@@ -284,6 +296,7 @@ class _ProgressBlock extends StatelessWidget {
   final int downloadedBytes;
   final int totalBytes;
   final String? pendingLabel;
+  final String? progressSummaryLabel;
   final Color color;
   final List<Widget> metrics;
 
@@ -297,6 +310,7 @@ class _ProgressBlock extends StatelessWidget {
             downloadedBytes: downloadedBytes,
             totalBytes: totalBytes,
             pendingLabel: pendingLabel,
+            progressSummaryLabel: progressSummaryLabel,
             color: color,
           ),
           if (metrics.isNotEmpty) ...[
@@ -315,6 +329,7 @@ class _ProgressSummary extends StatelessWidget {
     required this.totalBytes,
     required this.color,
     this.pendingLabel,
+    this.progressSummaryLabel,
   });
 
   final double progress;
@@ -322,6 +337,7 @@ class _ProgressSummary extends StatelessWidget {
   final int downloadedBytes;
   final int totalBytes;
   final String? pendingLabel;
+  final String? progressSummaryLabel;
   final Color color;
 
   @override
@@ -341,9 +357,10 @@ class _ProgressSummary extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
-                hasTotal
-                    ? '${formatBytes(downloadedBytes)} of ${formatBytes(totalBytes)}'
-                    : (pendingLabel ?? 'Waiting for metadata'),
+                progressSummaryLabel ??
+                    (hasTotal
+                        ? '${formatBytes(downloadedBytes)} of ${formatBytes(totalBytes)}'
+                        : (pendingLabel ?? 'Waiting for metadata')),
                 overflow: TextOverflow.ellipsis,
                 style: monoLabel(
                   size: 15,

@@ -118,6 +118,7 @@ class CollectionOverview extends StatelessWidget {
             downBytesPerSecond: collection.downBytesPerSecond,
             upBytesPerSecond: collection.upBytesPerSecond,
             sourceReading: collection.isSourceReading,
+            seeding: collection.isSeeding,
             history: transferHistory,
             // The core's own moments, not the span of surviving readings.
             startedAt: collection.startedAt ?? history?.startedAt,
@@ -125,6 +126,11 @@ class CollectionOverview extends StatelessWidget {
             livePeers: collection.livePeers,
             etaLabel: collection.etaLabel,
             color: collection.hue,
+            progressSummaryLabel: collection.isSourceReading
+                ? 'VERIFYING LOCAL SOURCE'
+                : (collection.isSeeding
+                    ? 'LOCAL SOURCE VERIFIED · ${formatBytes(collection.totalBytes)}'
+                    : null),
           ),
         ],
         if (showCommands) ...[

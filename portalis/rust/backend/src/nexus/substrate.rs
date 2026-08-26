@@ -486,6 +486,7 @@ fn held_torrent(info_hash: &str) -> TorrentInfo {
         name: "held".into(),
         state: "live".into(),
         progress_bytes: 1,
+        source_check_bytes: None,
         fetched_bytes: 1,
         total_bytes: 1,
         uploaded_bytes: 0,

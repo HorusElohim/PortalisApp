@@ -132,9 +132,10 @@ pub(crate) async fn follow_transfers(
             let Some(info) = by_handle.get(handle.as_str()) else {
                 continue;
             };
-            // A torrent still checking itself has no progress to report, and
-            // recording the placeholder zero put a false restart in the middle
-            // of the chart every time the app reopened.
+            // A torrent still checking itself has no *payload* progress to
+            // record: its scan cursor would put a false restart in the middle
+            // of the receive chart. The live tier still exposes that cursor to
+            // an owner as explicitly-labelled source verification.
             let measured = measured_rates(info, written.get(&key));
             // Reads performed by ReferencedStorage while an owner torrent is
             // being checked are local source I/O. Keep the rate visible, but
@@ -350,20 +351,30 @@ fn publish(
 /// when an owner wants to see the numbers — hiding the tier the moment a
 /// download completes is what makes seeding look like nothing happening.
 fn transfer_of_for(info: &TorrentInfo, rates: Rates, local_source: bool) -> Option<Transfer> {
+    let source_checking = local_source && info.source_check_bytes.is_some();
     let idle = if local_source {
-        info.finished && info.live_peers == 0 && rates.down == 0 && rates.up == 0
+        !source_checking
+            && info.finished
+            && info.live_peers == 0
+            && rates.down == 0
+            && rates.up == 0
     } else {
         info.finished && info.live_peers == 0 && rates.up == 0
     };
     if idle {
         return None;
     }
+    let progressed_bytes = if source_checking {
+        info.source_check_bytes.unwrap_or(0)
+    } else {
+        info.progress_bytes
+    };
     let fraction = if info.total_bytes == 0 {
         0.0
     } else {
         #[allow(clippy::cast_precision_loss, reason = "a fraction for a progress bar")]
         {
-            info.progress_bytes as f32 / info.total_bytes as f32
+            progressed_bytes as f32 / info.total_bytes as f32
         }
     };
     let down = rates.down;
@@ -373,14 +384,16 @@ fn transfer_of_for(info: &TorrentInfo, rates: Rates, local_source: bool) -> Opti
     // of it is wanted — either way the fraction reaches one while the engine
     // is still working, and a bar reading 100% beside the word Downloading is
     // the interface contradicting itself.
-    let complete = if info.finished {
+    let complete = if source_checking {
+        fraction.min(0.9999)
+    } else if info.finished {
         1.0
     } else {
         fraction.min(0.9999)
     };
     Some(Transfer {
         progress: complete.clamp(0.0, 1.0),
-        source_reading: local_source,
+        source_reading: source_checking,
         down_bytes_per_second: down,
         up_bytes_per_second: rates.up,
         peers: u16::try_from(info.live_peers).unwrap_or(u16::MAX),
@@ -405,11 +418,7 @@ fn status_of_for(info: &TorrentInfo, paused: bool, local_source: bool) -> Status
         return Status::Paused;
     }
     if local_source {
-        return if info.finished {
-            Status::Available
-        } else {
-            Status::Preparing
-        };
+        return Status::Seeding;
     }
     crate::nexus::projection::state::status_for(crate::nexus::projection::state::StatusFacts {
         draft: false,
@@ -494,6 +503,7 @@ mod tests {
             name: "Iceland".to_owned(),
             state: "live".to_owned(),
             progress_bytes: progress,
+            source_check_bytes: None,
             fetched_bytes: 0,
             total_bytes: total,
             uploaded_bytes: 0,
@@ -741,7 +751,9 @@ mod tests {
 
     #[test]
     fn linked_source_verification_is_not_reported_as_a_download() {
-        let checking = info(61, 547, false);
+        let mut checking = info(0, 547, false);
+        checking.state = "Initializing".to_owned();
+        checking.source_check_bytes = Some(61);
         let source_read = Rates {
             down: 6_300_000,
             up: 0,
@@ -754,8 +766,8 @@ mod tests {
         assert!(reading.source_reading);
         assert_eq!(
             status_of_for(&checking, false, true),
-            Status::Preparing,
-            "source verification should remain preparation"
+            Status::Seeding,
+            "source verification is seed preparation, never a receiver download"
         );
 
         let mut seeded = info(547, 547, true);
@@ -772,7 +784,10 @@ mod tests {
         assert_eq!(upload.down_bytes_per_second, 0);
         assert_eq!(upload.up_bytes_per_second, 500_000);
         assert_eq!(upload.progress, 1.0);
-        assert!(upload.source_reading);
+        assert!(
+            !upload.source_reading,
+            "serving a peer is upload activity, not source verification"
+        );
     }
 
     /// A total of zero is a torrent whose metadata has not arrived. Dividing by

@@ -92,6 +92,10 @@ pub use crate::nexus::core::events::VerifyFailure;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
     Available,
+    /// This device owns the source and is verifying or serving it to peers.
+    /// It is distinct from `Available` so an owner is never presented as a
+    /// receiver that happens to have completed a download.
+    Seeding,
     /// This device was told to stop transferring it. A person's choice, so it
     /// outranks what the numbers are doing — a paused collection that is still
     /// draining a buffer is paused, not downloading.
@@ -137,6 +141,12 @@ pub fn status_for(facts: StatusFacts<'_>) -> Status {
     if facts.paused {
         return Status::Paused;
     }
+    // This device owns the source references that created the torrent. An
+    // engine check may still be reading them, but that is seed preparation,
+    // never a receiver download.
+    if facts.locally_complete {
+        return Status::Seeding;
+    }
     if let Some(live) = facts.live {
         return if live.finished {
             Status::Available
@@ -151,9 +161,7 @@ pub fn status_for(facts: StatusFacts<'_>) -> Status {
     // reported its first live reading, so treating that temporary absence as a
     // receiver download makes a reopened share look like it is downloading
     // its own media.
-    if facts.locally_complete {
-        return Status::Available;
-    }
+
     // Carried, but nothing has reported on it yet — the first poll is at most
     // a second away and says which of the three above it really is. Claiming
     // Preparing here is what made a completed torrent look unfinished for as

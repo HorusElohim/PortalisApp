@@ -67,7 +67,13 @@
 
 ### Fixed
 
-- Restored published zero-copy owner collections as available for sharing
+- Published owner collections now enter the explicit `Seeding` lifecycle
+  instead of remaining at `Preparing` while librqbit checks the referenced
+  source. The source-check cursor is shown as local verification progress, not
+  as received download bytes; ready and active seeds identify their local
+  source rather than displaying a misleading receiver progress total.
+
+- Restored published zero-copy owner collections as seeding-ready for sharing
   while their seed rehydrates after restart. They no longer present the
   owner's original media as a receiver-side download before the engine's first
   live reading arrives.
