@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.0.41+42
+
+- Bumped the coordinated Flutter release to `1.0.41+42` and the Rust backend
+  to `0.1.39`.
+- Store schema 10 replaces the independently persisted `draft` and `paused`
+  booleans with one exhaustive durable lifecycle: native draft, native
+  published, torrent resolving, torrent awaiting selection, or torrent
+  requested. Running or paused activity exists only inside executable states,
+  so combinations such as a paused draft can no longer be encoded.
+- Schema 9 collections migrate atomically with the schema-version write. The
+  migration reads torrent metadata and selected entries alongside each legacy
+  row; resolved drafts are deliberately migrated to awaiting selection rather
+  than treated as download consent. A falsification test confirms that mapping
+  fails if changed to an executable state.
+- Metadata resolution now persists and displays as active preparation. Once
+  the file list resolves, the collection becomes a draft waiting for the
+  explicit Download action. Restarting in either state preserves that exact
+  intent and cannot start content acquisition.
+- The generic native `PublishDraft` command is rejected for torrent imports.
+  Only `DownloadSelection` can move an awaiting torrent to requested, after it
+  validates and durably records a non-empty explicit selection; default checked
+  entries are never treated as authorization.
+- Status projection now accepts the typed durable lifecycle plus live engine
+  observations, not a second pair of `draft` and `paused` booleans. Worker,
+  publisher, restart hydration, transfer reconciliation, and UI status all
+  therefore consume the same stored intent.
+- Confirming a draft is now refused for torrent imports, so the generic publish
+  action cannot promote an inspected-but-unconfirmed import to executable and
+  bypass the explicit Download decision.
+
 ## 1.0.40+41
 
 - Bumped the coordinated Flutter release to `1.0.40+41` and the Rust backend

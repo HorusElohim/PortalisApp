@@ -49,6 +49,111 @@ impl Role {
     }
 }
 
+/// Whether a requested collection should currently move bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoredActivity {
+    Running,
+    Paused,
+}
+
+impl StoredActivity {
+    #[must_use]
+    pub const fn is_paused(self) -> bool {
+        matches!(self, Self::Paused)
+    }
+}
+
+/// The durable decision this device has made about one collection.
+///
+/// This is persisted as one discriminant. Invalid combinations such as a
+/// paused draft or a selected-but-unconfirmed download therefore cannot be
+/// written at all.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoredLifecycle {
+    NativeDraft,
+    NativePublished { activity: StoredActivity },
+    TorrentResolving,
+    TorrentAwaitingSelection,
+    TorrentRequested { activity: StoredActivity },
+}
+
+impl StoredLifecycle {
+    const NATIVE_DRAFT: u8 = 0;
+    const NATIVE_RUNNING: u8 = 1;
+    const NATIVE_PAUSED: u8 = 2;
+    const TORRENT_RESOLVING: u8 = 3;
+    const TORRENT_AWAITING: u8 = 4;
+    const TORRENT_RUNNING: u8 = 5;
+    const TORRENT_PAUSED: u8 = 6;
+
+    const fn code(self) -> u8 {
+        match self {
+            Self::NativeDraft => Self::NATIVE_DRAFT,
+            Self::NativePublished {
+                activity: StoredActivity::Running,
+            } => Self::NATIVE_RUNNING,
+            Self::NativePublished {
+                activity: StoredActivity::Paused,
+            } => Self::NATIVE_PAUSED,
+            Self::TorrentResolving => Self::TORRENT_RESOLVING,
+            Self::TorrentAwaitingSelection => Self::TORRENT_AWAITING,
+            Self::TorrentRequested {
+                activity: StoredActivity::Running,
+            } => Self::TORRENT_RUNNING,
+            Self::TorrentRequested {
+                activity: StoredActivity::Paused,
+            } => Self::TORRENT_PAUSED,
+        }
+    }
+
+    fn from_code(code: u8) -> Result<Self, Malformed> {
+        match code {
+            Self::NATIVE_DRAFT => Ok(Self::NativeDraft),
+            Self::NATIVE_RUNNING => Ok(Self::NativePublished {
+                activity: StoredActivity::Running,
+            }),
+            Self::NATIVE_PAUSED => Ok(Self::NativePublished {
+                activity: StoredActivity::Paused,
+            }),
+            Self::TORRENT_RESOLVING => Ok(Self::TorrentResolving),
+            Self::TORRENT_AWAITING => Ok(Self::TorrentAwaitingSelection),
+            Self::TORRENT_RUNNING => Ok(Self::TorrentRequested {
+                activity: StoredActivity::Running,
+            }),
+            Self::TORRENT_PAUSED => Ok(Self::TorrentRequested {
+                activity: StoredActivity::Paused,
+            }),
+            _ => Err(Malformed),
+        }
+    }
+
+    #[must_use]
+    pub const fn activity(self) -> Option<StoredActivity> {
+        match self {
+            Self::NativePublished { activity } | Self::TorrentRequested { activity } => {
+                Some(activity)
+            }
+            Self::NativeDraft | Self::TorrentResolving | Self::TorrentAwaitingSelection => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_draft(self) -> bool {
+        matches!(
+            self,
+            Self::NativeDraft | Self::TorrentResolving | Self::TorrentAwaitingSelection
+        )
+    }
+
+    #[must_use]
+    pub const fn is_requested(self) -> bool {
+        matches!(
+            self,
+            Self::NativePublished { .. } | Self::TorrentRequested { .. }
+        )
+    }
+}
+
 /// What this device knows about one collection that no peer needs to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StoredCollection {
@@ -62,10 +167,9 @@ pub struct StoredCollection {
     /// Original no-copy sources while this device prepares and seeds the
     /// collection. Local-only; publications contain descriptors, not paths.
     pub sources: Vec<StoredSourceFile>,
-    /// Whether this device has been told to stop transferring this
-    /// collection. A local choice, like `media_path`: pausing on a phone says
-    /// nothing about what a laptop should do, so it never travels.
-    pub paused: bool,
+    /// The one durable user intent. This replaces the former independent
+    /// `draft` and `paused` flags, whose invalid combinations were persistable.
+    pub lifecycle: StoredLifecycle,
     /// The substrate handle this collection is carried under, once it has
     /// one: the hex info hash of its torrent.
     ///
@@ -92,19 +196,11 @@ pub struct StoredCollection {
     /// Unix nanoseconds, and `None` until the moment each describes arrives.
     pub started_at: Option<u64>,
     pub completed_at: Option<u64>,
-    /// Still being assembled, and not to be acted on yet.
-    ///
-    /// A person choosing files has not yet said to share them. Publishing at
-    /// the moment of choosing means hashing and seeding something they may
-    /// still rename, add to, or abandon — and abandoning it would then mean
-    /// unpublishing something strangers may already hold. Held as a flag on
-    /// the collection rather than as a separate kind of record, because a
-    /// draft is the same thing before its first revision: the publisher simply
-    /// leaves it alone until it is confirmed.
-    pub draft: bool,
 }
 
 impl StoredCollection {
+    /// Schema 10 layout. The lifecycle discriminant is the first local field,
+    /// so no reader can accidentally interpret the old `paused` byte as it.
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let source_bytes = self
@@ -123,29 +219,58 @@ impl StoredCollection {
         for source in self.sources.iter().take(count as usize) {
             source.encode_into(&mut bytes);
         }
-        bytes.push(u8::from(self.paused));
+        bytes.push(self.lifecycle.code());
         bytes.extend_from_slice(&self.on_disk_bytes.to_be_bytes());
         write_string(&mut bytes, self.substrate_handle.as_deref().unwrap_or(""));
-        bytes.push(u8::from(self.draft));
-        // Zero stands for absent: a moment nothing has reached yet, and the
-        // Unix epoch is not a time any of these can honestly have.
         bytes.extend_from_slice(&self.started_at.unwrap_or(0).to_be_bytes());
         bytes.extend_from_slice(&self.completed_at.unwrap_or(0).to_be_bytes());
         bytes
     }
 
-    /// # Errors
-    ///
-    /// Returns [`Malformed`] when the row is truncated, carries trailing
-    /// bytes, or names a role this version does not know.
+    /// Decodes only the schema this build writes. Older rows are rewritten by
+    /// [`super::Store::prepare`] before any normal read reaches here.
     pub fn decode(bytes: &[u8]) -> Result<Self, Malformed> {
         let mut reader = Reader::new(bytes);
         let role = Role::from_code(reader.byte()?)?;
         let content_key = reader.array::<CONTENT_KEY_BYTES>()?;
         let name = reader.string()?;
         let media_path = reader.string()?;
-        // Schemas 1–4 ended after `media_path`; they decode as collections
-        // with no pending native sources.
+        let count = reader.u32()?;
+        let sources = (0..count)
+            .map(|_| StoredSourceFile::decode_from(&mut reader))
+            .collect::<Result<Vec<_>, Malformed>>()?;
+        let lifecycle = StoredLifecycle::from_code(reader.byte()?)?;
+        let on_disk_bytes = reader.u64()?;
+        let substrate_handle = Some(reader.string()?).filter(|handle| !handle.is_empty());
+        let started_at = Some(reader.u64()?).filter(|at| *at != 0);
+        let completed_at = Some(reader.u64()?).filter(|at| *at != 0);
+        reader.finish()?;
+        Ok(Self {
+            name,
+            role,
+            content_key,
+            media_path,
+            sources,
+            lifecycle,
+            on_disk_bytes,
+            substrate_handle,
+            started_at,
+            completed_at,
+        })
+    }
+
+    /// Reads the append-only schema 1–9 layout and translates its two intent
+    /// bits with the torrent tables that gave those bits their meaning.
+    pub(crate) fn decode_v9(
+        bytes: &[u8],
+        has_torrent_import: bool,
+        has_resolved_entries: bool,
+    ) -> Result<Self, Malformed> {
+        let mut reader = Reader::new(bytes);
+        let role = Role::from_code(reader.byte()?)?;
+        let content_key = reader.array::<CONTENT_KEY_BYTES>()?;
+        let name = reader.string()?;
+        let media_path = reader.string()?;
         let sources = if reader.bytes.is_empty() {
             Vec::new()
         } else {
@@ -154,32 +279,21 @@ impl StoredCollection {
                 .map(|_| StoredSourceFile::decode_from(&mut reader))
                 .collect::<Result<Vec<_>, Malformed>>()?
         };
-        // Schema 5 ended after the sources. Those rows decode as a collection
-        // nobody has paused, holding nothing counted yet — which is what a
-        // store written before the count existed can honestly claim.
         let (paused, on_disk_bytes) = if reader.bytes.is_empty() {
             (false, 0)
         } else {
             (reader.byte()? != 0, reader.u64()?)
         };
-        // Schema 6 ended there. An empty handle and an absent one are the same
-        // thing — a collection nothing is carrying yet — so they share a
-        // representation rather than needing a flag to tell them apart.
         let substrate_handle = if reader.bytes.is_empty() {
             None
         } else {
             Some(reader.string()?).filter(|handle| !handle.is_empty())
         };
-        // Schema 7 ended there. Everything written before drafts existed was
-        // published the moment it was created, so a row without the flag is
-        // exactly what `false` means — never a draft left in limbo.
         let draft = if reader.bytes.is_empty() {
             false
         } else {
             reader.byte()? != 0
         };
-        // Schema 8 ended after the draft flag. Rows written before these
-        // existed have no moments to report, which is what `None` says.
         let (started_at, completed_at) = if reader.bytes.is_empty() {
             (None, None)
         } else {
@@ -189,19 +303,69 @@ impl StoredCollection {
             )
         };
         reader.finish()?;
+
+        let activity = if paused {
+            StoredActivity::Paused
+        } else {
+            StoredActivity::Running
+        };
+        let lifecycle = if has_torrent_import {
+            if !has_resolved_entries {
+                StoredLifecycle::TorrentResolving
+            } else if draft {
+                // Safety-biased migration: selected entries on a draft were
+                // checkbox defaults, never proof the person pressed Download.
+                StoredLifecycle::TorrentAwaitingSelection
+            } else {
+                StoredLifecycle::TorrentRequested { activity }
+            }
+        } else if draft {
+            StoredLifecycle::NativeDraft
+        } else {
+            StoredLifecycle::NativePublished { activity }
+        };
+
         Ok(Self {
             name,
             role,
             content_key,
             media_path,
             sources,
-            paused,
+            lifecycle,
             on_disk_bytes,
             substrate_handle,
-            draft,
             started_at,
             completed_at,
         })
+    }
+
+    /// Produces the predecessor layout for a real migration fixture.
+    #[cfg(test)]
+    pub(crate) fn encode_v9(&self) -> Vec<u8> {
+        let source_bytes = self
+            .sources
+            .iter()
+            .map(|source| source.label.len() + source.path.len() + 16)
+            .sum::<usize>();
+        let mut bytes =
+            Vec::with_capacity(self.name.len() + self.media_path.len() + source_bytes + 45);
+        bytes.push(self.role.code());
+        bytes.extend_from_slice(&self.content_key);
+        write_string(&mut bytes, &self.name);
+        write_string(&mut bytes, &self.media_path);
+        let count = u32::try_from(self.sources.len()).unwrap_or(u32::MAX);
+        bytes.extend_from_slice(&count.to_be_bytes());
+        for source in self.sources.iter().take(count as usize) {
+            source.encode_into(&mut bytes);
+        }
+        let activity = self.lifecycle.activity();
+        bytes.push(u8::from(activity.is_some_and(StoredActivity::is_paused)));
+        bytes.extend_from_slice(&self.on_disk_bytes.to_be_bytes());
+        write_string(&mut bytes, self.substrate_handle.as_deref().unwrap_or(""));
+        bytes.push(u8::from(self.lifecycle.is_draft()));
+        bytes.extend_from_slice(&self.started_at.unwrap_or(0).to_be_bytes());
+        bytes.extend_from_slice(&self.completed_at.unwrap_or(0).to_be_bytes());
+        bytes
     }
 }
 
@@ -524,43 +688,118 @@ mod tests {
             content_key: [7; CONTENT_KEY_BYTES],
             media_path: "/Users/ada/Pictures/Iceland".to_owned(),
             sources: Vec::new(),
-            paused: false,
+            lifecycle: StoredLifecycle::NativePublished {
+                activity: StoredActivity::Running,
+            },
             on_disk_bytes: 0,
             substrate_handle: None,
-            draft: false,
             started_at: None,
             completed_at: None,
         }
     }
 
-    /// A row written before schema 6 has no pause flag and no byte count. It
-    /// decodes as a collection nobody paused holding nothing counted, rather
-    /// than being refused — the fields are local facts, and inventing either
-    /// would be worse than admitting the row predates them.
     #[test]
-    fn a_row_from_before_the_local_facts_decodes_without_them() {
+    fn every_lifecycle_survives_a_round_trip() {
+        for lifecycle in [
+            StoredLifecycle::NativeDraft,
+            StoredLifecycle::NativePublished {
+                activity: StoredActivity::Running,
+            },
+            StoredLifecycle::NativePublished {
+                activity: StoredActivity::Paused,
+            },
+            StoredLifecycle::TorrentResolving,
+            StoredLifecycle::TorrentAwaitingSelection,
+            StoredLifecycle::TorrentRequested {
+                activity: StoredActivity::Running,
+            },
+            StoredLifecycle::TorrentRequested {
+                activity: StoredActivity::Paused,
+            },
+        ] {
+            let stored = StoredCollection {
+                lifecycle,
+                on_disk_bytes: 4096,
+                substrate_handle: Some("a1b2c3".to_owned()),
+                ..collection()
+            };
+            assert_eq!(
+                StoredCollection::decode(&stored.encode()).expect("decodes"),
+                stored,
+                "{lifecycle:?} is durable"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unknown_lifecycle_discriminant_is_damage_not_a_default() {
         let stored = StoredCollection {
-            paused: true,
-            on_disk_bytes: 4096,
-            substrate_handle: Some("a1b2c3".to_owned()),
+            name: String::new(),
+            media_path: String::new(),
+            sources: Vec::new(),
             ..collection()
         };
-        let encoded = stored.encode();
-        assert_eq!(
-            StoredCollection::decode(&encoded).expect("decodes"),
-            stored,
-            "what was written is what comes back"
-        );
+        let mut bytes = stored.encode();
+        let lifecycle_offset = 1 + CONTENT_KEY_BYTES + 4 + 4 + 4;
+        bytes[lifecycle_offset] = u8::MAX;
+        assert_eq!(StoredCollection::decode(&bytes), Err(Malformed));
+    }
 
-        // The same row as schema 5 wrote it: everything up to the sources, so
-        // without the pause flag, the byte count, the handle, the draft flag
-        // or the two moments that each later schema appended.
-        let older = &encoded[..encoded.len() - 16 - 1 - 9 - (4 + "a1b2c3".len())];
-        let decoded = StoredCollection::decode(older).expect("an older row still decodes");
-        assert!(!decoded.paused);
-        assert_eq!(decoded.on_disk_bytes, 0);
-        assert_eq!(decoded.substrate_handle, None);
-        assert_eq!(decoded.name, stored.name);
+    #[test]
+    fn schema_nine_intent_maps_to_every_current_lifecycle() {
+        let cases = [
+            (
+                StoredLifecycle::NativeDraft,
+                false,
+                false,
+                StoredLifecycle::NativeDraft,
+            ),
+            (
+                StoredLifecycle::NativePublished {
+                    activity: StoredActivity::Paused,
+                },
+                false,
+                false,
+                StoredLifecycle::NativePublished {
+                    activity: StoredActivity::Paused,
+                },
+            ),
+            (
+                // A schema-nine torrent had no torrent-specific state in the
+                // collection row; the absence of entries says resolving.
+                StoredLifecycle::TorrentAwaitingSelection,
+                true,
+                false,
+                StoredLifecycle::TorrentResolving,
+            ),
+            (
+                StoredLifecycle::TorrentAwaitingSelection,
+                true,
+                true,
+                StoredLifecycle::TorrentAwaitingSelection,
+            ),
+            (
+                StoredLifecycle::TorrentRequested {
+                    activity: StoredActivity::Paused,
+                },
+                true,
+                true,
+                StoredLifecycle::TorrentRequested {
+                    activity: StoredActivity::Paused,
+                },
+            ),
+        ];
+
+        for (legacy_shape, has_import, has_entries, expected) in cases {
+            let legacy = StoredCollection {
+                lifecycle: legacy_shape,
+                ..collection()
+            };
+            let migrated =
+                StoredCollection::decode_v9(&legacy.encode_v9(), has_import, has_entries)
+                    .expect("schema nine decodes");
+            assert_eq!(migrated.lifecycle, expected, "from {legacy_shape:?}");
+        }
     }
 
     #[test]
@@ -593,26 +832,6 @@ mod tests {
         assert_eq!(
             StoredCollection::decode(&with_sources.encode()).expect("decodes sources"),
             with_sources
-        );
-
-        let current = stored.encode();
-        // What each later schema appended: a source count with no sources,
-        // then the pause flag and the byte count. Removing both leaves the row
-        // exactly as schemas 1 to 4 wrote it. Named rather than counted, so
-        // the next field to arrive breaks this loudly instead of quietly
-        // truncating somewhere else.
-        const SOURCE_COUNT: usize = 4;
-        const LOCAL_FACTS: usize = 1 + 8;
-        const ABSENT_HANDLE: usize = 4;
-        const DRAFT_FLAG: usize = 1;
-        const MOMENTS: usize = 8 + 8;
-        let schema_four = &current
-            [..current.len() - SOURCE_COUNT - LOCAL_FACTS - ABSENT_HANDLE - DRAFT_FLAG - MOMENTS];
-        assert_eq!(
-            StoredCollection::decode(schema_four)
-                .expect("older rows decode without invented sources")
-                .sources,
-            Vec::new()
         );
     }
 
