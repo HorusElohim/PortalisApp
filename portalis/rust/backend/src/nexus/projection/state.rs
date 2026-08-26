@@ -146,6 +146,14 @@ pub fn status_for(facts: StatusFacts<'_>) -> Status {
             Status::Downloading
         };
     }
+    // An owner with its original referenced sources and a durable torrent
+    // handle already has every byte. During startup the engine has not yet
+    // reported its first live reading, so treating that temporary absence as a
+    // receiver download makes a reopened share look like it is downloading
+    // its own media.
+    if facts.locally_complete {
+        return Status::Available;
+    }
     // Carried, but nothing has reported on it yet — the first poll is at most
     // a second away and says which of the three above it really is. Claiming
     // Preparing here is what made a completed torrent look unfinished for as
@@ -178,6 +186,10 @@ pub struct StatusFacts<'a> {
     pub publishing: bool,
     /// Came from a magnet or a descriptor.
     pub importing: bool,
+    /// This device owns complete referenced source media for a carried
+    /// collection, even though startup rehydration has not produced a live
+    /// engine reading yet.
+    pub locally_complete: bool,
     /// The engine's own reading, where there is one.
     pub live: Option<&'a crate::nexus::torrent::TorrentInfo>,
 }
@@ -486,6 +498,7 @@ mod status_tests {
             carried: false,
             publishing: false,
             importing: false,
+            locally_complete: false,
             live: None,
         }
     }
