@@ -154,67 +154,78 @@ pub(crate) async fn follow_torrent_imports(
 
 /// Everything with a transition available, oldest collection first.
 fn pending_work(store: &Store) -> Result<Vec<Pending>, crate::nexus::store::StoreError> {
+    use crate::nexus::core::lifecycle::Lifecycle;
+
     let mut pending = Vec::new();
     for (key, stored) in store.collections()? {
-        let Some(source) = store.torrent_import(&key)? else {
-            // Not an import, but still possibly something the engine is
-            // carrying: a collection this device published seeds under a
-            // handle of its own, and pausing it has to reach the engine
-            // exactly as it does for a download. Without this the reconciler
-            // covered only half the collections there are.
-            if let Some(handle) = stored.substrate_handle {
-                pending.push(Pending::Reconcile {
-                    key,
-                    handle,
-                    paused: stored.paused,
-                    files: None,
-                });
-            }
-            continue;
+        let source = store.torrent_import(&key)?;
+        let entries = if source.is_some() {
+            store.torrent_import_entries(&key)?
+        } else {
+            Vec::new()
         };
-        let entries = store.torrent_import_entries(&key)?;
-        if entries.is_empty() {
-            pending.push(Pending::Resolve { key, source });
-            continue;
-        }
-        let files = entries
-            .iter()
-            .enumerate()
-            .filter(|(_, entry)| entry.selected)
-            .map(|(index, _)| index)
-            .collect::<Vec<_>>();
-        // Already carried: nothing left to start, but the engine still has
-        // to be told what the person last chose — both which files and
-        // whether to move at all. Asserted rather than remembered: both verbs
-        // are idempotent, so re-stating the stored intent costs nothing and
-        // cannot drift. This is also the only path by which a selection can
-        // change after a download begins.
+        let lifecycle = Lifecycle::of(&stored, source.as_deref(), &entries);
+
+        // Anything the engine already carries has the stored intent asserted
+        // against it, whether it is a download or this device's own seed.
+        // Asserted rather than remembered: both verbs are idempotent, so
+        // re-stating costs nothing and cannot drift — and it is the only path
+        // by which a selection can change after a transfer has begun.
         if let Some(handle) = stored.substrate_handle {
+            let files = matches!(lifecycle, Lifecycle::TorrentRequested { .. })
+                .then(|| selected_indices(&entries));
             pending.push(Pending::Reconcile {
                 key,
                 handle,
-                paused: stored.paused,
-                files: Some(files),
+                paused: lifecycle.activity().is_some_and(|it| it.is_paused()),
+                files,
             });
             continue;
         }
-        // Resolved, but nobody has chosen yet. The interface is showing the
-        // list; waiting is the correct state, not a stalled one.
-        if files.is_empty() {
-            continue;
+
+        match lifecycle {
+            // Nothing knows what this source contains yet.
+            Lifecycle::TorrentResolving => {
+                if let Some(source) = source {
+                    pending.push(Pending::Resolve { key, source });
+                }
+            }
+            // The person confirmed a selection and nothing is carrying it.
+            Lifecycle::TorrentRequested { .. } => {
+                let files = selected_indices(&entries);
+                // Confirming with nothing chosen is refused at the command, so
+                // an empty list here would be a stored row that cannot happen.
+                // Skipped rather than sent: "fetch nothing" and "fetch
+                // everything" must never be the same request.
+                if let Some(source) = source
+                    && !files.is_empty()
+                {
+                    pending.push(Pending::Acquire { key, source, files });
+                }
+            }
+            // A draft has nothing to transfer, and a resolved selection nobody
+            // has confirmed is the interface waiting on a person rather than a
+            // stalled job. Every resolved entry starts selected so the screen
+            // opens with something in it, and reading that default as a request
+            // is what made reopening the app download a torrent that had only
+            // ever been inspected.
+            Lifecycle::NativeDraft
+            | Lifecycle::TorrentAwaitingSelection
+            // Publishing this device's own sources is the publisher's job.
+            | Lifecycle::NativePublished { .. } => {}
         }
-        // A resolved import is still a draft until the person presses
-        // Download. Every resolved file starts selected so the selection
-        // screen opens with something in it, which means a default selection
-        // is not a request — and acquiring one here started a transfer nobody
-        // asked for. Opening the app wakes this worker, so the effect was that
-        // reopening Portalis downloaded a torrent that had only been inspected.
-        if stored.draft {
-            continue;
-        }
-        pending.push(Pending::Acquire { key, source, files });
     }
     Ok(pending)
+}
+
+/// Which entries the person actually asked for, by index.
+fn selected_indices(entries: &[StoredImportEntry]) -> Vec<usize> {
+    entries
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| entry.selected)
+        .map(|(index, _)| index)
+        .collect()
 }
 
 async fn perform(store: &Store, substrate: &dyn Substrate, work: &Pending) -> anyhow::Result<()> {

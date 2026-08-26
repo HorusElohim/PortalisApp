@@ -261,20 +261,24 @@ impl LocalCollections {
             let revision = store
                 .current_revision(&key)?
                 .map_or(0, |(number, _)| number);
-            let torrent_import = store.torrent_import(&key)?.is_some();
+            let torrent_import = store.torrent_import(&key)?;
+            let lifecycle = crate::nexus::core::lifecycle::Lifecycle::of(
+                &stored,
+                torrent_import.as_deref(),
+                &imported_entries,
+            );
+            let torrent_import = torrent_import.is_some();
             // No live reading yet: hydration happens at open, before the
             // first poll. `status_for` knows that, and the poller refines it
             // within a second.
             let status = crate::nexus::projection::state::status_for(
                 crate::nexus::projection::state::StatusFacts {
-                    draft: stored.draft,
-                    paused: stored.paused,
                     carried: stored.substrate_handle.is_some(),
                     publishing: !local_sources.is_empty() && revision == 0,
                     importing: torrent_import,
                     locally_complete: !local_sources.is_empty()
                         && stored.substrate_handle.is_some(),
-                    live: None,
+                    ..crate::nexus::projection::state::StatusFacts::from_lifecycle(&lifecycle)
                 },
             );
             let (entries, total_bytes) = if local_sources.is_empty() {
@@ -750,11 +754,17 @@ impl Nexus {
             .collection(key)
             .map_err(persistence)?
             .ok_or_else(|| missing_collection(handle))?;
-        let importing = self
-            .store
-            .torrent_import(key)
-            .map_err(persistence)?
-            .is_some();
+        let import = self.store.torrent_import(key).map_err(persistence)?;
+        let importing = import.is_some();
+        let entries = if importing {
+            self.store
+                .torrent_import_entries(key)
+                .map_err(persistence)?
+        } else {
+            Vec::new()
+        };
+        let lifecycle =
+            crate::nexus::core::lifecycle::Lifecycle::of(&stored, import.as_deref(), &entries);
         let revision = self
             .store
             .current_revision(key)
@@ -763,13 +773,12 @@ impl Nexus {
         let held = self.holdings.get(key);
         let status = crate::nexus::projection::state::status_for(
             crate::nexus::projection::state::StatusFacts {
-                draft: stored.draft,
-                paused: stored.paused,
                 carried: stored.substrate_handle.is_some(),
                 publishing: !stored.sources.is_empty() && revision == 0,
                 importing,
                 locally_complete: !stored.sources.is_empty() && stored.substrate_handle.is_some(),
                 live: held.as_ref(),
+                ..crate::nexus::projection::state::StatusFacts::from_lifecycle(&lifecycle)
             },
         );
         self.update_collection(handle, |collection| collection.status = status)
@@ -1310,8 +1319,11 @@ async fn publish_pending_collections(
                 .filter(|(_, collection)| {
                     // A draft is deliberately skipped: its files are chosen
                     // but not offered, and hashing them would start seeding
-                    // something the person has not said to share.
-                    !collection.draft
+                    // something the person has not said to share. Asked of the
+                    // lifecycle rather than of a flag, so this worker and the
+                    // torrent worker cannot disagree about what a draft is.
+                    crate::nexus::core::lifecycle::Lifecycle::of(collection, None, &[])
+                        .is_requested()
                         && !collection.sources.is_empty()
                         && collection.substrate_handle.is_none()
                 })
@@ -1365,16 +1377,18 @@ async fn publish_pending_collections(
                     // is paused on purpose, and declaring it Available here
                     // made the interface offer Pause on something stopped.
                     let status = store.collection(&key).ok().flatten().map(|stored| {
+                        let lifecycle =
+                            crate::nexus::core::lifecycle::Lifecycle::of(&stored, None, &[]);
                         crate::nexus::projection::state::status_for(
                             crate::nexus::projection::state::StatusFacts {
-                                draft: stored.draft,
-                                paused: stored.paused,
                                 carried: stored.substrate_handle.is_some(),
                                 publishing: false,
                                 importing: false,
                                 locally_complete: !stored.sources.is_empty()
                                     && stored.substrate_handle.is_some(),
-                                live: None,
+                                ..crate::nexus::projection::state::StatusFacts::from_lifecycle(
+                                    &lifecycle,
+                                )
                             },
                         )
                     });

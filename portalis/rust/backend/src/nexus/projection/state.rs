@@ -202,6 +202,29 @@ pub struct StatusFacts<'a> {
     pub live: Option<&'a crate::nexus::torrent::TorrentInfo>,
 }
 
+impl StatusFacts<'_> {
+    /// The two decisions a person makes, read from one typed answer rather
+    /// than from two independent booleans.
+    ///
+    /// `draft` and `paused` were stored side by side and set by different call
+    /// sites, so a pause recorded against something that could not transfer
+    /// stayed there and resurfaced later. [`Lifecycle`] says which of the two
+    /// is meaningful for a given collection, and this carries that decision
+    /// into the projection unchanged.
+    #[must_use]
+    pub fn from_lifecycle(lifecycle: &crate::nexus::core::lifecycle::Lifecycle) -> Self {
+        Self {
+            draft: lifecycle.is_draft(),
+            paused: lifecycle.activity().is_some_and(|it| it.is_paused()),
+            carried: false,
+            publishing: false,
+            importing: false,
+            locally_complete: false,
+            live: None,
+        }
+    }
+}
+
 /// A transfer in flight. The progress tier, coalesced.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Transfer {

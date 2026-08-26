@@ -10,6 +10,7 @@
 //! - [`supervisor`]: task ownership, startup order, bounded shutdown.
 
 pub mod events;
+pub mod lifecycle;
 pub mod nexus;
 pub mod supervisor;
 pub mod torrents;
