@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../features/collections/domain/collection.dart';
+import '../../features/collections/domain/collection_state.dart';
 import '../../features/collections/domain/peer_observation.dart';
 import '../../features/collections/domain/picked_file.dart';
 import '../../features/collections/domain/transfer_history.dart';
@@ -179,7 +180,7 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
   /// Only a torrent import has files to choose between: a collection this
   /// device published owns all of them, and there is nothing to fetch.
   @override
-  bool get supportsSelection => _live?.nature == 'Torrent';
+  bool get supportsSelection => _live?.kind == CollectionNature.torrent;
 
   /// The same command whether or not the download has started. The core
   /// records the choice and its worker states it to the engine — beginning a

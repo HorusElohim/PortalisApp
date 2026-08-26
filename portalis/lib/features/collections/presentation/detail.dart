@@ -418,7 +418,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                   // An import with no file list yet is still being answered —
                   // by a descriptor on disk or by the swarm. Saying it holds
                   // nothing would be the screen guessing, and guessing wrong.
-                  collection.state == 'importing'
+                  collection.isPreparing
                       ? 'Looking up what this torrent contains…'
                       : 'Nothing in this collection yet.',
                   style: AppText.secondary(color: AppColors.textDim),

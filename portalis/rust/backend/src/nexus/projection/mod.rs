@@ -11,3 +11,4 @@
 pub mod build;
 pub mod emit;
 pub mod state;
+pub mod wire;

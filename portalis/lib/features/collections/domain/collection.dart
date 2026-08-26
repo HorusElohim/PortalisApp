@@ -1,5 +1,6 @@
 import '../../../nexus/domain/app_state.dart';
 import '../../media/domain/item.dart';
+import 'collection_state.dart';
 
 /// One collection, as the interface reads it.
 ///
@@ -40,24 +41,27 @@ class Collection {
   String get id => '${source.id}';
   String get name => source.name;
 
-  /// The engine's own word, not a translation of it. Comparing against these
-  /// directly is what keeps a status that nobody remembered to map from
-  /// silently reading as every question's `false`.
+  /// The engine's own word, not a translation of it. Kept as the raw string
+  /// for anything that displays it; every *decision* goes through [lifecycle]
+  /// instead, so an unrecognised word is visible rather than silently false.
   String get state => source.status;
 
-  bool get isTorrent => source.nature == 'Torrent';
+  /// What this collection is doing, parsed once. See [CollectionState].
+  CollectionState get lifecycle => source.lifecycle;
+
+  bool get isTorrent => source.kind == CollectionNature.torrent;
   bool get isShared => !isTorrent;
 
   /// Chosen but not shared: private to this device, and free to abandon.
-  bool get isDraft => state == 'Draft';
+  bool get isDraft => lifecycle == CollectionState.draft;
 
   /// Told to stop. A person's decision, so it outranks whatever the numbers
   /// are doing — and it decides which half of the start/stop pair is offered.
-  bool get isPaused => state == 'Paused';
-  bool get isConnecting => state == 'WaitingForOwner';
-  bool get isDownloading => state == 'Downloading';
-  bool get isPreparing => state == 'Preparing';
-  bool get isSeeding => state == 'Seeding';
+  bool get isPaused => lifecycle == CollectionState.paused;
+  bool get isConnecting => lifecycle == CollectionState.waitingForOwner;
+  bool get isDownloading => lifecycle == CollectionState.downloading;
+  bool get isPreparing => lifecycle == CollectionState.preparing;
+  bool get isSeeding => lifecycle == CollectionState.seeding;
 
   /// Complete, and with something to serve. Nothing to serve means nothing is
   /// being served — telling somebody their photos are available when the
@@ -68,7 +72,8 @@ class Collection {
   /// catch up after a restart. Entry count alone is transient during hydration.
   bool get canShareQr => !isDraft && (entryCount > 0 || revision > 0);
 
-  bool get isComplete => state == 'Available' || isSeeding;
+  bool get isComplete =>
+      lifecycle == CollectionState.available || isSeeding;
   bool get isMoving =>
       isDownloading || downBytesPerSecond > 0 || upBytesPerSecond > 0;
 
