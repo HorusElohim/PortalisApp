@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.40+41
+
+- Bumped the coordinated Flutter release to `1.0.40+41` and the Rust backend
+  to `0.1.38`.
+- What a collection *is* is now one typed answer rather than a set of loose
+  flags each worker reassembled for itself. `core/lifecycle.rs` reads the
+  stored row once and reports whether a collection is a draft, resolving,
+  waiting for the person to press Download, or genuinely requested — and
+  whether the person's pause means anything for it yet. The torrent worker,
+  the publisher, the projection rebuild, and every status refresh now ask that
+  one question instead of interpreting `draft` and `paused` independently,
+  which is what let them disagree.
+- A pause recorded against something that cannot transfer no longer names a
+  decision. It was stored beside `draft`, ignored while the collection was a
+  draft, and could resurface once the collection was confirmed.
+
 ## 1.0.39+40
 
 - Bumped the coordinated Flutter release to `1.0.39+40` and the Rust backend
