@@ -203,6 +203,15 @@ fn pending_work(store: &Store) -> Result<Vec<Pending>, crate::nexus::store::Stor
         if files.is_empty() {
             continue;
         }
+        // A resolved import is still a draft until the person presses
+        // Download. Every resolved file starts selected so the selection
+        // screen opens with something in it, which means a default selection
+        // is not a request — and acquiring one here started a transfer nobody
+        // asked for. Opening the app wakes this worker, so the effect was that
+        // reopening Portalis downloaded a torrent that had only been inspected.
+        if stored.draft {
+            continue;
+        }
         pending.push(Pending::Acquire { key, source, files });
     }
     Ok(pending)
@@ -393,6 +402,10 @@ mod tests {
     }
 
     fn collection(store: &Store, key: &[u8], source: &str) {
+        collection_with_draft(store, key, source, false);
+    }
+
+    fn collection_with_draft(store: &Store, key: &[u8], source: &str, draft: bool) {
         store
             .put_collection(
                 key,
@@ -405,13 +418,63 @@ mod tests {
                     paused: false,
                     on_disk_bytes: 0,
                     substrate_handle: None,
-                    draft: false,
+                    draft,
                     started_at: None,
                     completed_at: None,
                 },
             )
             .expect("writes");
         store.put_torrent_import(key, source).expect("writes");
+    }
+
+    /// Resolving a source selects every file so the selection screen opens
+    /// with something in it. That default is not a request: until the person
+    /// presses Download the collection is still a draft, and acquiring it
+    /// would fetch a torrent nobody asked for. Opening the app wakes this
+    /// worker, so without the guard merely reopening Portalis started the
+    /// download.
+    #[test]
+    fn a_resolved_draft_is_never_acquired_before_the_person_confirms_it() {
+        let (store, dir) = store();
+        collection_with_draft(&store, b"a", "magnet:?xt=urn:btih:abc", true);
+        store
+            .put_torrent_import_entries(
+                b"a",
+                &[StoredImportEntry {
+                    label: "one.mkv".to_owned(),
+                    bytes: 10,
+                    // Exactly what `resolve` writes: everything selected.
+                    selected: true,
+                    native_location: None,
+                }],
+            )
+            .expect("writes");
+
+        assert!(
+            pending_work(&store).expect("scans").is_empty(),
+            "a draft's default selection is not a download request"
+        );
+
+        // Confirming is what makes it work: the same rows, no longer a draft.
+        let stored = store.collection(b"a").expect("reads").expect("exists");
+        store
+            .put_collection(
+                b"a",
+                &StoredCollection {
+                    draft: false,
+                    ..stored
+                },
+            )
+            .expect("writes");
+        assert!(
+            matches!(
+                pending_work(&store).expect("scans").as_slice(),
+                [Pending::Acquire { files, .. }] if files == &[0]
+            ),
+            "pressing Download is what starts it"
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// A source nobody has resolved is work; the same source once resolved

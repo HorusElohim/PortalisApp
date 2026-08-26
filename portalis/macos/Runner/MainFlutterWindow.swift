@@ -32,7 +32,16 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     HeicPreview().register(with: flutterViewController.engine.binaryMessenger)
+    // Registered before the first frame, because its initialiser is what
+    // reclaims sandbox access to everything Portalis is still seeding. The
+    // backend starts rehydrating those sources as soon as Dart calls `start`,
+    // and it reads the person's original files rather than a copy.
+    Self.securityScopedSources.register(with: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }
+
+  /// One per process. The access a bookmark resolves lasts exactly as long as
+  /// the URL that holds it, so this must outlive any single window.
+  private static let securityScopedSources = SecurityScopedSources()
 }

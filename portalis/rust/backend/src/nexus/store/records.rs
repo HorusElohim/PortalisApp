@@ -351,9 +351,10 @@ impl StoredImportEntry {
         };
         // Rows written before native gallery ownership existed end after the
         // selection bit. They remain app-folder downloads until a new move.
-        let native_location = if reader.bytes.is_empty() {
-            None
-        } else if reader.byte()? == 0 {
+        // The absent-row and explicit-zero cases mean the same thing — no
+        // native location — and short-circuiting keeps the byte unread when
+        // there is none to read.
+        let native_location = if reader.bytes.is_empty() || reader.byte()? == 0 {
             None
         } else {
             Some(reader.string()?)
