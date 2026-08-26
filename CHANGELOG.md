@@ -67,6 +67,10 @@
 
 ### Fixed
 
+- Fixed clean iOS builds deleting `backend.xcframework` and then invoking
+  Xcode before its Rust producer ran. `tool/build.sh ios` now recreates the
+  XCFramework before Flutter/Xcode plans the Runner target.
+
 - Upgraded the Android build baseline to Gradle 9.1.0 and Android Gradle Plugin
   9.0.1 so Java 25 is supported by the local Flutter build, and migrated the
   app to AGP's built-in Kotlin mode. This also lets Kotlin-based plugins such

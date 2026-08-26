@@ -191,6 +191,15 @@ fi
 status "==> Checking Flutter-Rust Bridge inputs"
 run "$SCRIPT_DIR/frb_build.sh" "${FRB_ARGS[@]}"
 
+# Xcode validates linked XCFramework paths while it plans Runner, before an
+# aggregate target's build phase can materialize a missing framework. In
+# particular, `--clean` deliberately removes this artifact, so recreate it
+# before handing control to `flutter build ios`.
+if [[ "$FLUTTER_PLATFORM" == "ios" ]]; then
+  status "==> Building iOS Rust XCFramework"
+  run bash "$ROOT_DIR/ios/Runner/build_rust_ios.sh"
+fi
+
 status "==> Building $PLATFORM ($MODE)"
 BUILD_ARGS=("$MODE")
 if [[ "$FLUTTER_PLATFORM" == "ios" ]]; then
