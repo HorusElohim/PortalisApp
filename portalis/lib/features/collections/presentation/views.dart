@@ -79,7 +79,7 @@ class _CollectionRowState extends State<CollectionRow> {
     final accent = torrent ? AppColors.ember : AppColors.signal;
     final live =
         collection.downBytesPerSecond > 0 || collection.upBytesPerSecond > 0;
-    final downloading = collection.state == 'downloading';
+    final downloading = collection.isDownloading;
     // No metadata has arrived, so there is no total to measure against — an
     // indeterminate bar is the honest shape for "reaching out to a peer".
     final connecting = collection.isConnecting;
@@ -149,7 +149,7 @@ class _CollectionRowState extends State<CollectionRow> {
   Widget _status() {
     final collection = widget.collection;
     final accent = collection.isShared ? AppColors.signal : AppColors.ember;
-    if (collection.state == 'downloading') {
+    if (collection.isDownloading) {
       return StatusBadge(
         label: formatProgressPercent(collection.progress),
         color: accent,
@@ -159,7 +159,7 @@ class _CollectionRowState extends State<CollectionRow> {
       // Mint here is earned: this device is genuinely serving the collection.
       return StatusBadge(label: 'SHARING', color: accent);
     }
-    return StatusBadge(label: collection.state.toUpperCase());
+    return StatusBadge(label: collection.lifecycle.label(collection.state));
   }
 }
 

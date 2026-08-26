@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.39+40
+
+- Bumped the coordinated Flutter release to `1.0.39+40` and the Rust backend
+  to `0.1.37`.
+- The words the backend sends the interface are now an explicit contract
+  instead of whatever `#[derive(Debug)]` happened to print. Every status,
+  nature, role, friendship, and connectivity value is spelled out by hand in
+  `projection/wire.rs`, so adding or renaming one fails to compile until its
+  word is chosen deliberately. Flutter parses those words once, in
+  `CollectionState`, rather than comparing string literals in a dozen widgets.
+- Fixed three comparisons that had silently rotted and could never match:
+  two tested for `'downloading'` and one for `'importing'`, neither of which
+  the backend has ever emitted. A downloading collection now shows its
+  progress percentage in the list, and a torrent still resolving its file list
+  says so instead of claiming to be empty.
+- A status word the running build does not recognise is now reported as
+  unknown and shown verbatim, rather than silently answering "no" to every
+  question the interface asks about that collection.
+- Connectivity and friendship no longer cross the bridge as debug-formatted
+  Rust values: `Online(Security { .. })` is now simply `Online`.
+
 ## 1.0.38+39
 
 - Bumped the coordinated Flutter release to `1.0.38+39` and the Rust backend

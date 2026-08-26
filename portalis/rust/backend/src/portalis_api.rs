@@ -11,6 +11,7 @@ use std::sync::{Mutex, OnceLock};
 use crate::api::StreamSink;
 use crate::nexus::core::nexus::Nexus;
 use crate::nexus::projection::state::{Command, Detail, Handle, LocalFile, PortalisState};
+use crate::nexus::projection::wire::Wire;
 
 /// The complete, app-renderable Nexus projection.
 #[derive(Clone, Debug)]
@@ -530,7 +531,7 @@ fn snapshot(state: &PortalisState) -> AppSnapshot {
             fingerprint: state.device.fingerprint.clone(),
             devices: state.device.devices,
         },
-        connectivity: format!("{:?}", state.connectivity),
+        connectivity: state.connectivity.wire().to_owned(),
         contacts: state
             .contacts
             .iter()
@@ -540,46 +541,70 @@ fn snapshot(state: &PortalisState) -> AppSnapshot {
                 handle: contact.handle.clone(),
                 fingerprint: contact.fingerprint.clone(),
                 verified: contact.verified,
-                friendship: format!("{:?}", contact.friendship),
+                friendship: contact.friendship.wire().to_owned(),
                 reachable: contact.reachable.map(|security| format!("{security:?}")),
             })
             .collect(),
         collections: state
             .collections
             .iter()
-            .map(|collection| AppCollection {
-                id: collection.id.0,
-                name: collection.name.clone(),
-                nature: format!("{:?}", collection.nature),
-                role: format!("{:?}", collection.role),
-                revision: collection.revision,
-                status: format!("{:?}", collection.status),
-                members: collection.members.iter().map(|member| member.0).collect(),
-                entries: collection.entries,
-                total_bytes: collection.total_bytes,
-                on_disk_bytes: collection.on_disk_bytes,
-                uploaded_bytes: collection.uploaded_bytes,
-                started_at: collection.started_at,
-                completed_at: collection.completed_at,
-                transfer: collection.transfer.map(|transfer| AppTransfer {
-                    progress: transfer.progress,
-                    source_reading: transfer.source_reading,
-                    down_bytes_per_second: transfer.down_bytes_per_second,
-                    up_bytes_per_second: transfer.up_bytes_per_second,
-                    peers: transfer.peers,
-                    eta_secs: transfer.eta_secs,
-                }),
-                pending: collection.pending.map(|pending| AppPending {
-                    command: pending.command,
-                    queued: pending.queued,
-                }),
-            })
+            .map(collection_projection)
             .collect(),
         alerts: state
             .alerts
             .iter()
             .map(|alert| format!("{alert:?}"))
             .collect(),
+    }
+}
+
+/// One collection, as the app reads it.
+///
+/// Split out so the contract check has somewhere to live that is not four
+/// levels deep inside an iterator chain.
+fn collection_projection(
+    collection: &crate::nexus::projection::state::CollectionState,
+) -> AppCollection {
+    use crate::nexus::projection::state::Status;
+
+    let status = collection.status.wire();
+    // A status Flutter cannot match is a collection it answers `false` about
+    // to every question — no start button, no progress, no label. Cheap to
+    // check, and the one place the contract can be caught drifting at runtime.
+    // `CannotVerify` is deliberately exempt: it deals its reason out of the
+    // word, so it is emitted but not parsed back.
+    debug_assert!(
+        crate::nexus::projection::wire::emits::<Status>(status)
+            || matches!(collection.status, Status::CannotVerify(_)),
+        "status {status:?} is not a word the app contract knows"
+    );
+
+    AppCollection {
+        id: collection.id.0,
+        name: collection.name.clone(),
+        nature: collection.nature.wire().to_owned(),
+        role: collection.role.wire().to_owned(),
+        revision: collection.revision,
+        status: status.to_owned(),
+        members: collection.members.iter().map(|member| member.0).collect(),
+        entries: collection.entries,
+        total_bytes: collection.total_bytes,
+        on_disk_bytes: collection.on_disk_bytes,
+        uploaded_bytes: collection.uploaded_bytes,
+        started_at: collection.started_at,
+        completed_at: collection.completed_at,
+        transfer: collection.transfer.map(|transfer| AppTransfer {
+            progress: transfer.progress,
+            source_reading: transfer.source_reading,
+            down_bytes_per_second: transfer.down_bytes_per_second,
+            up_bytes_per_second: transfer.up_bytes_per_second,
+            peers: transfer.peers,
+            eta_secs: transfer.eta_secs,
+        }),
+        pending: collection.pending.map(|pending| AppPending {
+            command: pending.command,
+            queued: pending.queued,
+        }),
     }
 }
 
