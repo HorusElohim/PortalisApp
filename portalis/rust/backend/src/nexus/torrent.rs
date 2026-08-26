@@ -683,10 +683,28 @@ pub(crate) async fn acquire_selection(
 /// (librqbit's "forget", as opposed to "delete" which also unlinks them).
 /// Backs deleting a plain-torrent collection — see
 /// `collections::delete_collection`.
+/// Stops carrying a torrent in the current session.
+///
+/// Deliberately does **not** forget the durable source references. Releasing
+/// is what the transfer poller does to a torrent no collection currently
+/// claims, and a collection can be unclaimed for reasons that have nothing to
+/// do with the person deleting it — a publish that failed to record its handle,
+/// a rehydration that ran before the projection caught up. Purging the vault
+/// here destroyed the only record of where an owner's media actually lives, so
+/// the next launch could no longer restore it and reported the collection's
+/// files as living in the download folder instead. Forgetting the references
+/// belongs with the explicit act of deleting the collection.
 pub(crate) async fn forget_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
-    native::forget_torrent(info_hash_hex).await?;
-    crate::nexus::linked_source_store::remove(info_hash_hex)?;
-    Ok(())
+    native::forget_torrent(info_hash_hex).await
+}
+
+/// Forgets where one collection's original sources live.
+///
+/// Called when the person deletes the collection, which is the one moment the
+/// references are genuinely no longer wanted. No media is touched: the vault
+/// holds locations and a descriptor, never bytes.
+pub(crate) fn forget_linked_sources(info_hash_hex: &str) -> anyhow::Result<()> {
+    crate::nexus::linked_source_store::remove(info_hash_hex)
 }
 
 /// Rebinds one received torrent to durable native/gallery and filesystem

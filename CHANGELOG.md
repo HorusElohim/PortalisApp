@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.38+39
+
+- Bumped the coordinated Flutter release to `1.0.38+39` and the Rust backend
+  to `0.1.36`.
+- Releasing a torrent from the session no longer forgets where the person's
+  original media lives. The transfer poller releases any torrent no collection
+  currently claims, and that purged the source references — so a collection
+  briefly unclaimed during startup lost the only record of its originals, and
+  the next launch reported its files as living under the download folder. Only
+  deleting the collection forgets them now, which is the one moment they stop
+  being wanted.
+
 ## 1.0.37+38
 
 - Bumped the coordinated Flutter release to `1.0.37+38` and the Rust backend
