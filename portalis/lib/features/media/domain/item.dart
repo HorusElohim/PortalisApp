@@ -43,6 +43,22 @@ class MediaItem {
   /// path is the readiness signal. This avoids a stale progress value hiding
   /// a valid local file.
   bool get isReady => localPath != null;
+
+  /// Creates a presentation-only selection view without altering the source
+  /// location, verified progress, or other durable media facts.
+  MediaItem withSelected(bool value) => MediaItem(
+        label: label,
+        entryLabel: _entryLabel,
+        localPath: localPath,
+        progress: progress,
+        sizeBytes: sizeBytes,
+        downloadedBytes: downloadedBytes,
+        pieceRuns: pieceRuns,
+        fetched: fetched,
+        addedBy: addedBy,
+        entryId: entryId,
+        selected: value,
+      );
 }
 
 /// One exact file-relative intersection with torrent piece state. Missing
