@@ -272,6 +272,8 @@ impl LocalCollections {
                     carried: stored.substrate_handle.is_some(),
                     publishing: !local_sources.is_empty() && revision == 0,
                     importing: torrent_import,
+                    locally_complete: !local_sources.is_empty()
+                        && stored.substrate_handle.is_some(),
                     live: None,
                 },
             );
@@ -766,6 +768,7 @@ impl Nexus {
                 carried: stored.substrate_handle.is_some(),
                 publishing: !stored.sources.is_empty() && revision == 0,
                 importing,
+                locally_complete: !stored.sources.is_empty() && stored.substrate_handle.is_some(),
                 live: held.as_ref(),
             },
         );
@@ -1360,6 +1363,8 @@ async fn publish_pending_collections(
                                 carried: stored.substrate_handle.is_some(),
                                 publishing: false,
                                 importing: false,
+                                locally_complete: !stored.sources.is_empty()
+                                    && stored.substrate_handle.is_some(),
                                 live: None,
                             },
                         )
@@ -1902,8 +1907,8 @@ mod tests {
         // claims it is shared while the engine has been told to remain idle.
         assert_eq!(
             nexus.state().collections[0].status,
-            Status::Downloading,
-            "confirmed and ready to seed"
+            Status::Available,
+            "the owner already has the source and is ready to seed"
         );
 
         // Confirming twice is a second tap on a button, not an error.
@@ -2455,6 +2460,54 @@ mod tests {
         assert_eq!(
             std::fs::read(&second_path).expect("original remains"),
             b"second episode"
+        );
+        reopened.close().await;
+    }
+
+    #[tokio::test]
+    async fn a_reopened_published_owner_collection_is_available_while_its_zero_copy_seed_rehydrates()
+     {
+        let scratch = Scratch::new("reopened-owner-seed-status");
+        let source = scratch.0.join("episode.mp4");
+        std::fs::write(&source, b"episode").expect("writes source");
+        let nexus = open(&scratch);
+
+        let collection = nexus
+            .command(&Command::CreateCollection {
+                name: "Episodes".to_owned(),
+                files: vec![LocalFile {
+                    name: "episode.mp4".to_owned(),
+                    path: source,
+                    bytes: 7,
+                }],
+            })
+            .expect("creates the local collection")
+            .collection
+            .expect("names the collection");
+        let key = nexus.collection_key(collection).expect("collection key");
+        let stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("collection exists");
+        nexus
+            .store
+            .put_collection(
+                &key,
+                &StoredCollection {
+                    draft: false,
+                    substrate_handle: Some("44".repeat(20)),
+                    ..stored
+                },
+            )
+            .expect("records a published owner collection");
+        nexus.close().await;
+
+        let reopened = open(&scratch);
+        assert_eq!(
+            reopened.state().collections[0].status,
+            Status::Available,
+            "the owner already has the referenced source; startup rehydration must not present it as a receiver download"
         );
         reopened.close().await;
     }

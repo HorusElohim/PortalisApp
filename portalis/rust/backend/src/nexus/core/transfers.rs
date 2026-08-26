@@ -417,6 +417,7 @@ fn status_of_for(info: &TorrentInfo, paused: bool, local_source: bool) -> Status
         carried: true,
         publishing: false,
         importing: false,
+        locally_complete: local_source,
         live: Some(info),
     })
 }

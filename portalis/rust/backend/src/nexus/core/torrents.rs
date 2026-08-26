@@ -351,6 +351,7 @@ fn republish(store: &Store, states: &watch::Sender<PortalisState>, handle: Handl
                 carried,
                 publishing: false,
                 importing: true,
+                locally_complete: false,
                 live: None,
             },
         );

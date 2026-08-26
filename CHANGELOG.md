@@ -67,6 +67,11 @@
 
 ### Fixed
 
+- Restored published zero-copy owner collections as available for sharing
+  while their seed rehydrates after restart. They no longer present the
+  owner's original media as a receiver-side download before the engine's first
+  live reading arrives.
+
 - Kept incomplete transfer graphs anchored to their last real reading when
   receive activity stops, instead of adding synthetic zero-rate samples that
   stretch the timeline and compress earlier activity. The UI now retains the
