@@ -296,4 +296,24 @@ void main() {
     expect(find.text('UPLOAD'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('an active owner names upload activity as seeding',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TransferGraph(
+            progress: 1,
+            downBytesPerSecond: 0,
+            upBytesPerSecond: 1250000,
+            seeding: true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('SEEDING SPEED'), findsOneWidget);
+    expect(find.text('SEEDING'), findsOneWidget);
+    expect(find.text('RECEIVING SPEED'), findsNothing);
+  });
 }

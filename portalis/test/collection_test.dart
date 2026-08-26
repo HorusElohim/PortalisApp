@@ -3,6 +3,7 @@ import 'test_support.dart';
 import 'package:portalis/app/collection_link.dart';
 import 'package:portalis/nexus/data/collection_view.dart';
 import 'package:portalis/features/collections/presentation/share_qr.dart';
+import 'package:portalis/features/collections/presentation/overview.dart';
 
 import 'package:portalis/features/collections/domain/picked_file.dart';
 import 'package:portalis/features/collections/domain/transfer_history.dart';
@@ -72,6 +73,36 @@ void main() {
   tearDown(resetTestState);
 
   group('collection', () {
+    testWidgets('a seed names local ownership instead of downloaded bytes',
+        (tester) async {
+      final collection = buildCollection(
+        status: 'Seeding',
+        totalBytes: 1024,
+        entries: [buildEntry(bytes: 1024)],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CollectionOverview(
+              collection: collection,
+              busy: false,
+              onCommand: (_) {},
+              onAddMedia: () {},
+              onFetch: () {},
+              showCommands: false,
+            ),
+          ),
+        ),
+      );
+
+      expect(collection.isSeeding, isTrue);
+      expect(collection.isSharing, isTrue);
+      expect(collection.progress, 1);
+      expect(find.textContaining('LOCAL SOURCE VERIFIED'), findsOneWidget);
+      expect(find.text('0 B of 1 KB'), findsNothing);
+    });
+
     test('peer age keeps only the compact time unit', () {
       final now = DateTime(2026, 8, 11, 12);
 
