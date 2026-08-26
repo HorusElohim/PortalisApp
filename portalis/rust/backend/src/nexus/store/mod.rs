@@ -160,6 +160,12 @@ impl Store {
             });
         }
 
+        let migrated_collections = if found < 10 {
+            self.collections_from_schema_nine()?
+        } else {
+            Vec::new()
+        };
+
         let write = self.database.begin_write()?;
         {
             // Opening a table creates it. Listed explicitly so adding one to
@@ -169,7 +175,11 @@ impl Store {
             write.open_table(IDENTITY)?;
             write.open_table(DEVICE_LOG)?;
             write.open_table(CONTACTS)?;
-            write.open_table(COLLECTIONS)?;
+            let mut collections = write.open_table(COLLECTIONS)?;
+            for (key, collection) in migrated_collections {
+                collections.insert(key.as_slice(), collection.encode().as_slice())?;
+            }
+            drop(collections);
             write.open_table(REVISIONS)?;
             write.open_table(MANIFESTS)?;
             write.open_table(ENTRIES)?;
@@ -184,6 +194,52 @@ impl Store {
         }
         write.commit()?;
         Ok(())
+    }
+
+    /// Reads every pre-schema-10 collection together with the torrent tables
+    /// that gave its old `draft` bit meaning, then returns current rows ready
+    /// for one atomic rewrite.
+    fn collections_from_schema_nine(&self) -> Result<Vec<(Vec<u8>, StoredCollection)>, StoreError> {
+        let read = self.database.begin_read()?;
+        let collections = match read.open_table(COLLECTIONS) {
+            Ok(table) => table,
+            Err(redb::TableError::TableDoesNotExist(_)) => return Ok(Vec::new()),
+            Err(error) => return Err(error.into()),
+        };
+        let imports = match read.open_table(TORRENT_IMPORTS) {
+            Ok(table) => Some(table),
+            Err(redb::TableError::TableDoesNotExist(_)) => None,
+            Err(error) => return Err(error.into()),
+        };
+        let import_entries = match read.open_table(TORRENT_IMPORT_ENTRIES) {
+            Ok(table) => Some(table),
+            Err(redb::TableError::TableDoesNotExist(_)) => None,
+            Err(error) => return Err(error.into()),
+        };
+        let mut migrated = Vec::new();
+
+        for row in collections.iter()? {
+            let (key, value) = row?;
+            let key = key.value().to_vec();
+            let has_import = if let Some(table) = imports.as_ref() {
+                table.get(key.as_slice())?.is_some()
+            } else {
+                false
+            };
+            let has_entries = if let Some(table) = import_entries.as_ref() {
+                let (low, high) = schema::range_of(&key);
+                table
+                    .range(low.as_slice()..=high.as_slice())?
+                    .next()
+                    .transpose()?
+                    .is_some()
+            } else {
+                false
+            };
+            let collection = StoredCollection::decode_v9(value.value(), has_import, has_entries)?;
+            migrated.push((key, collection));
+        }
+        Ok(migrated)
     }
 
     /// The schema version recorded in the file, or 0 for a store that has
@@ -698,7 +754,7 @@ mod tests {
     //! module exists for, which is surviving a restart.
 
     use portalis_nexus_protocol::CONTENT_KEY_BYTES;
-    use records::{EntryStatus, Role, StoredImportEntry};
+    use records::{EntryStatus, Role, StoredActivity, StoredImportEntry, StoredLifecycle};
 
     use super::*;
 
@@ -741,10 +797,11 @@ mod tests {
             content_key: [7; CONTENT_KEY_BYTES],
             media_path: "/media".to_owned(),
             sources: Vec::new(),
-            paused: false,
+            lifecycle: StoredLifecycle::NativePublished {
+                activity: StoredActivity::Running,
+            },
             on_disk_bytes: 0,
             substrate_handle: None,
-            draft: false,
             started_at: None,
             completed_at: None,
         }
@@ -880,16 +937,19 @@ mod tests {
         let scratch = Scratch::new("older");
         {
             let store = Store::open(scratch.file()).expect("opens");
-            store
-                .put_collection(&COLLECTION, &collection("from before"))
-                .expect("writes");
+            let legacy = collection("from before");
             let write = store.database.begin_write().expect("writes");
             {
                 write
+                    .open_table(COLLECTIONS)
+                    .expect("collections")
+                    .insert(COLLECTION.as_slice(), legacy.encode_v9().as_slice())
+                    .expect("writes predecessor bytes");
+                write
                     .open_table(META)
                     .expect("meta")
-                    .insert(SCHEMA_VERSION_KEY, 0_u64)
-                    .expect("rewinds the version");
+                    .insert(SCHEMA_VERSION_KEY, 9_u64)
+                    .expect("marks predecessor schema");
             }
             write.commit().expect("commits");
         }
@@ -901,6 +961,115 @@ mod tests {
             store.collection(&COLLECTION).expect("reads"),
             Some(collection("from before")),
             "and nothing was lost bringing it forward"
+        );
+    }
+
+    /// Schema 9 kept `draft` and `paused` as independent bits. A resolved
+    /// torrent draft also kept every entry selected by default, so migration
+    /// must preserve "waiting for Download" rather than reinterpret those
+    /// defaults as permission to fetch.
+    #[test]
+    fn schema_nine_resolved_draft_migrates_to_awaiting_selection() {
+        let scratch = Scratch::new("schema-nine-awaiting");
+        {
+            let store = Store::open(scratch.file()).expect("opens");
+            let legacy = StoredCollection {
+                lifecycle: StoredLifecycle::TorrentAwaitingSelection,
+                ..collection("inspected, never requested")
+            };
+            store
+                .put_torrent_import(&COLLECTION, "magnet:?xt=urn:btih:abc")
+                .expect("writes source");
+            store
+                .put_torrent_import_entries(
+                    &COLLECTION,
+                    &[StoredImportEntry {
+                        label: "one.mkv".to_owned(),
+                        bytes: 10,
+                        selected: true,
+                        native_location: None,
+                    }],
+                )
+                .expect("writes the selected-by-default file list");
+
+            let write = store.database.begin_write().expect("writes legacy row");
+            {
+                write
+                    .open_table(COLLECTIONS)
+                    .expect("collections")
+                    .insert(COLLECTION.as_slice(), legacy.encode_v9().as_slice())
+                    .expect("writes schema-nine bytes");
+                write
+                    .open_table(META)
+                    .expect("meta")
+                    .insert(SCHEMA_VERSION_KEY, 9)
+                    .expect("marks schema nine");
+            }
+            write.commit().expect("commits legacy store");
+        }
+
+        let migrated = Store::open(scratch.file()).expect("migrates schema nine");
+        let collection = migrated
+            .collection(&COLLECTION)
+            .expect("reads")
+            .expect("collection survives");
+
+        assert_eq!(
+            collection.lifecycle,
+            StoredLifecycle::TorrentAwaitingSelection,
+            "selected-by-default is presentation state, not download consent"
+        );
+        assert_eq!(migrated.version().expect("reads version"), 10);
+    }
+
+    #[test]
+    fn a_failed_schema_nine_migration_changes_neither_version_nor_rows() {
+        let scratch = Scratch::new("schema-nine-damaged");
+        let mut damaged = collection("damaged predecessor").encode_v9();
+        damaged.truncate(damaged.len() - 3);
+        {
+            let store = Store::open(scratch.file()).expect("opens");
+            let write = store.database.begin_write().expect("writes legacy row");
+            {
+                write
+                    .open_table(COLLECTIONS)
+                    .expect("collections")
+                    .insert(COLLECTION.as_slice(), damaged.as_slice())
+                    .expect("writes damaged predecessor bytes");
+                write
+                    .open_table(META)
+                    .expect("meta")
+                    .insert(SCHEMA_VERSION_KEY, 9_u64)
+                    .expect("marks schema nine");
+            }
+            write.commit().expect("commits legacy store");
+        }
+
+        assert!(matches!(
+            Store::open(scratch.file()),
+            Err(StoreError::Malformed)
+        ));
+
+        let database = redb::Database::open(scratch.file()).expect("reopens raw database");
+        let read = database.begin_read().expect("reads raw database");
+        let meta = read.open_table(META).expect("meta survived");
+        assert_eq!(
+            meta.get(SCHEMA_VERSION_KEY)
+                .expect("reads version")
+                .expect("version exists")
+                .value(),
+            9,
+            "the schema marker commits only with every rewritten row"
+        );
+        let collections = read.open_table(COLLECTIONS).expect("collections survived");
+        assert_eq!(
+            collections
+                .get(COLLECTION.as_slice())
+                .expect("reads row")
+                .expect("row exists")
+                .value(),
+            damaged.as_slice(),
+            "a failed migration cannot partly rewrite the predecessor"
         );
     }
 

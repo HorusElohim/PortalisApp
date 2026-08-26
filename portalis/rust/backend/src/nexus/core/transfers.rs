@@ -218,7 +218,10 @@ fn carried_collections(
             stored.substrate_handle.map(|handle| CarriedCollection {
                 key,
                 handle,
-                paused: stored.paused,
+                paused: stored
+                    .lifecycle
+                    .activity()
+                    .is_some_and(crate::nexus::store::records::StoredActivity::is_paused),
                 local_source: !stored.sources.is_empty(),
             })
         })
@@ -421,8 +424,9 @@ fn status_of_for(info: &TorrentInfo, paused: bool, local_source: bool) -> Status
         return Status::Seeding;
     }
     crate::nexus::projection::state::status_for(crate::nexus::projection::state::StatusFacts {
-        draft: false,
-        paused,
+        lifecycle: crate::nexus::store::records::StoredLifecycle::TorrentRequested {
+            activity: crate::nexus::store::records::StoredActivity::Running,
+        },
         carried: true,
         publishing: false,
         importing: false,
@@ -638,10 +642,11 @@ mod tests {
             content_key: [0; 32],
             media_path: String::new(),
             sources: Vec::new(),
-            paused: false,
+            lifecycle: crate::nexus::store::records::StoredLifecycle::TorrentRequested {
+                activity: crate::nexus::store::records::StoredActivity::Running,
+            },
             on_disk_bytes: 0,
             substrate_handle: Some("abc".to_owned()),
-            draft: false,
             started_at: None,
             completed_at: None,
         }

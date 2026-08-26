@@ -34,7 +34,9 @@ use crate::nexus::projection::state::{
     Accepted, CollectionState, Command, CommandError, Connectivity, Detail, DeviceState, Handle,
     LocalFile, Nature, PortalisState, Role, Status,
 };
-use crate::nexus::store::records::{Role as StoredRole, StoredCollection, StoredSourceFile};
+use crate::nexus::store::records::{
+    Role as StoredRole, StoredActivity, StoredCollection, StoredLifecycle, StoredSourceFile,
+};
 use crate::nexus::store::{Store, StoreError};
 
 /// Where the core keeps its file, and who it is.
@@ -262,11 +264,7 @@ impl LocalCollections {
                 .current_revision(&key)?
                 .map_or(0, |(number, _)| number);
             let torrent_import = store.torrent_import(&key)?;
-            let lifecycle = crate::nexus::core::lifecycle::Lifecycle::of(
-                &stored,
-                torrent_import.as_deref(),
-                &imported_entries,
-            );
+            let lifecycle = stored.lifecycle;
             let torrent_import = torrent_import.is_some();
             // No live reading yet: hydration happens at open, before the
             // first poll. `status_for` knows that, and the poller refines it
@@ -278,7 +276,7 @@ impl LocalCollections {
                     importing: torrent_import,
                     locally_complete: !local_sources.is_empty()
                         && stored.substrate_handle.is_some(),
-                    ..crate::nexus::projection::state::StatusFacts::from_lifecycle(&lifecycle)
+                    ..crate::nexus::projection::state::StatusFacts::from_lifecycle(lifecycle)
                 },
             );
             let (entries, total_bytes) = if local_sources.is_empty() {
@@ -700,7 +698,7 @@ impl Nexus {
         }
     }
 
-    /// Clears the draft flag, so the publisher may act on it.
+    /// Moves a draft to the one executable state appropriate to its kind.
     ///
     /// Idempotent: confirming something already shared is not an error, it is
     /// a second tap on a button whose first tap worked.
@@ -711,24 +709,30 @@ impl Nexus {
             .collection(&key)
             .map_err(persistence)?
             .ok_or_else(|| missing_collection(collection))?;
-        let needs_publication = !stored.sources.is_empty() && stored.substrate_handle.is_none();
-        if !stored.draft && !needs_publication {
-            return Ok(());
-        }
-        if stored.draft {
+        let lifecycle = match stored.lifecycle {
+            StoredLifecycle::NativeDraft => Some(StoredLifecycle::NativePublished {
+                activity: StoredActivity::Running,
+            }),
+            // Already published is idempotent, but still reaches `republish`
+            // below: a crash can leave durable intent and revision in place
+            // before the substrate handle is recorded.
+            StoredLifecycle::NativePublished { .. } => None,
+            StoredLifecycle::TorrentResolving
+            | StoredLifecycle::TorrentAwaitingSelection
+            | StoredLifecycle::TorrentRequested { .. } => {
+                return Err(CommandError::Invalid(
+                    "torrent imports can only be confirmed with Download".to_owned(),
+                ));
+            }
+        };
+        if let Some(lifecycle) = lifecycle {
             self.store
                 .put_collection(
                     &key,
                     &StoredCollection {
-                        draft: false,
+                        lifecycle,
                         started_at: None,
                         completed_at: None,
-                        // Sharing is the explicit instruction to publish and
-                        // seed. Stopping it remains a separate Pause action;
-                        // confirming while leaving it paused produced no
-                        // usable torrent or link until an undocumented second
-                        // tap.
-                        paused: false,
                         ..stored
                     },
                 )
@@ -754,17 +758,12 @@ impl Nexus {
             .collection(key)
             .map_err(persistence)?
             .ok_or_else(|| missing_collection(handle))?;
-        let import = self.store.torrent_import(key).map_err(persistence)?;
-        let importing = import.is_some();
-        let entries = if importing {
-            self.store
-                .torrent_import_entries(key)
-                .map_err(persistence)?
-        } else {
-            Vec::new()
-        };
-        let lifecycle =
-            crate::nexus::core::lifecycle::Lifecycle::of(&stored, import.as_deref(), &entries);
+        let importing = self
+            .store
+            .torrent_import(key)
+            .map_err(persistence)?
+            .is_some();
+        let lifecycle = stored.lifecycle;
         let revision = self
             .store
             .current_revision(key)
@@ -778,7 +777,7 @@ impl Nexus {
                 importing,
                 locally_complete: !stored.sources.is_empty() && stored.substrate_handle.is_some(),
                 live: held.as_ref(),
-                ..crate::nexus::projection::state::StatusFacts::from_lifecycle(&lifecycle)
+                ..crate::nexus::projection::state::StatusFacts::from_lifecycle(lifecycle)
             },
         );
         self.update_collection(handle, |collection| collection.status = status)
@@ -811,12 +810,11 @@ impl Nexus {
             content_key: crate::nexus::crypto::generate_content_key(),
             media_path: String::new(),
             sources: sources.clone(),
-            paused: false,
-            on_disk_bytes: 0,
-            substrate_handle: None,
             // Chosen, not yet shared. Publishing waits for the person to say
             // so, which is what makes abandoning one cost nothing.
-            draft: true,
+            lifecycle: StoredLifecycle::NativeDraft,
+            on_disk_bytes: 0,
+            substrate_handle: None,
             started_at: None,
             completed_at: None,
         };
@@ -882,12 +880,10 @@ impl Nexus {
             content_key: crate::nexus::crypto::generate_content_key(),
             media_path: String::new(),
             sources: Vec::new(),
-            paused: false,
+            // Nothing is selectable until metadata resolution finishes.
+            lifecycle: StoredLifecycle::TorrentResolving,
             on_disk_bytes: 0,
             substrate_handle: None,
-            // An import is a draft for the same reason: its file list is not
-            // known yet, so there is nothing the person could have confirmed.
-            draft: true,
             started_at: None,
             completed_at: None,
         };
@@ -915,9 +911,10 @@ impl Nexus {
             nature: Nature::Torrent,
             role: Role::Owner,
             revision: 0,
-            // Nothing is known about it yet, so there is nothing to confirm.
-            // Choosing files is what promotes it out of draft.
-            status: Status::Draft,
+            // Metadata resolution is active preparation, but not acquisition.
+            // Once the file list exists the lifecycle becomes AwaitingSelection
+            // and projects as Draft until the person presses Download.
+            status: Status::Preparing,
             members: Vec::new(),
             // Nothing is known about the contents until the worker has
             // resolved the source. Zero here is honest rather than a guess:
@@ -942,7 +939,7 @@ impl Nexus {
             .collection(&key)
             .map_err(persistence)?
             .ok_or_else(|| missing_collection(handle))?;
-        if !stored.draft {
+        if stored.lifecycle != StoredLifecycle::NativeDraft {
             return Err(CommandError::Invalid(
                 "only an unshared collection can receive more files".to_owned(),
             ));
@@ -1016,7 +1013,29 @@ impl Nexus {
             .collection(&key)
             .map_err(persistence)?
             .ok_or_else(|| missing_collection(handle))?;
-        stored.paused = paused;
+        stored.lifecycle = match stored.lifecycle {
+            StoredLifecycle::NativePublished { .. } => StoredLifecycle::NativePublished {
+                activity: if paused {
+                    StoredActivity::Paused
+                } else {
+                    StoredActivity::Running
+                },
+            },
+            StoredLifecycle::TorrentRequested { .. } => StoredLifecycle::TorrentRequested {
+                activity: if paused {
+                    StoredActivity::Paused
+                } else {
+                    StoredActivity::Running
+                },
+            },
+            StoredLifecycle::NativeDraft
+            | StoredLifecycle::TorrentResolving
+            | StoredLifecycle::TorrentAwaitingSelection => {
+                return Err(CommandError::Invalid(
+                    "only a requested collection can be paused or resumed".to_owned(),
+                ));
+            }
+        };
         self.store
             .put_collection(&key, &stored)
             .map_err(persistence)?;
@@ -1166,17 +1185,54 @@ impl Nexus {
                 "the selected torrent file is no longer available".to_owned(),
             ));
         }
+        let stored = self
+            .store
+            .collection(&key)
+            .map_err(persistence)?
+            .ok_or_else(|| missing_collection(collection))?;
+        let requested_lifecycle = match stored.lifecycle {
+            StoredLifecycle::TorrentAwaitingSelection => Some(StoredLifecycle::TorrentRequested {
+                activity: StoredActivity::Running,
+            }),
+            // A repeated Download may update the durable selection, but it
+            // does not silently resume a collection the person paused.
+            StoredLifecycle::TorrentRequested { .. } => None,
+            StoredLifecycle::TorrentResolving => {
+                return Err(CommandError::Invalid(
+                    "the torrent file list has not finished resolving".to_owned(),
+                ));
+            }
+            StoredLifecycle::NativeDraft | StoredLifecycle::NativePublished { .. } => {
+                return Err(CommandError::Invalid(
+                    "that collection is not a torrent import".to_owned(),
+                ));
+            }
+        };
         for (index, entry) in entries.iter_mut().enumerate() {
             entry.selected =
                 requested.contains(&u32::try_from(index).unwrap_or(u32::MAX).saturating_add(1));
         }
+        // Commit selection first. A crash between these writes remains safely
+        // AwaitingSelection; the unsafe inverse ordering could persist consent
+        // with an old or default selection.
         self.store
             .put_torrent_import_entries(&key, &entries)
             .map_err(persistence)?;
-        // Choosing the files *is* confirming a torrent draft: nothing else is
-        // left to decide, and a separate confirm step would be a button that
-        // only ever repeats what the tap before it already said.
-        self.publish_draft(collection)?;
+        if let Some(lifecycle) = requested_lifecycle {
+            self.store
+                .put_collection(
+                    &key,
+                    &StoredCollection {
+                        lifecycle,
+                        started_at: None,
+                        completed_at: None,
+                        ..stored
+                    },
+                )
+                .map_err(persistence)?;
+        }
+        self.refresh_status(collection, &key)?;
+        self.republish(collection, &key);
         self.refresh_detail(collection);
         // Notify coalesces duplicate wakes; it never reports a full queue.
         self.torrents.notify_one();
@@ -1322,8 +1378,7 @@ async fn publish_pending_collections(
                     // something the person has not said to share. Asked of the
                     // lifecycle rather than of a flag, so this worker and the
                     // torrent worker cannot disagree about what a draft is.
-                    crate::nexus::core::lifecycle::Lifecycle::of(collection, None, &[])
-                        .is_requested()
+                    collection.lifecycle.is_requested()
                         && !collection.sources.is_empty()
                         && collection.substrate_handle.is_none()
                 })
@@ -1377,8 +1432,7 @@ async fn publish_pending_collections(
                     // is paused on purpose, and declaring it Available here
                     // made the interface offer Pause on something stopped.
                     let status = store.collection(&key).ok().flatten().map(|stored| {
-                        let lifecycle =
-                            crate::nexus::core::lifecycle::Lifecycle::of(&stored, None, &[]);
+                        let lifecycle = stored.lifecycle;
                         crate::nexus::projection::state::status_for(
                             crate::nexus::projection::state::StatusFacts {
                                 carried: stored.substrate_handle.is_some(),
@@ -1387,7 +1441,7 @@ async fn publish_pending_collections(
                                 locally_complete: !stored.sources.is_empty()
                                     && stored.substrate_handle.is_some(),
                                 ..crate::nexus::projection::state::StatusFacts::from_lifecycle(
-                                    &lifecycle,
+                                    lifecycle,
                                 )
                             },
                         )
@@ -1911,6 +1965,25 @@ mod tests {
         );
         assert_eq!(nexus.state().collections[0].status, Status::Draft);
 
+        let refused = nexus
+            .command(&Command::SetPaused {
+                collection,
+                paused: true,
+            })
+            .expect_err("a draft has no transfer to pause");
+        assert!(matches!(refused, CommandError::Invalid(_)));
+        let key = nexus.collection_key(collection).expect("collection key");
+        assert_eq!(
+            nexus
+                .store
+                .collection(&key)
+                .expect("reads")
+                .expect("exists")
+                .lifecycle,
+            StoredLifecycle::NativeDraft,
+            "the rejected command cannot leave a pause that resurfaces later"
+        );
+
         nexus
             .command(&Command::PublishDraft { collection })
             .expect("confirms");
@@ -2148,7 +2221,9 @@ mod tests {
             .put_collection(
                 &key,
                 &StoredCollection {
-                    draft: false,
+                    lifecycle: StoredLifecycle::NativePublished {
+                        activity: StoredActivity::Running,
+                    },
                     substrate_handle: Some(info_hash.clone()),
                     ..stored
                 },
@@ -2608,7 +2683,9 @@ mod tests {
             .put_collection(
                 &key,
                 &StoredCollection {
-                    draft: false,
+                    lifecycle: StoredLifecycle::NativePublished {
+                        activity: StoredActivity::Running,
+                    },
                     substrate_handle: Some("44".repeat(20)),
                     ..stored
                 },
@@ -2883,17 +2960,31 @@ mod tests {
             .expect("records the import");
         let imported = nexus.state().collections[0].clone();
         assert_eq!(imported.name, "Torrent import");
-        // An import is a draft until its files are chosen — there is nothing
-        // to confirm yet, because nobody knows what is in it.
-        assert_eq!(imported.status, Status::Draft);
+        // Resolution is active metadata work, not download authorization. The
+        // collection becomes Draft only after a file list exists and awaits
+        // the person's explicit Download decision.
+        assert_eq!(imported.status, Status::Preparing);
         assert_eq!(imported.entries, 0, "metadata has not resolved yet");
         nexus.close().await;
 
         let reopened = open(&scratch);
         assert_eq!(reopened.state().collections.len(), 1);
-        // Still a draft after a restart: an unconfirmed import survives as
-        // what it was, rather than quietly promoting itself.
-        assert_eq!(reopened.state().collections[0].status, Status::Draft);
+        // Still resolving after a restart: it is active metadata work but can
+        // never acquire content until it reaches AwaitingSelection and the
+        // person presses Download.
+        assert_eq!(reopened.state().collections[0].status, Status::Preparing);
+        let key = reopened
+            .collection_key(reopened.state().collections[0].id)
+            .expect("collection key");
+        assert_eq!(
+            reopened
+                .store
+                .collection(&key)
+                .expect("reads")
+                .expect("exists")
+                .lifecycle,
+            StoredLifecycle::TorrentResolving
+        );
         reopened.close().await;
     }
 
@@ -2929,10 +3020,10 @@ mod tests {
             .expect("records the source");
         let handle = accepted.collection.expect("names its collection");
 
-        // Immediately: a row exists, and it does not pretend to know what is
-        // inside. A draft, because nothing has been chosen from it yet.
+        // Immediately: a row exists and metadata resolution is visibly active,
+        // but this does not authorize downloading any content.
         let imported = nexus.state().collections[0].clone();
-        assert_eq!(imported.status, Status::Draft);
+        assert_eq!(imported.status, Status::Preparing);
         assert_eq!(imported.entries, 0, "nothing is known yet");
 
         let mut watching = nexus.watch_detail(Some(handle));
@@ -2949,6 +3040,11 @@ mod tests {
         );
         assert_eq!(resolved.entries, 2);
         assert_eq!(resolved.total_bytes, 12);
+        assert_eq!(
+            resolved.status,
+            Status::Draft,
+            "resolved choices wait for the explicit Download action"
+        );
         let detail = watching.borrow().clone().expect("a selection");
         assert_eq!(detail.entries[0].label, "a.txt");
         assert!(
@@ -2958,6 +3054,29 @@ mod tests {
         assert!(
             substrate.selections.lock().unwrap().is_empty(),
             "and nothing is downloaded before anyone chooses"
+        );
+
+        // Publish is for local files this device owns. Routing a resolved
+        // import through it would promote awaiting-selection straight to
+        // executable, which is the explicit-Download bypass this refuses.
+        let refused = nexus
+            .command(&Command::PublishDraft { collection: handle })
+            .expect_err("an import is confirmed with Download, not Publish");
+        assert!(matches!(refused, CommandError::Invalid(_)));
+        let key = nexus.collection_key(handle).expect("collection key");
+        assert_eq!(
+            nexus
+                .store
+                .collection(&key)
+                .expect("reads")
+                .expect("exists")
+                .lifecycle,
+            StoredLifecycle::TorrentAwaitingSelection,
+            "the refusal left no executable intent behind"
+        );
+        assert!(
+            substrate.selections.lock().unwrap().is_empty(),
+            "and produced no acquisition work"
         );
 
         // Choosing one file starts exactly that download.
@@ -3054,10 +3173,11 @@ mod tests {
                     content_key: [0; 32],
                     media_path: scratch.0.join("media").to_string_lossy().into_owned(),
                     sources: Vec::new(),
-                    paused: false,
+                    lifecycle: StoredLifecycle::TorrentRequested {
+                        activity: StoredActivity::Running,
+                    },
                     on_disk_bytes: 0,
                     substrate_handle: Some("a1b2".to_owned()),
-                    draft: false,
                     started_at: None,
                     completed_at: None,
                 },

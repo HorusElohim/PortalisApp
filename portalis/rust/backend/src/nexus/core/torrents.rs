@@ -31,7 +31,7 @@ use tokio::sync::{Notify, watch};
 
 use crate::nexus::projection::state::{Handle, PortalisState};
 use crate::nexus::store::Store;
-use crate::nexus::store::records::{StoredCollection, StoredImportEntry};
+use crate::nexus::store::records::{StoredCollection, StoredImportEntry, StoredLifecycle};
 use crate::nexus::substrate::Substrate;
 
 /// A failed resolve remains durable work. Back off before scanning it again so
@@ -164,7 +164,7 @@ fn pending_work(store: &Store) -> Result<Vec<Pending>, crate::nexus::store::Stor
         } else {
             Vec::new()
         };
-        let lifecycle = Lifecycle::of(&stored, source.as_deref(), &entries);
+        let lifecycle = stored.lifecycle;
 
         // Anything the engine already carries has the stored intent asserted
         // against it, whether it is a download or this device's own seed.
@@ -299,6 +299,7 @@ async fn resolve(
             key,
             &StoredCollection {
                 name: inspected.name.clone(),
+                lifecycle: StoredLifecycle::TorrentAwaitingSelection,
                 ..stored
             },
         )?;
@@ -366,13 +367,11 @@ fn republish(store: &Store, states: &watch::Sender<PortalisState>, handle: Handl
         // only has to be right about what the store knows.
         let status = crate::nexus::projection::state::status_for(
             crate::nexus::projection::state::StatusFacts {
-                draft: stored.draft,
-                paused: stored.paused,
                 carried,
                 publishing: false,
                 importing: true,
                 locally_complete: false,
-                live: None,
+                ..crate::nexus::projection::state::StatusFacts::from_lifecycle(stored.lifecycle)
             },
         );
         if collection.name == name
@@ -413,10 +412,26 @@ mod tests {
     }
 
     fn collection(store: &Store, key: &[u8], source: &str) {
-        collection_with_draft(store, key, source, false);
+        collection_with_lifecycle(store, key, source, StoredLifecycle::TorrentResolving);
     }
 
     fn collection_with_draft(store: &Store, key: &[u8], source: &str, draft: bool) {
+        let lifecycle = if draft {
+            StoredLifecycle::TorrentAwaitingSelection
+        } else {
+            StoredLifecycle::TorrentRequested {
+                activity: crate::nexus::store::records::StoredActivity::Running,
+            }
+        };
+        collection_with_lifecycle(store, key, source, lifecycle);
+    }
+
+    fn collection_with_lifecycle(
+        store: &Store,
+        key: &[u8],
+        source: &str,
+        lifecycle: StoredLifecycle,
+    ) {
         store
             .put_collection(
                 key,
@@ -426,10 +441,9 @@ mod tests {
                     content_key: [0; 32],
                     media_path: String::new(),
                     sources: Vec::new(),
-                    paused: false,
+                    lifecycle,
                     on_disk_bytes: 0,
                     substrate_handle: None,
-                    draft,
                     started_at: None,
                     completed_at: None,
                 },
@@ -472,7 +486,9 @@ mod tests {
             .put_collection(
                 b"a",
                 &StoredCollection {
-                    draft: false,
+                    lifecycle: StoredLifecycle::TorrentRequested {
+                        activity: crate::nexus::store::records::StoredActivity::Running,
+                    },
                     ..stored
                 },
             )
@@ -514,6 +530,16 @@ mod tests {
                 }],
             )
             .expect("writes");
+        let stored = store.collection(b"a").expect("reads").expect("exists");
+        store
+            .put_collection(
+                b"a",
+                &StoredCollection {
+                    lifecycle: StoredLifecycle::TorrentAwaitingSelection,
+                    ..stored
+                },
+            )
+            .expect("resolution moves it to awaiting selection");
         assert!(pending_work(&store).expect("scans").is_empty());
 
         let _ = std::fs::remove_dir_all(dir);
@@ -522,7 +548,7 @@ mod tests {
     #[test]
     fn a_chosen_selection_is_work_until_something_is_carrying_it() {
         let (store, dir) = store();
-        collection(&store, b"a", "magnet:?xt=urn:btih:abc");
+        collection_with_draft(&store, b"a", "magnet:?xt=urn:btih:abc", false);
         store
             .put_torrent_import_entries(
                 b"a",
@@ -646,10 +672,11 @@ mod tests {
                     content_key: [0; 32],
                     media_path: String::new(),
                     sources: Vec::new(),
-                    paused: false,
+                    lifecycle: StoredLifecycle::NativePublished {
+                        activity: crate::nexus::store::records::StoredActivity::Running,
+                    },
                     on_disk_bytes: 0,
                     substrate_handle: None,
-                    draft: false,
                     started_at: None,
                     completed_at: None,
                 },

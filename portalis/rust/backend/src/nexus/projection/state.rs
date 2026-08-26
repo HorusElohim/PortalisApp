@@ -132,13 +132,23 @@ pub enum Status {
 /// and the engine's activity outranks what the store can infer without it.
 #[must_use]
 pub fn status_for(facts: StatusFacts<'_>) -> Status {
-    // Nothing has happened and nothing will until somebody says so.
-    if facts.draft {
+    // Nothing has happened and nothing will until somebody says so. Resolving
+    // is different: the worker is doing something, so it falls through to
+    // Preparing rather than looking like it is waiting on the person.
+    if matches!(
+        facts.lifecycle,
+        crate::nexus::core::lifecycle::Lifecycle::NativeDraft
+            | crate::nexus::core::lifecycle::Lifecycle::TorrentAwaitingSelection
+    ) {
         return Status::Draft;
     }
     // A decision, so it outranks whatever the numbers are doing — a paused
     // collection still draining a buffer is paused, not downloading.
-    if facts.paused {
+    if facts
+        .lifecycle
+        .activity()
+        .is_some_and(crate::nexus::store::records::StoredActivity::is_paused)
+    {
         return Status::Paused;
     }
     // This device owns the source references that created the torrent. An
@@ -186,8 +196,9 @@ pub fn status_for(facts: StatusFacts<'_>) -> Status {
 /// disagreed did so by knowing different things — naming each one makes what
 /// a caller does *not* know impossible to pass by accident.
 pub struct StatusFacts<'a> {
-    pub draft: bool,
-    pub paused: bool,
+    /// Durable user intent. It is one enum specifically so impossible pairs
+    /// such as "paused draft" cannot enter the projection.
+    pub lifecycle: crate::nexus::core::lifecycle::Lifecycle,
     /// Something is carrying this under a substrate handle.
     pub carried: bool,
     /// Has native sources and no revision yet.
@@ -203,19 +214,12 @@ pub struct StatusFacts<'a> {
 }
 
 impl StatusFacts<'_> {
-    /// The two decisions a person makes, read from one typed answer rather
-    /// than from two independent booleans.
-    ///
-    /// `draft` and `paused` were stored side by side and set by different call
-    /// sites, so a pause recorded against something that could not transfer
-    /// stayed there and resurfaced later. [`Lifecycle`] says which of the two
-    /// is meaningful for a given collection, and this carries that decision
-    /// into the projection unchanged.
+    /// Begins with durable intent and no engine observation. Callers fill the
+    /// observed fields they actually know using struct update syntax.
     #[must_use]
-    pub fn from_lifecycle(lifecycle: &crate::nexus::core::lifecycle::Lifecycle) -> Self {
+    pub const fn from_lifecycle(lifecycle: crate::nexus::core::lifecycle::Lifecycle) -> Self {
         Self {
-            draft: lifecycle.is_draft(),
-            paused: lifecycle.activity().is_some_and(|it| it.is_paused()),
+            lifecycle,
             carried: false,
             publishing: false,
             importing: false,
@@ -524,8 +528,9 @@ mod status_tests {
 
     fn facts() -> StatusFacts<'static> {
         StatusFacts {
-            draft: false,
-            paused: false,
+            lifecycle: crate::nexus::core::lifecycle::Lifecycle::TorrentRequested {
+                activity: crate::nexus::core::lifecycle::Activity::Running,
+            },
             carried: false,
             publishing: false,
             importing: false,
@@ -540,8 +545,7 @@ mod status_tests {
     fn a_decision_outranks_whatever_the_engine_is_doing() {
         assert_eq!(
             status_for(StatusFacts {
-                draft: true,
-                paused: true,
+                lifecycle: crate::nexus::core::lifecycle::Lifecycle::NativeDraft,
                 carried: true,
                 ..facts()
             }),
@@ -550,7 +554,9 @@ mod status_tests {
         );
         assert_eq!(
             status_for(StatusFacts {
-                paused: true,
+                lifecycle: crate::nexus::core::lifecycle::Lifecycle::TorrentRequested {
+                    activity: crate::nexus::core::lifecycle::Activity::Paused,
+                },
                 carried: true,
                 ..facts()
             }),
@@ -578,7 +584,9 @@ mod status_tests {
         // which is what made the start/stop button offer the wrong half.
         assert_eq!(
             status_for(StatusFacts {
-                paused: true,
+                lifecycle: crate::nexus::core::lifecycle::Lifecycle::TorrentRequested {
+                    activity: crate::nexus::core::lifecycle::Activity::Paused,
+                },
                 carried: true,
                 importing: true,
                 ..facts()
@@ -588,6 +596,7 @@ mod status_tests {
         // Resolved or resolving, nothing carrying it yet: genuinely preparing.
         assert_eq!(
             status_for(StatusFacts {
+                lifecycle: crate::nexus::core::lifecycle::Lifecycle::TorrentResolving,
                 importing: true,
                 ..facts()
             }),
