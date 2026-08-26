@@ -57,8 +57,15 @@ pub(crate) fn descriptor_for(info_hash: &str) -> anyhow::Result<Vec<u8>> {
 /// them. These paths are projection data, not a staging layout: a caller uses
 /// them to preview the same source the storage adapter reads.
 pub(crate) fn sources_for(info_hash: &str) -> anyhow::Result<Option<Vec<SourceFile>>> {
+    Ok(record_for(info_hash)?.map(|record| record.sources))
+}
+
+/// The whole record, for a caller that has to rebuild the torrent rather than
+/// only describe it. Restoring a share needs the descriptor and the missing-
+/// file policy as well as the paths, and re-deriving those from a magnet would
+/// fetch content this device already holds.
+pub(crate) fn record_for(info_hash: &str) -> anyhow::Result<Option<LinkedSourceRecord>> {
     Ok(load()?
         .into_iter()
-        .find(|record| record.info_hash.eq_ignore_ascii_case(info_hash))
-        .map(|record| record.sources))
+        .find(|record| record.info_hash.eq_ignore_ascii_case(info_hash)))
 }

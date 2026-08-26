@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.0.37+38
+
+- Bumped the coordinated Flutter release to `1.0.37+38` and the Rust backend
+  to `0.1.35`.
+- A resolved torrent import is no longer acquired until the person presses
+  Download. Resolving selects every file so the selection screen opens with
+  something in it, and that default was being read as a request: because
+  opening the app wakes the import worker, reopening Portalis started
+  downloading a torrent that had only ever been inspected.
+- Restored shares now read the person's own files again. Rehydration was
+  leaving librqbit's output folder unset, so a reopened collection fell back to
+  the download directory instead of the info-hash-keyed metadata directory
+  publication had chosen, and two collections sharing a torrent name could
+  overwrite one another's state there. Resuming a share the session had
+  dropped rebuilds it from the retained source references for the same reason,
+  rather than re-adding it by info hash and fetching content this device
+  already holds.
+- One unreadable source no longer stops every later collection from being
+  restored: rehydration failures are now contained per collection instead of
+  abandoning the whole startup pass.
+- Restored torrents are added paused and started by the reconciler, so a
+  collection the person stopped never moves bytes during the window between
+  session startup and the first reconcile pass.
+- macOS now keeps security-scoped bookmarks for selected sources, matching what
+  iOS already does. A sandboxed app loses access to a chosen file when the
+  process that chose it exits, and because Portalis seeds the original file
+  rather than a copy, reopening the app failed with `Operation not permitted`
+  and stopped seeding everything it had shared.
+- Per-file source paths are matched by name rather than by list position when
+  a restored torrent reports its files, so a multi-file collection cannot show
+  one file's original location beside another file's name.
+
 ## 1.0.36+37
 
 - Bumped the coordinated Flutter release to `1.0.36+37` and the Rust backend

@@ -1093,55 +1093,84 @@ pub mod native {
     /// source vault instead. No media bytes are copied or staged.
     async fn rehydrate_linked_torrents(session: &Arc<Session>) -> anyhow::Result<()> {
         for record in crate::nexus::linked_source_store::load()? {
-            let sources = record
-                .sources
-                .iter()
-                .map(|source| {
-                    crate::nexus::content_location::ContentLocation::from_source_path(&source.path)
-                })
-                .collect::<anyhow::Result<Vec<_>>>()?;
-            let lengths = if record.allow_missing_files {
-                record
-                    .sources
-                    .iter()
-                    .map(|source| {
-                        source.length_bytes.ok_or_else(|| {
-                            anyhow::anyhow!("gallery-linked receiver source has no declared length")
-                        })
-                    })
-                    .collect::<anyhow::Result<Vec<_>>>()?
-            } else {
-                record
-                    .sources
-                    .iter()
-                    .zip(&sources)
-                    .map(|(source, location)| location.length(source.length_bytes))
-                    .collect::<anyhow::Result<Vec<_>>>()?
-            };
-            let options = AddTorrentOptions {
-                overwrite: true,
-                storage_factory: Some(ReferencedStorageFactory { sources, lengths }.boxed()),
-                ..Default::default()
-            };
-            match add_managed_torrent(
-                session,
-                AddTorrent::from_bytes(record.torrent_bytes),
-                options,
-            )
-            .await
-            {
-                Ok(_) => crate::nexus::log::clog!(
+            let info_hash = record.info_hash.clone();
+            // Contained per record: a source the person has since moved or
+            // deleted must cost that one collection, never every collection
+            // that would have been restored after it. Propagating the first
+            // failure abandoned the whole loop, so one stale path left every
+            // later share unseeded until it was fixed.
+            match rehydrate_linked_torrent(session, record).await {
+                Ok(()) => crate::nexus::log::clog!(
                     "torrent",
-                    "rehydrated linked torrent {} from original sources",
-                    record.info_hash
+                    "rehydrated linked torrent {info_hash} from original sources"
                 ),
                 Err(error) => crate::nexus::log::clog!(
                     "torrent",
-                    "could not rehydrate linked torrent {}: {error:#}",
-                    record.info_hash
+                    "could not rehydrate linked torrent {info_hash}: {error:#}"
                 ),
             }
         }
+        Ok(())
+    }
+
+    /// Restores one referenced torrent to exactly the shape publication gave
+    /// it: the same private metadata directory, the same original sources,
+    /// and no bytes moving until the reconciler says they may.
+    async fn rehydrate_linked_torrent(
+        session: &Arc<Session>,
+        record: crate::nexus::linked_source_store::LinkedSourceRecord,
+    ) -> anyhow::Result<()> {
+        let sources = record
+            .sources
+            .iter()
+            .map(|source| {
+                crate::nexus::content_location::ContentLocation::from_source_path(&source.path)
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let lengths = if record.allow_missing_files {
+            record
+                .sources
+                .iter()
+                .map(|source| {
+                    source.length_bytes.ok_or_else(|| {
+                        anyhow::anyhow!("gallery-linked receiver source has no declared length")
+                    })
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?
+        } else {
+            record
+                .sources
+                .iter()
+                .zip(&sources)
+                .map(|(source, location)| location.length(source.length_bytes))
+                .collect::<anyhow::Result<Vec<_>>>()?
+        };
+        // The same info-hash-keyed directory publication chose. Left unset,
+        // librqbit fell back to the session's download folder, so a restored
+        // collection reported its files as living under Downloads rather than
+        // at the sources it actually reads — and two collections sharing a
+        // torrent name overwrote one another's state there.
+        let metadata_dir = referenced_metadata_dir(&record.info_hash);
+        std::fs::create_dir_all(&metadata_dir)?;
+        let options = AddTorrentOptions {
+            overwrite: true,
+            output_folder: Some(metadata_dir.to_string_lossy().into_owned()),
+            // Restored stopped, on purpose. A person's pause outlives the
+            // process that took it, and starting every torrent here meant
+            // bytes moved for as long as it took the reconciler to assert the
+            // stored intent. The reconciler runs at open and unpauses whatever
+            // is genuinely meant to be running, so this is the safe half of an
+            // idempotent pair rather than a second source of truth.
+            paused: true,
+            storage_factory: Some(ReferencedStorageFactory { sources, lengths }.boxed()),
+            ..Default::default()
+        };
+        add_managed_torrent(
+            session,
+            AddTorrent::from_bytes(record.torrent_bytes),
+            options,
+        )
+        .await?;
         Ok(())
     }
 
@@ -1774,8 +1803,13 @@ pub mod native {
         let info_hash = handle.info_hash().as_string();
         let mut files = files_for(api, id, &stats, initializing);
         if let Ok(Some(sources)) = crate::nexus::linked_source_store::sources_for(&info_hash) {
-            for (file, source) in files.iter_mut().zip(sources) {
-                file.absolute_path = source.path;
+            // Matched by name rather than by position: librqbit orders a
+            // torrent's files its own way, so lining the two lists up by index
+            // put one file's original source path beside another file's name.
+            for file in &mut files {
+                if let Some(source) = sources.iter().find(|source| source.name == file.name) {
+                    file.absolute_path = source.path.clone();
+                }
             }
         }
         // `PeerStatsFilter`/`PeerStatsSnapshot` are private-in-public on
@@ -2243,6 +2277,19 @@ pub mod native {
             return session.unpause(&handle).await.context("restarting torrent");
         }
 
+        // Gone from the session but known to the vault: this device owns the
+        // sources, so it is restored the way publication built it — reading
+        // the person's own files, into its own metadata directory. Re-adding
+        // it by info hash instead asked the swarm for content this device
+        // already has and wrote it into the download folder, which is both a
+        // second copy of the person's media and the reason a reopened share
+        // pointed at Downloads instead of the file it was made from.
+        if let Some(record) = crate::nexus::linked_source_store::record_for(info_hash_hex)? {
+            return rehydrate_linked_torrent(&session, record)
+                .await
+                .with_context(|| format!("restoring linked torrent {info_hash_hex}"));
+        }
+
         add_managed_torrent(&session, AddTorrent::from_url(info_hash_hex), add_opts())
             .await
             .with_context(|| format!("re-adding torrent {info_hash_hex}"))?;
@@ -2318,8 +2365,9 @@ pub mod native {
     #[cfg(test)]
     mod referenced_storage_tests {
         use super::{
-            PublishProgress, ReferencedStorage, ReferencedStorageFactory, SourceFile,
+            PublishProgress, ReferencedStorage, ReferencedStorageFactory, SourceFile, api,
             create_referenced_collection, create_referenced_metainfo, install_rustls_ring_provider,
+            rehydrate_linked_torrents, to_info,
         };
 
         #[test]
@@ -2467,6 +2515,135 @@ pub mod native {
             .expect("admits the subsequent zero-copy collection");
 
             assert_ne!(first.info_hash, second.info_hash);
+            std::fs::remove_dir_all(root).unwrap();
+        }
+
+        /// Reopening the app must restore a share as what it is: a torrent
+        /// reading the person's own files, where they actually live.
+        ///
+        /// Two things went wrong here. Rehydration left `output_folder`
+        /// unset, so librqbit fell back to the session's download directory
+        /// and every restored file reported itself as living under Downloads —
+        /// a path nothing had ever written. And one unreadable source aborted
+        /// the whole loop with `?`, so a single moved file left every later
+        /// collection unseeded.
+        #[tokio::test]
+        async fn rehydration_restores_original_sources_paused_and_survives_a_missing_one() {
+            let _state = crate::nexus::paths::redirect_to_temp();
+            install_rustls_ring_provider();
+            let root =
+                std::env::temp_dir().join(format!("portalis-rehydrate-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&root).unwrap();
+            let session = librqbit::Session::new_with_opts(
+                root.join("session"),
+                librqbit::SessionOptions {
+                    dht: None,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("starts a session");
+
+            let source_path = root.join("episode.mov");
+            std::fs::write(&source_path, b"episode bytes").unwrap();
+            let published = create_referenced_collection(
+                session.clone(),
+                "Episodes".into(),
+                vec![SourceFile {
+                    name: "episode.mov".into(),
+                    path: source_path.to_string_lossy().into_owned(),
+                    length_bytes: Some(13),
+                }],
+                vec![crate::nexus::content_location::ContentLocation::Filesystem(
+                    source_path.clone(),
+                )],
+                PublishProgress::new(13),
+            )
+            .await
+            .expect("publishes a zero-copy collection");
+
+            // A second record whose source the person has since moved away.
+            // It must not take the healthy one down with it.
+            crate::nexus::linked_source_store::upsert(
+                crate::nexus::linked_source_store::LinkedSourceRecord {
+                    info_hash: "ab".repeat(20),
+                    torrent_bytes: b"not a descriptor".to_vec(),
+                    sources: vec![SourceFile {
+                        name: "gone.mov".into(),
+                        path: root.join("gone.mov").to_string_lossy().into_owned(),
+                        length_bytes: Some(4),
+                    }],
+                    allow_missing_files: false,
+                },
+            )
+            .expect("records a stale collection");
+
+            // A fresh process: a new session, restoring from the vault alone.
+            let reopened = librqbit::Session::new_with_opts(
+                root.join("reopened"),
+                librqbit::SessionOptions {
+                    dht: None,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("starts the reopened session");
+            rehydrate_linked_torrents(&reopened)
+                .await
+                .expect("one unusable record is not a failed startup");
+
+            let restored_api = api(reopened.clone());
+            let restored_id = reopened
+                .with_torrents(|iter| {
+                    iter.filter(|(_, handle)| {
+                        handle
+                            .info_hash()
+                            .as_string()
+                            .eq_ignore_ascii_case(&published.info_hash)
+                    })
+                    .map(|(id, _)| id)
+                    .next()
+                })
+                .expect("the healthy collection was restored despite the stale one");
+
+            // The observable that actually catches it. `absolute_path` alone
+            // cannot: `to_info` overlays the vault's source paths afterwards,
+            // so it reads correctly even when librqbit was handed the wrong
+            // folder. The output folder is where librqbit would put bytes, and
+            // for a zero-copy owner that must never be the download directory.
+            let details = restored_api
+                .api_torrent_details(librqbit::api::TorrentIdOrHash::Id(restored_id))
+                .expect("reads the restored torrent's details");
+            assert!(
+                details.output_folder.contains(&published.info_hash),
+                "a restored share keeps its own info-hash-keyed metadata directory, got {}",
+                details.output_folder
+            );
+            assert!(
+                !details.output_folder.contains("Portalis-TorrentDebug"),
+                "the download folder is not where an owner's sources live: {}",
+                details.output_folder
+            );
+
+            let restored = to_info(
+                &restored_api,
+                restored_id,
+                &reopened
+                    .get(librqbit::api::TorrentIdOrHash::Id(restored_id))
+                    .expect("the restored handle"),
+            );
+            let file = restored.files.first().expect("its one file");
+            assert_eq!(
+                std::path::Path::new(&file.absolute_path),
+                source_path,
+                "a restored share reads the person's own file, not a Downloads path"
+            );
+            assert!(
+                !file.absolute_path.contains("Portalis-TorrentDebug"),
+                "the download folder is not where an owner's sources live: {}",
+                file.absolute_path
+            );
+
             std::fs::remove_dir_all(root).unwrap();
         }
     }

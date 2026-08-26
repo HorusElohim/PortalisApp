@@ -118,6 +118,10 @@ impl ContentLocation {
                 }
                 let file = std::fs::OpenOptions::new()
                     .create(true)
+                    // Explicitly not truncating: a torrent writes its pieces
+                    // out of order, so emptying the file on every open would
+                    // discard everything already received for it.
+                    .truncate(false)
                     .write(true)
                     .open(path)?;
                 #[cfg(target_family = "unix")]
