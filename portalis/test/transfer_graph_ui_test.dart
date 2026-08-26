@@ -124,6 +124,45 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('inactive incomplete history ends at its last recorded sample',
+      (tester) async {
+    final start = DateTime(2026, 8, 10, 19, 39, 20);
+    final lastSample = start.add(const Duration(seconds: 7));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 900,
+            child: TransferGraph(
+              progress: 0.6,
+              downBytesPerSecond: 0,
+              upBytesPerSecond: 0,
+              startedAt: start,
+              history: [
+                TransferPoint(
+                  at: start,
+                  downBytesPerSecond: 1000000,
+                  upBytesPerSecond: 0,
+                ),
+                TransferPoint(
+                  at: lastSample,
+                  downBytesPerSecond: 0,
+                  upBytesPerSecond: 0,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('RECEIVE HISTORY'), findsOneWidget);
+    expect(find.text('LAST RECORDED'), findsOneWidget);
+    expect(find.text('10/08/2026  19:39:27'), findsOneWidget);
+    expect(find.textContaining('LIVE ·'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
       'live native receive activity is labeled separately from progress',
       (tester) async {

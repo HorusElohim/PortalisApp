@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/features/collections/domain/transfer_history.dart';
 
 void main() {
-  test('keeps timestamped transfer samples at a readable cadence', () {
+  test('keeps timestamped transfer samples at the backend poll cadence', () {
     final start = DateTime(2026, 8, 5, 12, 0);
     final history = TransferHistory(startedAt: start);
 
@@ -22,7 +22,7 @@ void main() {
         upBytesPerSecond: 0,
         progress: 0.2,
       ),
-      isFalse,
+      isTrue,
     );
     expect(
       history.record(
@@ -34,7 +34,7 @@ void main() {
       isTrue,
     );
 
-    expect(history.samples, hasLength(2));
+    expect(history.samples, hasLength(3));
     expect(history.samples.last.downBytesPerSecond, 3);
   });
 
@@ -56,5 +56,25 @@ void main() {
     expect(history.samples.single.at, sample.at);
     expect(history.samples.single.downBytesPerSecond, 525000);
     expect(history.completedAt, start.add(const Duration(minutes: 2)));
+  });
+
+  test('retains the core\'s full thirty-minute transfer ring', () {
+    final start = DateTime(2026, 8, 5, 12, 0);
+    final history = TransferHistory.restore(
+      startedAt: start,
+      samples: List.generate(
+        3601,
+        (index) => TransferSample(
+          at: start.add(Duration(milliseconds: 500 * index)),
+          downBytesPerSecond: index,
+          upBytesPerSecond: 0,
+          progress: index / 3600,
+        ),
+      ),
+    );
+
+    expect(history.samples, hasLength(3600));
+    expect(history.samples.first.downBytesPerSecond, 1);
+    expect(history.samples.last.downBytesPerSecond, 3600);
   });
 }
