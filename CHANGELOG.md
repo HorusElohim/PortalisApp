@@ -67,6 +67,12 @@
 
 ### Fixed
 
+- Kept incomplete transfer graphs anchored to their last real reading when
+  receive activity stops, instead of adding synthetic zero-rate samples that
+  stretch the timeline and compress earlier activity. The UI now retains the
+  core's complete 30-minute, 500-ms history ring and removes the duplicate
+  progress bar from the peer list.
+
 - Fixed clean iOS builds deleting `backend.xcframework` and then invoking
   Xcode before its Rust producer ran. `tool/build.sh ios` now recreates the
   XCFramework before Flutter/Xcode plans the Runner target.

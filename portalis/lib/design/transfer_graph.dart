@@ -133,7 +133,9 @@ class TransferGraph extends StatelessWidget {
                 ),
                 Expanded(
                   child: _TimelineLabel(
-                    title: graph.complete ? 'END' : 'LATEST',
+                    title: graph.complete
+                        ? 'END'
+                        : (graph.active ? 'LATEST' : 'LAST RECORDED'),
                     value: graph.end,
                     compact: compact,
                     alignEnd: true,
@@ -211,7 +213,11 @@ class _TransferGraphHeading extends StatelessWidget {
               Text(
                 graph.sourceReading
                     ? 'SOURCE READ'
-                    : (graph.complete ? 'RECEIVE SESSION' : 'RECEIVING SPEED'),
+                    : (graph.active
+                        ? 'RECEIVING SPEED'
+                        : (graph.complete
+                            ? 'RECEIVE SESSION'
+                            : 'RECEIVE HISTORY')),
                 style: monoLabel(
                   size: 10,
                   color: AppColors.textDim,
@@ -222,7 +228,9 @@ class _TransferGraphHeading extends StatelessWidget {
               Text(
                 graph.complete
                     ? 'COMPLETED IN ${graph.spanLabel}'
-                    : 'LIVE · ${graph.spanLabel}',
+                    : (graph.active
+                        ? 'LIVE · ${graph.spanLabel}'
+                        : 'LAST RECORDED · ${graph.spanLabel}'),
                 style: monoLabel(size: 10, color: AppColors.textGhost),
               ),
             ],
@@ -235,15 +243,15 @@ class _TransferGraphHeading extends StatelessWidget {
               _SeriesSummary(
                 color: color,
                 label: graph.sourceReading ? 'READING' : 'RECEIVING',
-                value: graph.complete
-                    ? 'peak ${formatRate(graph.peakDownload)}'
-                    : 'now ${formatRate(graph.downBytesPerSecond)} · peak ${formatRate(graph.peakDownload)}',
+                value: graph.active
+                    ? 'now ${formatRate(graph.downBytesPerSecond)} · peak ${formatRate(graph.peakDownload)}'
+                    : 'peak ${formatRate(graph.peakDownload)}',
               ),
               if (graph.hasUpload)
                 _SeriesSummary(
                   color: AppColors.signalSoft,
                   label: 'UPLOAD',
-                  value: graph.upBytesPerSecond > 0
+                  value: graph.active && graph.upBytesPerSecond > 0
                       ? 'now ${formatRate(graph.upBytesPerSecond)} · peak ${formatRate(graph.peakUpload)}'
                       : 'peak ${formatRate(graph.peakUpload)}',
                 ),
@@ -256,6 +264,7 @@ class _TransferGraphHeading extends StatelessWidget {
 class _TransferGraphState {
   const _TransferGraphState({
     required this.complete,
+    required this.active,
     required this.sourceReading,
     required this.downBytesPerSecond,
     required this.upBytesPerSecond,
@@ -282,6 +291,11 @@ class _TransferGraphState {
     // transfer metadata. In that case the final sample is the best truthful
     // end time available; treating it as "latest" suggests a live transfer.
     final complete = progress >= 1.0;
+    // A paused or disconnected incomplete transfer still has useful history,
+    // but it must not gain a synthetic "now" point on every rebuild. That
+    // stretches its time axis until the real line is visually compressed away.
+    final active =
+        !complete && (downBytesPerSecond > 0 || upBytesPerSecond > 0);
     final current = TransferPoint(
       at: now,
       downBytesPerSecond: downBytesPerSecond,
@@ -289,9 +303,9 @@ class _TransferGraphState {
     );
     final points = history.isEmpty
         ? [current]
-        : complete
-            ? history
-            : [...history, current];
+        : active
+            ? [...history, current]
+            : history;
     final start = startedAt ?? points.first.at;
     final lastSampleAt = points.last.at;
     final requestedEnd = completedAt ?? lastSampleAt;
@@ -315,6 +329,7 @@ class _TransferGraphState {
         positiveRates.isEmpty ? 0 : positiveRates.reduce(math.min);
     return _TransferGraphState(
       complete: complete,
+      active: active,
       sourceReading: sourceReading,
       downBytesPerSecond: downBytesPerSecond,
       upBytesPerSecond: upBytesPerSecond,
@@ -329,6 +344,7 @@ class _TransferGraphState {
   }
 
   final bool complete;
+  final bool active;
   final bool sourceReading;
   final int downBytesPerSecond;
   final int upBytesPerSecond;

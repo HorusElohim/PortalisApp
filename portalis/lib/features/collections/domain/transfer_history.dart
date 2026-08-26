@@ -18,8 +18,12 @@ class TransferHistory {
     return history;
   }
 
-  static const _sampleSpacing = Duration(seconds: 1);
-  static const _maxSamples = 1800;
+  // The Rust core writes at this cadence; thinning it again in the UI loses
+  // half of the persisted timeline before the chart can render it.
+  static const _sampleSpacing = Duration(milliseconds: 500);
+  // Match the backend's 3,600 samples at 500 ms: a complete thirty-minute
+  // graph survives both initial restoration and a long-open detail screen.
+  static const _maxSamples = 3600;
 
   final DateTime startedAt;
   final List<TransferSample> _samples = [];

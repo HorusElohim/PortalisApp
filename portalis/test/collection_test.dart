@@ -152,11 +152,13 @@ void main() {
       expect(find.textContaining(RegExp(r'^1[2-3]s$')), findsNWidgets(2));
       expect(find.textContaining('seen'), findsNothing);
       expect(find.textContaining('ago'), findsNothing);
-      expect(find.byKey(const Key('collectionPeerTransferProgress')),
-          findsOneWidget);
-      expect(find.text('25%'), findsOneWidget);
       expect(
-          find.text('250 B of 1 KB received on this device'), findsOneWidget);
+        find.byKey(const Key('collectionPeerTransferProgress')),
+        findsNothing,
+        reason: 'progress belongs to the transfer panel, not the peer list',
+      );
+      expect(find.text('COLLECTION TRANSFER'), findsNothing);
+      expect(find.text('250 B of 1 KB received on this device'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
