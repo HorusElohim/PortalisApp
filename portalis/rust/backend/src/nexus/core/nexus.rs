@@ -1065,17 +1065,26 @@ impl Nexus {
 
     fn delete_collection(&self, handle: Handle, delete_files: bool) -> Result<(), CommandError> {
         let key = self.collection_key(handle)?;
+        let stored = self.store.collection(&key).map_err(persistence)?;
         if delete_files {
-            let media_path = self
-                .store
-                .collection(&key)
-                .map_err(persistence)?
-                .map(|stored| stored.media_path);
             // Before the record goes, because afterwards there is nothing left
             // that knows where the files were.
-            if let Some(media_path) = media_path {
+            if let Some(media_path) = stored.as_ref().map(|stored| stored.media_path.clone()) {
                 remove_media(&media_path)?;
             }
+        }
+        // Deleting the collection is the one moment its source references stop
+        // being wanted. They are deliberately not dropped when a torrent is
+        // merely released from the session: a collection can be unclaimed for a
+        // moment without the person having asked for anything, and forgetting
+        // where an owner's media lives is not recoverable.
+        if let Some(substrate_handle) = stored.and_then(|stored| stored.substrate_handle)
+            && let Err(error) = crate::nexus::torrent::forget_linked_sources(&substrate_handle)
+        {
+            crate::nexus::log::clog!(
+                "nexus",
+                "could not forget linked sources for {substrate_handle}: {error:#}"
+            );
         }
         self.store
             .forget_torrent_import(&key)
@@ -2068,6 +2077,95 @@ mod tests {
             })
             .expect("resumes");
         assert_eq!(nexus.state().collections[0].status, Status::Available);
+        nexus.close().await;
+    }
+
+    /// Releasing a torrent must not forget where the person's media lives.
+    ///
+    /// The poller releases anything no collection currently claims, and a
+    /// collection can be unclaimed for a moment without anyone having asked
+    /// for it — a publish that has not recorded its handle yet, a rehydration
+    /// that ran before the projection caught up. Purging the source references
+    /// there destroyed the only record of where an owner's originals are, so
+    /// the next launch could not restore them and fell back to reporting the
+    /// download folder. Only deleting the collection forgets them.
+    #[tokio::test]
+    async fn releasing_a_torrent_keeps_the_source_references_and_deleting_drops_them() {
+        let _state = crate::nexus::paths::redirect_to_temp();
+        let scratch = Scratch::new("release-keeps-sources");
+        let source = scratch.0.join("episode.mp4");
+        std::fs::write(&source, b"episode").expect("writes source");
+        let info_hash = "55".repeat(20);
+        crate::nexus::linked_source_store::upsert(
+            crate::nexus::linked_source_store::LinkedSourceRecord {
+                info_hash: info_hash.clone(),
+                torrent_bytes: b"descriptor".to_vec(),
+                sources: vec![crate::nexus::torrent::SourceFile {
+                    name: "episode.mp4".to_owned(),
+                    path: source.to_string_lossy().into_owned(),
+                    length_bytes: Some(7),
+                }],
+                allow_missing_files: false,
+            },
+        )
+        .expect("records where the original lives");
+
+        let nexus = open(&scratch);
+        let collection = nexus
+            .command(&Command::CreateCollection {
+                name: "Episodes".to_owned(),
+                files: vec![LocalFile {
+                    name: "episode.mp4".to_owned(),
+                    path: source,
+                    bytes: 7,
+                }],
+            })
+            .expect("creates the collection")
+            .collection
+            .expect("names it");
+        let key = nexus.collection_key(collection).expect("collection key");
+        let stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads")
+            .expect("exists");
+        nexus
+            .store
+            .put_collection(
+                &key,
+                &StoredCollection {
+                    draft: false,
+                    substrate_handle: Some(info_hash.clone()),
+                    ..stored
+                },
+            )
+            .expect("records the published handle");
+
+        // Releasing is a session-level act, not a decision about the person's
+        // media. The references have to survive it.
+        crate::nexus::torrent::forget_torrent(&info_hash)
+            .await
+            .expect("releases without a live session");
+        assert!(
+            crate::nexus::linked_source_store::sources_for(&info_hash)
+                .expect("reads")
+                .is_some(),
+            "a released torrent still knows where its originals are"
+        );
+
+        // Deleting the collection is the one act that forgets them.
+        nexus
+            .command(&Command::DeleteCollection {
+                collection,
+                delete_files: false,
+            })
+            .expect("deletes");
+        assert!(
+            crate::nexus::linked_source_store::sources_for(&info_hash)
+                .expect("reads")
+                .is_none(),
+            "deleting the collection forgets its source references"
+        );
         nexus.close().await;
     }
 
