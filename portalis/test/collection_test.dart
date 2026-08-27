@@ -11,7 +11,6 @@ import 'package:portalis/features/collections/presentation/source.dart';
 
 import 'package:portalis/features/collections/domain/peer_observation.dart';
 import 'package:portalis/features/collections/presentation/peers.dart';
-import 'package:portalis/features/collections/presentation/peer_color.dart';
 
 /// A source that answers with exactly what it was given.
 ///
@@ -177,18 +176,15 @@ void main() {
         ),
       );
 
-      final active = tester.widget<Text>(find.text('203.0.113.5:6881'));
-      final idle = tester.widget<Text>(find.text('198.51.100.9:6881'));
-      expect(active.style?.color, AppColors.ember);
-      expect(
-        idle.style?.color,
-        rememberedPeerColor('198.51.100.9:6881'),
-      );
-      expect(idle.style?.color, isNot(AppColors.textFaint));
-      // A moving peer shows its rate; a quiet one says so rather than
-      // showing a rate that stopped being true.
-      expect(find.textContaining('↓'), findsOneWidget);
-      expect(find.text('idle'), findsOneWidget);
+      expect(find.byType(SurfaceCard), findsNWidgets(2));
+      expect(find.byType(GridView), findsOneWidget);
+      expect(find.text('LIVE'), findsOneWidget);
+      expect(find.text('Unknown client'), findsNWidgets(2));
+      // A moving peer shows a non-zero speed, while a quiet peer shows zero
+      // rather than a rate that stopped being true.
+      expect(find.text('512 KB/s'), findsOneWidget);
+      expect(find.text('0 B/s'), findsNWidgets(3));
+      expect(find.text('idle'), findsNothing);
       expect(find.textContaining('ago'), findsNothing);
       expect(
         find.byKey(const Key('collectionPeerTransferProgress')),
@@ -197,6 +193,46 @@ void main() {
       );
       expect(find.text('COLLECTION TRANSFER'), findsNothing);
       expect(find.text('250 B of 1 KB received on this device'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a peer is presented as a card with identity and four metrics',
+        (tester) async {
+      final collection = buildCollection(nature: 'Torrent');
+      final peer = PeerObservation(
+        collectionId: collection.id,
+        collectionName: collection.name,
+        address: '203.0.113.5:6881',
+        lastSeen: DateTime.now(),
+        client: 'qBittorrent/5.2.3',
+        downBytes: 1250000,
+        upBytes: 340000,
+        downBytesPerSecond: 512000,
+        upBytesPerSecond: 64000,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CollectionPeers(
+              collection: collection,
+              peerHistory: [peer],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('qBittorrent/5.2.3'), findsOneWidget);
+      expect(find.textContaining('203.0.113.5:6881'), findsOneWidget);
+      expect(find.text('DOWNLOADED'), findsOneWidget);
+      expect(find.text('UPLOADED'), findsOneWidget);
+      expect(find.text('DOWN SPEED'), findsOneWidget);
+      expect(find.text('UP SPEED'), findsOneWidget);
+      expect(find.text('1.3 MB'), findsOneWidget);
+      expect(find.text('340 KB'), findsOneWidget);
+      expect(find.text('512 KB/s'), findsOneWidget);
+      expect(find.text('64 KB/s'), findsOneWidget);
+      expect(find.text('LIVE'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
