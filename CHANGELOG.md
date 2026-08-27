@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.0.42+43
+
+- Bumped the coordinated Flutter release to `1.0.42+43` and the Rust backend
+  to `0.1.40`.
+- Swarm peers now carry what they have actually exchanged. librqbit already
+  counted bytes received and sent per peer and announced each peer's client
+  name; the engine was discarding all of it and keeping only the address.
+  Each connection now reports its own totals, its live up/down rates measured
+  between polls, and the name the peer reported for itself.
+- People shows those connections. It previously rendered contacts only, and
+  the contact list is always empty because nothing writes one yet, so the
+  screen could never show anything. Contacts and connections are separate
+  sections with different shapes: a contact is somebody whose fingerprint can
+  be compared, a connection is an address, and a self-reported client name is
+  labelled as reported rather than shown as an identity.
+- A peer's rate is the difference between two polls rather than its share of
+  the connection's lifetime average, so a peer that delivered a burst and went
+  quiet reads as idle instead of still working.
+- Removed the drag-to-resize handle under a collection's file grid. The grid
+  sizes to its content and the page scrolls; the handle existed only to manage
+  a scroll region nested inside another scroll region. The file list now has a
+  count header like every other section on the page.
+
 ## 1.0.41+42
 
 - Bumped the coordinated Flutter release to `1.0.41+42` and the Rust backend

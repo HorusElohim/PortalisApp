@@ -102,10 +102,10 @@ class Collection {
   int get livePeers => source.transfer?.peers ?? torrentPeers.length;
   int? get etaSecs => source.transfer?.etaSecs;
 
-  /// `"ip:port"` of this collection's live swarm peers. Anonymous: BitTorrent
-  /// carries no identity beyond a network address, so there is no name to
-  /// show, only that somebody is there.
-  List<String> get torrentPeers => detail?.peers ?? const [];
+  /// This collection's live swarm connections, with what each has actually
+  /// exchanged. Anonymous by construction: BitTorrent carries no identity
+  /// beyond a network address, and any client name is self-reported.
+  List<AppPeer> get torrentPeers => detail?.peers ?? const [];
 
   /// The people this collection is shared with, resolved against the contacts
   /// the snapshot already carries.

@@ -21,11 +21,13 @@ export '../bridge/portalis_api.dart'
     show
         AppAccepted,
         AppCollection,
+        AppCollectionPeer,
         AppContact,
         AppDetail,
         AppDevice,
         AppEntry,
         AppPending,
+        AppPeer,
         AppSnapshot,
         AppSourceFile,
         AppTransfer;

@@ -20,6 +20,7 @@ class AppController extends ChangeNotifier {
   AppSnapshot? _state;
   Stream<AppDetail?>? _debugDetails;
   Stream<Uint8List>? _debugHistory;
+  List<AppCollectionPeer>? _debugPeers;
   AppSnapshot? get state => _state;
 
   /// What the engine is doing, derived from the one state this controller
@@ -101,6 +102,25 @@ class AppController extends ChangeNotifier {
   Stream<Uint8List> watchHistory(int collection) =>
       _debugHistory ?? _repository.watchHistory(collection);
 
+  /// Every live swarm connection, polled by the one screen that shows them.
+  ///
+  /// Seeded controllers answer from [debugSeed] rather than reaching the
+  /// bridge, for the same reason the history stream does: a widget test must
+  /// not discover the native library is missing because something subscribed.
+  Future<List<AppCollectionPeer>> peers() async {
+    final seeded = _debugPeers;
+    if (seeded != null) return seeded;
+    try {
+      return await _repository.peers();
+    } catch (error) {
+      // Recorded, not announced. This is a poll for one screen, and notifying
+      // every listener from it rebuilds the whole app — including, if the poll
+      // began during a build, the widget currently being built.
+      lastError = '$error';
+      return const [];
+    }
+  }
+
   /// Seeds the projection for widgets that exercise app composition without a
   /// native runtime. Production state always arrives through [watchStates].
   @visibleForTesting
@@ -109,6 +129,7 @@ class AppController extends ChangeNotifier {
     String? error,
     Stream<AppDetail?>? details,
     Stream<Uint8List>? history,
+    List<AppCollectionPeer>? peers,
   }) {
     _state = state;
     lastError = error;
@@ -117,6 +138,7 @@ class AppController extends ChangeNotifier {
     // reach the bridge for anything, or a widget test discovers the native
     // library is missing at the moment something happens to subscribe.
     _debugHistory = history ?? const Stream<Uint8List>.empty();
+    _debugPeers = peers ?? const [];
     notifyListeners();
   }
 

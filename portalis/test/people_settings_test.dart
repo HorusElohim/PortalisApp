@@ -64,6 +64,50 @@ void main() {
 
       expect(find.textContaining('Nobody yet'), findsOneWidget);
     });
+
+    /// The figures a person actually wants from a swarm peer are what it has
+    /// exchanged and how fast — the only things about it this device measures
+    /// rather than takes on trust.
+    testWidgets('lists live connections with what each has exchanged',
+        (tester) async {
+      await tester.binding.setSurfaceSize(desktopSize);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(const MaterialApp(home: PeopleScreen()));
+      AppControllers.engine.debugSeed(
+        buildNexusState([
+          buildNexusCollection(id: 1, name: 'Iceland trip'),
+        ]),
+        peers: [
+          AppCollectionPeer(
+            collection: 1,
+            peer: buildPeer(
+              address: '203.0.113.5:6881',
+              client: 'qBittorrent 4.6',
+              downBytes: 4194304,
+              upBytes: 1048576,
+              downBytesPerSecond: 524288,
+            ),
+          ),
+          AppCollectionPeer(
+            collection: 1,
+            peer: buildPeer(address: '198.51.100.9:6881'),
+          ),
+        ],
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('203.0.113.5:6881'), findsOneWidget);
+      expect(find.textContaining('Iceland trip'), findsWidgets);
+      // A self-reported name is shown as reported, never as an identity.
+      expect(find.textContaining('reports qBittorrent 4.6'), findsOneWidget);
+      expect(find.textContaining('/s'), findsOneWidget);
+      // A connected peer that has exchanged nothing says so rather than
+      // being hidden or dressed up as active.
+      expect(find.text('connected · idle'), findsOneWidget);
+      // Connections are never presented as verified people.
+      expect(find.text('VERIFIED'), findsNothing);
+    });
   });
 
   group('settings', () {

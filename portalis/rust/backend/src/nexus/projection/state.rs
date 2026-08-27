@@ -349,14 +349,36 @@ pub struct Detail {
     pub entries: Vec<EntryState>,
     /// One bit per piece, packed.
     pub pieces: Vec<u8>,
-    /// Who this collection is currently moving with, as `ip:port`.
+    /// Who this collection is currently moving with.
     ///
-    /// Addresses and nothing else, deliberately. A swarm peer carries no
-    /// signed identity — there is no name and no device id to correlate it
-    /// with a contact — so presenting one as a person would be a claim the
-    /// protocol cannot support. Contacts are `members`; these are not the same
-    /// thing and the interface must not merge them.
-    pub peers: Vec<String>,
+    /// Connections, deliberately, and not people. A swarm peer carries no
+    /// signed identity — there is no device id to correlate it with a
+    /// contact — so presenting one as a person would be a claim the protocol
+    /// cannot support. Contacts are `members`; these are not the same thing
+    /// and the interface must not merge them.
+    pub peers: Vec<PeerState>,
+}
+
+/// One connected peer, as the interface shows it.
+///
+/// The byte counters and rates are this device's own measurements. The
+/// address names a socket and [`Self::client`] is whatever the far end chose
+/// to call itself, so neither is evidence about who is on the other side.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PeerState {
+    /// `"ip:port"`. Stable enough to key a row on for as long as the
+    /// connection lasts, and meaningless afterwards.
+    pub address: String,
+    /// Self-reported client name, when the peer announced one.
+    pub client: Option<String>,
+    /// Bytes received from and sent to this peer on this connection.
+    pub down_bytes: u64,
+    pub up_bytes: u64,
+    /// Current rates, measured between polls rather than averaged over the
+    /// connection's lifetime: a peer that finished a minute ago is idle now,
+    /// and a lifetime average would keep claiming otherwise.
+    pub down_bytes_per_second: u32,
+    pub up_bytes_per_second: u32,
 }
 
 /// One local source selected for a collection.

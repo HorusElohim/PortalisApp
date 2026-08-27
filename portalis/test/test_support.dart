@@ -49,7 +49,7 @@ Collection buildCollection({
   int downBytesPerSecond = 0,
   int upBytesPerSecond = 0,
   int livePeers = 0,
-  List<String> torrentPeers = const [],
+  List<AppPeer> torrentPeers = const [],
   List<AppEntry> entries = const [],
   List<AppContact> contacts = const [],
   Uint32List? members,
@@ -97,6 +97,27 @@ Collection buildCollection({
     contacts: contacts,
   );
 }
+
+/// One swarm connection, as the engine reports it.
+///
+/// Defaults to a connected-but-idle peer, which is the common real state and
+/// the one a test is least likely to mean to assert about by accident.
+AppPeer buildPeer({
+  String address = '203.0.113.5:6881',
+  String? client,
+  int downBytes = 0,
+  int upBytes = 0,
+  int downBytesPerSecond = 0,
+  int upBytesPerSecond = 0,
+}) =>
+    AppPeer(
+      address: address,
+      client: client,
+      downBytes: BigInt.from(downBytes),
+      upBytes: BigInt.from(upBytes),
+      downBytesPerSecond: downBytesPerSecond,
+      upBytesPerSecond: upBytesPerSecond,
+    );
 
 /// One file of a collection, as the engine reports it.
 AppEntry buildEntry({

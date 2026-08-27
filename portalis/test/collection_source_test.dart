@@ -92,6 +92,9 @@ class _Repository implements AppRepository {
   Stream<Uint8List> watchHistory(int collection) => const Stream.empty();
 
   @override
+  Future<List<AppCollectionPeer>> peers() async => const [];
+
+  @override
   Future<AppAccepted> send(EngineCommand command) async {
     commands.add(command);
     return AppAccepted(id: BigInt.one, collection: null, queued: true);
