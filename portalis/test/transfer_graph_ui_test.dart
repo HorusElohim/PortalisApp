@@ -85,6 +85,43 @@ void main() {
     expect(find.text('10/08/2026  19:39:27'), findsOneWidget);
   });
 
+  testWidgets(
+      'post-download upload updates the graph without changing completion',
+      (tester) async {
+    final start = DateTime(2026, 8, 10, 19, 39, 20);
+    final completed = start.add(const Duration(seconds: 7));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TransferGraph(
+            progress: 1,
+            downBytesPerSecond: 0,
+            upBytesPerSecond: 250000,
+            startedAt: start,
+            completedAt: completed,
+            history: [
+              TransferPoint(
+                at: start,
+                downBytesPerSecond: 1000000,
+                upBytesPerSecond: 0,
+              ),
+              TransferPoint(
+                at: completed,
+                downBytesPerSecond: 0,
+                upBytesPerSecond: 0,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('COMPLETED IN 7s'), findsOneWidget);
+    expect(find.text('now 250 KB/s · peak 250 KB/s'), findsOneWidget);
+    expect(find.text('COMPLETED AT 10/08/2026 19:39:27 · UPLOADING NOW'),
+        findsOneWidget);
+  });
+
   testWidgets('live history distinguishes current speed from peak speed',
       (tester) async {
     final start = DateTime.now().subtract(const Duration(seconds: 8));

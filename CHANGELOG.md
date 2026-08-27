@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.43+44
+
+- Bumped the coordinated Flutter release to `1.0.43+44` and the Rust backend
+  to `0.1.41`.
+- Fixed completion metadata so `completed at` and `completed in` remain the
+  download's finalized values instead of following later upload activity.
+- Kept the transfer graph live after download completion: upload-only seeding
+  samples remain visible, with the fixed completion moment shown separately.
+
 ## 1.0.42+43
 
 - Bumped the coordinated Flutter release to `1.0.42+43` and the Rust backend
