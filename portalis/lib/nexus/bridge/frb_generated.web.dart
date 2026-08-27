@@ -48,6 +48,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppCollection dco_decode_app_collection(dynamic raw);
 
   @protected
+  AppCollectionPeer dco_decode_app_collection_peer(dynamic raw);
+
+  @protected
   AppCommand dco_decode_app_command(dynamic raw);
 
   @protected
@@ -61,6 +64,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AppEntry dco_decode_app_entry(dynamic raw);
+
+  @protected
+  AppPeer dco_decode_app_peer(dynamic raw);
 
   @protected
   AppPending dco_decode_app_pending(dynamic raw);
@@ -120,10 +126,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<AppCollection> dco_decode_list_app_collection(dynamic raw);
 
   @protected
+  List<AppCollectionPeer> dco_decode_list_app_collection_peer(dynamic raw);
+
+  @protected
   List<AppContact> dco_decode_list_app_contact(dynamic raw);
 
   @protected
   List<AppEntry> dco_decode_list_app_entry(dynamic raw);
+
+  @protected
+  List<AppPeer> dco_decode_list_app_peer(dynamic raw);
 
   @protected
   List<AppSourceFile> dco_decode_list_app_source_file(dynamic raw);
@@ -199,6 +211,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppCollection sse_decode_app_collection(SseDeserializer deserializer);
 
   @protected
+  AppCollectionPeer sse_decode_app_collection_peer(
+      SseDeserializer deserializer);
+
+  @protected
   AppCommand sse_decode_app_command(SseDeserializer deserializer);
 
   @protected
@@ -212,6 +228,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AppEntry sse_decode_app_entry(SseDeserializer deserializer);
+
+  @protected
+  AppPeer sse_decode_app_peer(SseDeserializer deserializer);
 
   @protected
   AppPending sse_decode_app_pending(SseDeserializer deserializer);
@@ -274,10 +293,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<AppCollectionPeer> sse_decode_list_app_collection_peer(
+      SseDeserializer deserializer);
+
+  @protected
   List<AppContact> sse_decode_list_app_contact(SseDeserializer deserializer);
 
   @protected
   List<AppEntry> sse_decode_list_app_entry(SseDeserializer deserializer);
+
+  @protected
+  List<AppPeer> sse_decode_list_app_peer(SseDeserializer deserializer);
 
   @protected
   List<AppSourceFile> sse_decode_list_app_source_file(
@@ -361,6 +387,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_app_collection(AppCollection self, SseSerializer serializer);
 
   @protected
+  void sse_encode_app_collection_peer(
+      AppCollectionPeer self, SseSerializer serializer);
+
+  @protected
   void sse_encode_app_command(AppCommand self, SseSerializer serializer);
 
   @protected
@@ -374,6 +404,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_app_entry(AppEntry self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_peer(AppPeer self, SseSerializer serializer);
 
   @protected
   void sse_encode_app_pending(AppPending self, SseSerializer serializer);
@@ -442,11 +475,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       List<AppCollection> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_app_collection_peer(
+      List<AppCollectionPeer> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_app_contact(
       List<AppContact> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_app_entry(List<AppEntry> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_app_peer(List<AppPeer> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_app_source_file(

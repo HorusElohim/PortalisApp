@@ -95,8 +95,35 @@ pub struct AppDetail {
     pub id: u32,
     pub entries: Vec<AppEntry>,
     pub pieces: Vec<u8>,
-    /// Swarm addresses, which are not contacts. See `Detail::peers`.
-    pub peers: Vec<String>,
+    /// Swarm connections, which are not contacts. See `Detail::peers`.
+    pub peers: Vec<AppPeer>,
+}
+
+/// One connected swarm peer.
+///
+/// A connection rather than a person: the address names a socket and `client`
+/// is self-reported by the far end, so neither identifies anybody. Only the
+/// byte counters and rates are this device's own measurements.
+#[derive(Clone, Debug)]
+pub struct AppPeer {
+    pub address: String,
+    /// What the peer calls itself, when it says. Untrusted by construction.
+    pub client: Option<String>,
+    pub down_bytes: u64,
+    pub up_bytes: u64,
+    pub down_bytes_per_second: u32,
+    pub up_bytes_per_second: u32,
+}
+
+/// One swarm connection, and which collection it belongs to.
+///
+/// Paired rather than nested so the peers call answers in one flat list: the
+/// same address may be connected for two collections, and those are two
+/// separate connections rather than one peer with two names.
+#[derive(Clone, Debug)]
+pub struct AppCollectionPeer {
+    pub collection: u32,
+    pub peer: AppPeer,
 }
 
 /// A selectable media entry in a collection detail projection.
@@ -253,6 +280,32 @@ pub async fn watch_detail(
             return Ok(());
         }
     }
+}
+
+/// Every live swarm connection this device has, across all collections.
+///
+/// Its own call rather than a snapshot field: peers change every poll while
+/// the rest of a snapshot does not, and carrying them in the summary tier
+/// would push a per-second rewrite through every screen that renders a
+/// collection list. Asked for by the one screen that shows them.
+pub fn peers() -> Result<Vec<AppCollectionPeer>, String> {
+    Ok(locked_runtime()?
+        .as_ref()
+        .ok_or_else(|| "start Nexus before listing peers".to_owned())?
+        .peers()
+        .into_iter()
+        .map(|(collection, peer)| AppCollectionPeer {
+            collection: collection.0,
+            peer: AppPeer {
+                address: peer.address,
+                client: peer.client,
+                down_bytes: peer.down_bytes,
+                up_bytes: peer.up_bytes,
+                down_bytes_per_second: peer.down_bytes_per_second,
+                up_bytes_per_second: peer.up_bytes_per_second,
+            },
+        })
+        .collect())
 }
 
 /// The collection's shareable magnet URI, when the local substrate has a real
@@ -625,7 +678,18 @@ fn detail_projection(detail: &Detail) -> AppDetail {
             })
             .collect(),
         pieces: detail.pieces.clone(),
-        peers: detail.peers.clone(),
+        peers: detail
+            .peers
+            .iter()
+            .map(|peer| AppPeer {
+                address: peer.address.clone(),
+                client: peer.client.clone(),
+                down_bytes: peer.down_bytes,
+                up_bytes: peer.up_bytes,
+                down_bytes_per_second: peer.down_bytes_per_second,
+                up_bytes_per_second: peer.up_bytes_per_second,
+            })
+            .collect(),
     }
 }
 

@@ -41,10 +41,33 @@ pub struct TorrentInfo {
     /// Currently-connected peers (not the historical total ever seen) — the
     /// closest real equivalent to the mockup's "N copies alive" indicator.
     pub live_peers: u32,
-    /// `"ip:port"` of each currently-connected peer. BitTorrent peers carry
-    /// no identity beyond their network address — there is no name, no
-    /// signed device id, nothing to correlate them with a collaborator.
-    pub live_peer_addrs: Vec<String>,
+    /// Each currently-connected peer, with what it has actually exchanged.
+    ///
+    /// BitTorrent peers carry no identity beyond their network address —
+    /// there is no name, no signed device id, nothing to correlate them with
+    /// a contact. What they do carry is a byte count in each direction, which
+    /// is a fact about this connection rather than a claim about a person.
+    pub live_peer_addrs: Vec<PeerLink>,
+}
+
+/// One connected swarm peer, as the engine counts it.
+///
+/// Deliberately not a person. The address identifies a socket, and
+/// [`Self::client`] is a self-reported string the remote end chose, so
+/// neither may be presented as an identity. The byte counters are this
+/// device's own measurements and are therefore the only trustworthy figures
+/// here.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PeerLink {
+    /// `"ip:port"`, which names a connection rather than anybody.
+    pub address: String,
+    /// Bytes received from this peer since the connection was established.
+    pub fetched_bytes: u64,
+    /// Bytes sent to this peer over the same period.
+    pub uploaded_bytes: u64,
+    /// The client name the remote end announced, when it announced one.
+    /// Untrusted by construction: a peer may say anything here.
+    pub client: Option<String>,
 }
 
 impl TorrentInfo {
@@ -829,8 +852,8 @@ pub mod native {
     use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
     use super::{
-        PieceRun, PublishProgress, RawStorageEntry, SourceFile, TORRENT_PIECE_LENGTH, TorrentFile,
-        TorrentInfo,
+        PeerLink, PieceRun, PublishProgress, RawStorageEntry, SourceFile, TORRENT_PIECE_LENGTH,
+        TorrentFile, TorrentInfo,
     };
 
     static SESSION: OnceCell<Arc<Session>> = OnceCell::const_new();
@@ -1846,9 +1869,21 @@ pub mod native {
         // already know it's doomed keeps the log for what it's for: a
         // torrent `stats` calls live still failing peer stats, which would
         // be the actual anomaly.
-        let live_peer_addrs: Vec<String> = if stats.live.is_some() {
+        let live_peer_addrs: Vec<PeerLink> = if stats.live.is_some() {
             match api.api_peer_stats(TorrentIdOrHash::Id(id), Default::default()) {
-                Ok(snapshot) => snapshot.peers.into_keys().collect(),
+                Ok(snapshot) => snapshot
+                    .peers
+                    .into_iter()
+                    .map(|(address, peer)| PeerLink {
+                        address,
+                        fetched_bytes: peer.counters.fetched_bytes,
+                        uploaded_bytes: peer.counters.uploaded_bytes,
+                        // Kept as the peer sent it, including empty, rather
+                        // than substituted with a guess. An absent name is a
+                        // fact about the connection worth showing.
+                        client: peer.client_name.filter(|name| !name.trim().is_empty()),
+                    })
+                    .collect(),
                 Err(error) => {
                     crate::nexus::log::clog!(
                         "torrent",

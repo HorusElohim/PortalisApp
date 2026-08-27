@@ -52,12 +52,17 @@ List<PeerObservation> peerObservations({
 }) {
   final now = DateTime.now();
   return [
-    for (final address in detail?.peers ?? const <String>[])
+    for (final peer in detail?.peers ?? const <AppPeer>[])
       PeerObservation(
         collectionId: '${collection.id}',
         collectionName: collection.name,
-        address: address,
+        address: peer.address,
         lastSeen: now,
+        client: peer.client,
+        downBytes: peer.downBytes.toInt(),
+        upBytes: peer.upBytes.toInt(),
+        downBytesPerSecond: peer.downBytesPerSecond,
+        upBytesPerSecond: peer.upBytesPerSecond,
       ),
   ];
 }

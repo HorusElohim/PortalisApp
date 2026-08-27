@@ -6,7 +6,6 @@ import 'package:image_picker/image_picker.dart' hide PickedFile;
 
 import '../../../design/collection_deletion_dialog.dart';
 import '../../../design/design.dart';
-import '../../../design/resizable_media_preview.dart';
 import '../../media/domain/item.dart';
 import '../../media/presentation/viewer_screen.dart';
 import '../domain/collection.dart';
@@ -409,7 +408,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
         // Files are the deepest layer — worth the extra tap they cost a
         // merely-mid row, the same trade the peers section makes.
         ...[
-          const SizedBox(height: 14),
+          const SizedBox(height: 18),
           if (collection.media.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 22),
@@ -425,22 +424,27 @@ class _CollectionDetailState extends State<CollectionDetail> {
                 ),
               ),
             )
-          else
-            ResizableMediaPreview(
-              child: CollectionContents(
-                collection: collection,
-                onOpenMedia: (media) => _openMedia(collection, media),
-                stagedSelection: collection.isTorrent && collection.isDraft
-                    ? _wantedEntries(collection)
-                    : null,
-                // Only while editing: a tap that changes what downloads is
-                // not something a person should be able to do by brushing
-                // past a tile they were only looking at.
-                onToggleWanted: _isEditing && widget.source.supportsSelection
-                    ? (media) => _toggleWanted(collection, media)
-                    : null,
-              ),
+          else ...[
+            // The grid sizes to its own content and the page scrolls, rather
+            // than the grid scrolling inside a height a person had to drag to
+            // set. A scroll region nested in a scroll region is the thing that
+            // needed the handle; without it there is nothing to resize.
+            SectionLabel('FILES - ${collection.media.length}'),
+            const SizedBox(height: 8),
+            CollectionContents(
+              collection: collection,
+              onOpenMedia: (media) => _openMedia(collection, media),
+              stagedSelection: collection.isTorrent && collection.isDraft
+                  ? _wantedEntries(collection)
+                  : null,
+              // Only while editing: a tap that changes what downloads is
+              // not something a person should be able to do by brushing
+              // past a tile they were only looking at.
+              onToggleWanted: _isEditing && widget.source.supportsSelection
+                  ? (media) => _toggleWanted(collection, media)
+                  : null,
             ),
+          ],
         ],
         if (_isEditing) ...[
           const SizedBox(height: 20),

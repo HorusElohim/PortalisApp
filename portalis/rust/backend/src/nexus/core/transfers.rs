@@ -42,20 +42,42 @@ pub const HISTORY_LENGTH: usize = 3600;
 /// the progress tier just used, and asking the substrate twice would let the
 /// two disagree within one frame.
 #[derive(Clone, Debug, Default)]
-pub struct Holdings(Arc<Mutex<HashMap<Vec<u8>, TorrentInfo>>>);
+pub struct Holdings(Arc<Mutex<HashMap<Vec<u8>, Holding>>>);
+
+/// One collection's last reading, with the peer rates measured alongside it.
+///
+/// The rates live here rather than on [`TorrentInfo`] because they are not
+/// something the substrate reports: they are a difference between two polls,
+/// and only this task knows both.
+#[derive(Clone, Debug)]
+pub struct Holding {
+    pub info: TorrentInfo,
+    pub peers: Vec<crate::nexus::projection::state::PeerState>,
+}
 
 impl Holdings {
     /// What the substrate last reported for one collection.
     #[must_use]
     pub fn get(&self, collection_key: &[u8]) -> Option<TorrentInfo> {
-        self.lock().get(collection_key).cloned()
+        self.lock()
+            .get(collection_key)
+            .map(|holding| holding.info.clone())
     }
 
-    fn replace(&self, holdings: HashMap<Vec<u8>, TorrentInfo>) {
+    /// The peers of one collection, with the rates measured for this tick.
+    #[must_use]
+    pub fn peers(&self, collection_key: &[u8]) -> Vec<crate::nexus::projection::state::PeerState> {
+        self.lock()
+            .get(collection_key)
+            .map(|holding| holding.peers.clone())
+            .unwrap_or_default()
+    }
+
+    fn replace(&self, holdings: HashMap<Vec<u8>, Holding>) {
         *self.lock() = holdings;
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<Vec<u8>, TorrentInfo>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<Vec<u8>, Holding>> {
         // Never held across an await, so poisoning would mean a bug elsewhere;
         // recovering the guard keeps one panicked reader from stopping every
         // later transfer reading.
@@ -137,6 +159,13 @@ pub(crate) async fn follow_transfers(
             // of the receive chart. The live tier still exposes that cursor to
             // an owner as explicitly-labelled source verification.
             let measured = measured_rates(info, written.get(&key));
+            // Peer rates share the collection's measurement window, so a row
+            // and the total above it are differences over the same interval
+            // rather than two numbers from two clocks.
+            let elapsed = written
+                .get(&key)
+                .map_or(0, |previous| unix_time_ns().saturating_sub(previous.at));
+            let peers = measured_peers(info, written.get(&key), elapsed);
             // Reads performed by ReferencedStorage while an owner torrent is
             // being checked are local source I/O. Keep the rate visible, but
             // carry the explicit source_reading marker so the UI does not call
@@ -161,6 +190,7 @@ pub(crate) async fn follow_transfers(
                         at: now,
                         fetched: info.fetched_bytes,
                         uploaded: info.uploaded_bytes,
+                        peers: peer_counters(info),
                     },
                 );
             }
@@ -173,7 +203,13 @@ pub(crate) async fn follow_transfers(
                     "could not move verified received media into Photos: {error:#}"
                 );
             }
-            current.insert(key.clone(), (*info).clone());
+            current.insert(
+                key.clone(),
+                Holding {
+                    info: (*info).clone(),
+                    peers,
+                },
+            );
 
             let projected = collections
                 .lock()
@@ -460,6 +496,57 @@ struct LastReading {
     at: u64,
     fetched: u64,
     uploaded: u64,
+    /// Per-peer counters at that moment, keyed by address, so a peer's rate
+    /// can be measured the same way the collection's is. Peers that went away
+    /// are simply absent next tick and measure as gone rather than as idle.
+    peers: HashMap<String, (u64, u64)>,
+}
+
+/// Per-peer live rates for one reading.
+///
+/// Measured between polls rather than divided over the connection's lifetime.
+/// A peer that delivered a burst and then went quiet reads as idle here, which
+/// is what a person watching the transfer actually sees; a lifetime average
+/// would keep claiming it was still working.
+fn measured_peers(
+    info: &TorrentInfo,
+    last: Option<&LastReading>,
+    elapsed_ns: u64,
+) -> Vec<crate::nexus::projection::state::PeerState> {
+    info.live_peer_addrs
+        .iter()
+        .map(|peer| {
+            let previous = last
+                .filter(|_| elapsed_ns > 0)
+                .and_then(|reading| reading.peers.get(&peer.address));
+            let (down, up) = previous.map_or((0, 0), |(fetched, uploaded)| {
+                (
+                    rate(peer.fetched_bytes.saturating_sub(*fetched), elapsed_ns),
+                    rate(peer.uploaded_bytes.saturating_sub(*uploaded), elapsed_ns),
+                )
+            });
+            crate::nexus::projection::state::PeerState {
+                address: peer.address.clone(),
+                client: peer.client.clone(),
+                down_bytes: peer.fetched_bytes,
+                up_bytes: peer.uploaded_bytes,
+                down_bytes_per_second: down,
+                up_bytes_per_second: up,
+            }
+        })
+        .collect()
+}
+
+fn peer_counters(info: &TorrentInfo) -> HashMap<String, (u64, u64)> {
+    info.live_peer_addrs
+        .iter()
+        .map(|peer| {
+            (
+                peer.address.clone(),
+                (peer.fetched_bytes, peer.uploaded_bytes),
+            )
+        })
+        .collect()
 }
 
 fn measured_rates(info: &TorrentInfo, last: Option<&LastReading>) -> Rates {
@@ -515,7 +602,12 @@ mod tests {
             error: None,
             files: Vec::new(),
             live_peers: 3,
-            live_peer_addrs: vec!["10.0.0.1:6881".to_owned()],
+            live_peer_addrs: vec![crate::nexus::torrent::PeerLink {
+                address: "10.0.0.1:6881".to_owned(),
+                fetched_bytes: 0,
+                uploaded_bytes: 0,
+                client: None,
+            }],
         }
     }
 
@@ -554,6 +646,7 @@ mod tests {
             at: unix_time_ns().saturating_sub(1_000_000_000),
             fetched: 0,
             uploaded: 0,
+            peers: HashMap::new(),
         };
 
         let mut receiving = arrived;
@@ -839,12 +932,69 @@ mod tests {
         let holdings = Holdings::default();
         assert!(holdings.get(b"unknown").is_none());
 
-        holdings.replace(HashMap::from([(b"key".to_vec(), info(1, 2, false))]));
+        holdings.replace(HashMap::from([(
+            b"key".to_vec(),
+            Holding {
+                info: info(1, 2, false),
+                peers: Vec::new(),
+            },
+        )]));
 
         assert_eq!(
             holdings.get(b"key").map(|info| info.progress_bytes),
             Some(1)
         );
         assert!(holdings.get(b"other").is_none());
+        assert!(
+            holdings.peers(b"other").is_empty(),
+            "a collection nothing is carrying has no peers rather than stale ones"
+        );
+    }
+
+    /// A peer's rate is the difference between two polls, not its share of the
+    /// connection's lifetime average. A peer that delivered a burst and went
+    /// quiet reads as idle, which is what the person watching actually sees.
+    #[test]
+    fn a_peer_rate_is_measured_between_polls_rather_than_averaged() {
+        let peer = |fetched: u64, uploaded: u64| crate::nexus::torrent::PeerLink {
+            address: "10.0.0.7:6881".to_owned(),
+            fetched_bytes: fetched,
+            uploaded_bytes: uploaded,
+            client: Some("qBittorrent 4.6".to_owned()),
+        };
+        let mut reading = info(0, 100, false);
+        reading.live_peer_addrs = vec![peer(3_000_000, 1_000_000)];
+
+        let a_second_ago = LastReading {
+            sample: StoredSample {
+                done: 0,
+                total: 100,
+                down_bytes_per_second: 0,
+                up_bytes_per_second: 0,
+                peers: 1,
+            },
+            at: unix_time_ns().saturating_sub(1_000_000_000),
+            fetched: 0,
+            uploaded: 0,
+            peers: HashMap::from([("10.0.0.7:6881".to_owned(), (1_000_000, 500_000))]),
+        };
+
+        let measured = measured_peers(&reading, Some(&a_second_ago), 1_000_000_000);
+        assert_eq!(measured.len(), 1);
+        assert_eq!(measured[0].down_bytes_per_second, 2_000_000);
+        assert_eq!(measured[0].up_bytes_per_second, 500_000);
+        // The totals stay the connection's own counters, not the delta.
+        assert_eq!(measured[0].down_bytes, 3_000_000);
+        assert_eq!(measured[0].up_bytes, 1_000_000);
+        assert_eq!(measured[0].client.as_deref(), Some("qBittorrent 4.6"));
+
+        // A peer seen for the first time has nothing to measure against, and
+        // reports no rate rather than its whole connection as one tick.
+        let first_sight = measured_peers(&reading, None, 0);
+        assert_eq!(first_sight[0].down_bytes_per_second, 0);
+        assert_eq!(
+            first_sight[0].down_bytes, 3_000_000,
+            "but its totals are still true"
+        );
     }
 }

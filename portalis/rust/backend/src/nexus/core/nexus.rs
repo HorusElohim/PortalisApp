@@ -236,7 +236,7 @@ impl DetailSources {
                 })
                 .collect(),
             pieces: held.as_ref().map(pieces_of).unwrap_or_default(),
-            peers: held.map(|info| info.live_peer_addrs).unwrap_or_default(),
+            peers: self.holdings.peers(&key),
         })
     }
 }
@@ -556,6 +556,36 @@ impl Nexus {
         let rows = self.store.samples_after(&key, at).ok()?;
         let newest = rows.last()?.0;
         Some((newest, packed_samples(rows)))
+    }
+
+    /// Every live swarm connection, across every collection this device is
+    /// carrying.
+    ///
+    /// Read from the same holdings the transfer poller writes, so the peers a
+    /// people screen shows and the peer count on a collection row are the same
+    /// reading rather than two answers from two clocks.
+    #[must_use]
+    pub fn peers(&self) -> Vec<(Handle, crate::nexus::projection::state::PeerState)> {
+        let index = self
+            .collections
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Ok(stored) = self.store.collections() else {
+            return Vec::new();
+        };
+        stored
+            .into_iter()
+            .filter_map(|(key, _)| {
+                let handle = index.handle(&key)?;
+                Some(
+                    self.holdings
+                        .peers(&key)
+                        .into_iter()
+                        .map(move |peer| (handle, peer)),
+                )
+            })
+            .flatten()
+            .collect()
     }
 
     pub fn watch_detail(&self, collection: Option<Handle>) -> watch::Receiver<Option<Detail>> {
@@ -3217,7 +3247,12 @@ mod tests {
                 error: None,
                 files: Vec::new(),
                 live_peers: 1,
-                live_peer_addrs: vec!["10.0.0.1:6881".to_owned()],
+                live_peer_addrs: vec![crate::nexus::torrent::PeerLink {
+                    address: "10.0.0.1:6881".to_owned(),
+                    fetched_bytes: 0,
+                    uploaded_bytes: 0,
+                    client: None,
+                }],
             }
         }
         let moving = reading("a1b2", 10, false);

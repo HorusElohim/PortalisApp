@@ -630,6 +630,9 @@ class _Repository implements AppRepository {
   var stops = 0;
 
   @override
+  Future<List<AppCollectionPeer>> peers() async => const [];
+
+  @override
   Future<AppAccepted> send(EngineCommand command) async {
     commands.add(command);
     return AppAccepted(id: BigInt.zero, collection: null, queued: false);

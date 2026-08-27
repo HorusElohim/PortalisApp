@@ -145,7 +145,7 @@ void main() {
         nature: 'Torrent',
         totalBytes: 1000,
         downloadedBytes: 250,
-        torrentPeers: const ['203.0.113.5:6881'],
+        torrentPeers: [buildPeer()],
       );
 
       await tester.pumpWidget(
@@ -154,12 +154,17 @@ void main() {
             body: CollectionPeers(
               collection: collection,
               peerHistory: [
+                // Moving right now, so it reads as active.
                 PeerObservation(
                   collectionId: collection.id,
                   collectionName: collection.name,
                   address: '203.0.113.5:6881',
                   lastSeen: observedAt,
+                  downBytesPerSecond: 512000,
                 ),
+                // Connected but quiet. The core only reports peers it is
+                // connected to, so "not connected" is not a state that can
+                // reach this widget — idle is, and it is the honest contrast.
                 PeerObservation(
                   collectionId: collection.id,
                   collectionName: collection.name,
@@ -173,15 +178,17 @@ void main() {
       );
 
       final active = tester.widget<Text>(find.text('203.0.113.5:6881'));
-      final disconnected = tester.widget<Text>(find.text('198.51.100.9:6881'));
+      final idle = tester.widget<Text>(find.text('198.51.100.9:6881'));
       expect(active.style?.color, AppColors.ember);
       expect(
-        disconnected.style?.color,
+        idle.style?.color,
         rememberedPeerColor('198.51.100.9:6881'),
       );
-      expect(disconnected.style?.color, isNot(AppColors.textFaint));
-      expect(find.textContaining(RegExp(r'^1[2-3]s$')), findsNWidgets(2));
-      expect(find.textContaining('seen'), findsNothing);
+      expect(idle.style?.color, isNot(AppColors.textFaint));
+      // A moving peer shows its rate; a quiet one says so rather than
+      // showing a rate that stopped being true.
+      expect(find.textContaining('↓'), findsOneWidget);
+      expect(find.text('idle'), findsOneWidget);
       expect(find.textContaining('ago'), findsNothing);
       expect(
         find.byKey(const Key('collectionPeerTransferProgress')),
@@ -417,7 +424,7 @@ void main() {
             available: false,
           ),
         ],
-        torrentPeers: const ['203.0.113.5:6881'],
+        torrentPeers: [buildPeer()],
         totalBytes: 1000,
         downloadedBytes: 900,
         downBytesPerSecond: 2,
@@ -454,7 +461,7 @@ void main() {
         (tester) async {
       final collection = buildCollection(
         nature: 'Torrent',
-        torrentPeers: const ['203.0.113.5:6881'],
+        torrentPeers: [buildPeer()],
         livePeers: 1,
       );
       await tester.binding.setSurfaceSize(phoneSize);

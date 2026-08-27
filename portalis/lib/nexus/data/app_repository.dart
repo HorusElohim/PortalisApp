@@ -25,6 +25,13 @@ abstract interface class AppRepository {
   /// one row was thirty kilobytes a second for a screen already showing it.
   /// Whoever subscribes accumulates.
   Stream<Uint8List> watchHistory(int collection);
+
+  /// Every live swarm connection, across all collections.
+  ///
+  /// A call rather than a stream field: peers change every poll, and carrying
+  /// them in the snapshot would rewrite every collection list once a second
+  /// for one screen's benefit.
+  Future<List<AppCollectionPeer>> peers();
   Future<AppAccepted> send(EngineCommand command);
 }
 
@@ -54,6 +61,9 @@ class FrbAppRepository implements AppRepository {
   @override
   Stream<Uint8List> watchHistory(int collection) =>
       bridge.watchHistory(collection: collection);
+
+  @override
+  Future<List<AppCollectionPeer>> peers() => bridge.peers();
 
   @override
   Future<AppAccepted> send(EngineCommand command) =>

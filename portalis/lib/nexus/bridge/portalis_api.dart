@@ -6,8 +6,8 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `detail_projection`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `collection_projection`, `detail_projection`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Opens the local Nexus runtime once. Calling it again is harmless.
 ///
@@ -38,6 +38,15 @@ Stream<AppSnapshot> watchStates() =>
 /// Streams the detail tier for one collection, or `None` after unsubscribing.
 Stream<AppDetail?> watchDetail({int? collection}) =>
     RustLib.instance.api.cratePortalisApiWatchDetail(collection: collection);
+
+/// Every live swarm connection this device has, across all collections.
+///
+/// Its own call rather than a snapshot field: peers change every poll while
+/// the rest of a snapshot does not, and carrying them in the summary tier
+/// would push a per-second rewrite through every screen that renders a
+/// collection list. Asked for by the one screen that shows them.
+Future<List<AppCollectionPeer>> peers() =>
+    RustLib.instance.api.cratePortalisApiPeers();
 
 /// The collection's shareable magnet URI, when the local substrate has a real
 /// persisted info hash for it. The URI is fetched on demand rather than added
@@ -193,6 +202,32 @@ class AppCollection {
           pending == other.pending;
 }
 
+/// One swarm connection, and which collection it belongs to.
+///
+/// Paired rather than nested so the peers call answers in one flat list: the
+/// same address may be connected for two collections, and those are two
+/// separate connections rather than one peer with two names.
+class AppCollectionPeer {
+  final int collection;
+  final AppPeer peer;
+
+  const AppCollectionPeer({
+    required this.collection,
+    required this.peer,
+  });
+
+  @override
+  int get hashCode => collection.hashCode ^ peer.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppCollectionPeer &&
+          runtimeType == other.runtimeType &&
+          collection == other.collection &&
+          peer == other.peer;
+}
+
 /// A request from the app. `kind` is explicit so this stays a single command
 /// envelope across Dart and Rust without generated union helpers.
 class AppCommand {
@@ -320,8 +355,8 @@ class AppDetail {
   final List<AppEntry> entries;
   final Uint8List pieces;
 
-  /// Swarm addresses, which are not contacts. See `Detail::peers`.
-  final List<String> peers;
+  /// Swarm connections, which are not contacts. See `Detail::peers`.
+  final List<AppPeer> peers;
 
   const AppDetail({
     required this.id,
@@ -426,6 +461,52 @@ class AppEntry {
           available == other.available &&
           downloadedBytes == other.downloadedBytes &&
           path == other.path;
+}
+
+/// One connected swarm peer.
+///
+/// A connection rather than a person: the address names a socket and `client`
+/// is self-reported by the far end, so neither identifies anybody. Only the
+/// byte counters and rates are this device's own measurements.
+class AppPeer {
+  final String address;
+
+  /// What the peer calls itself, when it says. Untrusted by construction.
+  final String? client;
+  final BigInt downBytes;
+  final BigInt upBytes;
+  final int downBytesPerSecond;
+  final int upBytesPerSecond;
+
+  const AppPeer({
+    required this.address,
+    this.client,
+    required this.downBytes,
+    required this.upBytes,
+    required this.downBytesPerSecond,
+    required this.upBytesPerSecond,
+  });
+
+  @override
+  int get hashCode =>
+      address.hashCode ^
+      client.hashCode ^
+      downBytes.hashCode ^
+      upBytes.hashCode ^
+      downBytesPerSecond.hashCode ^
+      upBytesPerSecond.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppPeer &&
+          runtimeType == other.runtimeType &&
+          address == other.address &&
+          client == other.client &&
+          downBytes == other.downBytes &&
+          upBytes == other.upBytes &&
+          downBytesPerSecond == other.downBytesPerSecond &&
+          upBytesPerSecond == other.upBytesPerSecond;
 }
 
 /// A locally accepted command that has not settled yet.
