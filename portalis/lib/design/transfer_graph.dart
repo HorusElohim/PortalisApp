@@ -17,6 +17,14 @@ class TransferPoint {
   final int upBytesPerSecond;
 }
 
+String _formatTransferDateTime(DateTime value) =>
+    '${value.day.toString().padLeft(2, '0')}/'
+    '${value.month.toString().padLeft(2, '0')}/'
+    '${value.year} '
+    '${value.hour.toString().padLeft(2, '0')}:'
+    '${value.minute.toString().padLeft(2, '0')}:'
+    '${value.second.toString().padLeft(2, '0')}';
+
 /// A real per-torrent receive/upload history sampled by the collections core.
 class TransferGraph extends StatelessWidget {
   TransferGraph({
@@ -243,6 +251,13 @@ class _TransferGraphHeading extends StatelessWidget {
               ),
             ],
           ),
+          if (graph.complete && graph.active && graph.completedAt != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'COMPLETED AT ${_formatTransferDateTime(graph.completedAt!)} · UPLOADING NOW',
+              style: monoLabel(size: 9, color: AppColors.textGhost),
+            ),
+          ],
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -306,8 +321,10 @@ class _TransferGraphState {
     // A paused or disconnected incomplete transfer still has useful history,
     // but it must not gain a synthetic "now" point on every rebuild. That
     // stretches its time axis until the real line is visually compressed away.
-    final active =
-        !complete && (downBytesPerSecond > 0 || upBytesPerSecond > 0);
+    // Completion closes the receive duration, not the whole transfer graph.
+    // A complete torrent can still be seeding, so an upload-only reading must
+    // remain visible while `completedAt` keeps the duration immutable.
+    final active = downBytesPerSecond > 0 || upBytesPerSecond > 0;
     final current = TransferPoint(
       at: now,
       downBytesPerSecond: downBytesPerSecond,
