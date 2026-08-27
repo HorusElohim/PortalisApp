@@ -13,7 +13,7 @@ import 'peer_color.dart';
 ///
 /// Collaborators are chips: a name is all there is to say about somebody this
 /// collection is shared with, because neither engine attributes bytes to a
-/// signed identity. Connections are rows, because there *is* more to say —
+/// signed identity. Connections are cards, because there *is* more to say —
 /// what each has sent and received, and how fast — and those figures are this
 /// device's own measurements rather than anybody's claim.
 class CollectionPeers extends StatelessWidget {
@@ -61,11 +61,21 @@ class CollectionPeers extends StatelessWidget {
             ),
             if (connections.isNotEmpty) const SizedBox(height: 10),
           ],
-          for (final peer in connections)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: PeerRow(peer: peer),
+          LayoutBuilder(
+            builder: (context, constraints) => GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 360,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                mainAxisExtent: 154,
+              ),
+              itemCount: connections.length,
+              itemBuilder: (context, index) =>
+                  PeerCard(peer: connections[index]),
             ),
+          ),
         ],
       ],
     );
@@ -119,11 +129,11 @@ class _NamedPeer extends StatelessWidget {
 
 /// One swarm connection on a collection page.
 ///
-/// The address leads because it is the only part this device can vouch for;
-/// the client name follows as something the peer reported about itself. The
-/// figures on the right are measurements.
-class PeerRow extends StatelessWidget {
-  const PeerRow({super.key, required this.peer});
+/// A card gives the connection a stable visual boundary and makes all four
+/// measurements readable together. The client name is still explicitly a
+/// report from the peer, not a verified identity.
+class PeerCard extends StatelessWidget {
+  const PeerCard({super.key, required this.peer});
 
   final PeerObservation peer;
 
@@ -131,51 +141,121 @@ class PeerRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final color =
         peer.isMoving ? AppColors.ember : rememberedPeerColor(peer.address);
-    return Row(
-      children: [
-        Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 9),
-        Expanded(
-          child: Text(
-            peer.client == null
-                ? peer.address
-                : '${peer.address}  ·  reports ${peer.client}',
-            overflow: TextOverflow.ellipsis,
-            // The address carries the same colour as the dot: active peers
-            // read as ember, settled ones keep their own stable identity
-            // colour. Distinguishable at a glance without reading the figures.
-            style: monoLabel(size: 10, color: color, letterSpacing: 0),
+    return SurfaceCard(
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+      borderColor: color.withValues(alpha: peer.isMoving ? 0.5 : 0.28),
+      glow: peer.isMoving ? GlowLevel.active : GlowLevel.none,
+      glowColor: color,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      peer.client ?? 'Unknown client',
+                      overflow: TextOverflow.ellipsis,
+                      style: displayText(size: 13, weight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      peer.client == null
+                          ? peer.address
+                          : '${peer.address}  ·  self-reported client',
+                      overflow: TextOverflow.ellipsis,
+                      style: monoLabel(
+                        size: 10,
+                        color: AppColors.textDim,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (peer.isMoving)
+                StatusBadge(label: 'LIVE', color: color, filled: true),
+            ],
           ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          _figures,
-          style: monoLabel(
-            size: 10,
-            color: peer.isMoving ? AppColors.textDim : AppColors.textFaint,
-            letterSpacing: 0,
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _PeerMetric(
+                  label: 'DOWNLOADED',
+                  value: formatBytesPrecise(peer.downBytes),
+                  color: AppColors.signalMuted,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _PeerMetric(
+                  label: 'UPLOADED',
+                  value: formatBytesPrecise(peer.upBytes),
+                  color: AppColors.signalMuted,
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _PeerMetric(
+                  label: 'DOWN SPEED',
+                  value: formatRate(peer.downBytesPerSecond),
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _PeerMetric(
+                  label: 'UP SPEED',
+                  value: formatRate(peer.upBytesPerSecond),
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
+}
 
-  /// Rates while something is moving, totals once it is not — a connected peer
-  /// that has gone quiet says so rather than showing a rate that has stopped
-  /// being true.
-  String get _figures {
-    if (peer.isMoving) {
-      return [
-        if (peer.downBytesPerSecond > 0)
-          '↓ ${formatRate(peer.downBytesPerSecond)}',
-        if (peer.upBytesPerSecond > 0) '↑ ${formatRate(peer.upBytesPerSecond)}',
-      ].join('  ');
-    }
-    if (!peer.hasExchanged) return 'idle';
-    return '↓ ${formatBytes(peer.downBytes)}  ↑ ${formatBytes(peer.upBytes)}';
-  }
+class _PeerMetric extends StatelessWidget {
+  const _PeerMetric({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: monoLabel(size: 9, color: AppColors.textGhost),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            overflow: TextOverflow.ellipsis,
+            style: monoLabel(size: 13, color: color, letterSpacing: 0),
+          ),
+        ],
+      );
 }

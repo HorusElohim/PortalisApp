@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.44+45
+
+- Reworked collection-detail swarm peers into compact cards.
+- Each peer card groups the self-reported client name and address with total
+  downloaded/uploaded bytes and current download/upload speeds.
+- Active peers are marked `LIVE`; quiet connections remain visible without
+  implying that they are still transferring.
+
 ## 1.0.43+44
 
 - Bumped the coordinated Flutter release to `1.0.43+44` and the Rust backend
