@@ -74,6 +74,7 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
       _readings.addAll(decodeReadings(packed));
       notifyListeners();
     });
+    unawaited(_loadPeerHistory());
   }
 
   final AppController controller;
@@ -81,6 +82,7 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
 
   AppDetail? _detail;
   final List<Reading> _readings = [];
+  List<AppPeerHistory> _peerHistory = const [];
   late final StreamSubscription<AppDetail?> _detailSubscription;
   late final StreamSubscription<Uint8List> _historySubscription;
 
@@ -113,7 +115,23 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
   List<PeerObservation> peerHistoryFor(String id) {
     final collection = _live;
     if (collection == null) return const [];
-    return peerObservations(collection: collection, detail: _detail);
+    final live = peerObservations(collection: collection, detail: _detail);
+    final liveKeys = {
+      for (final peer in live) '${peer.address}\u0000${peer.client}'
+    };
+    return [
+      ...live,
+      for (final peer in storedPeerObservations(
+        collection: collection,
+        peers: _peerHistory,
+      ))
+        if (!liveKeys.contains('${peer.address}\u0000${peer.client}')) peer,
+    ];
+  }
+
+  Future<void> _loadPeerHistory() async {
+    _peerHistory = await controller.peerHistory(collectionId);
+    notifyListeners();
   }
 
   @override

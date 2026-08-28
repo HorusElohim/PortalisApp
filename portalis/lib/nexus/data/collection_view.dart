@@ -66,3 +66,23 @@ List<PeerObservation> peerObservations({
       ),
   ];
 }
+
+List<PeerObservation> storedPeerObservations({
+  required AppCollection collection,
+  required List<AppPeerHistory> peers,
+}) =>
+    [
+      for (final peer in peers)
+        PeerObservation(
+          collectionId: '${collection.id}',
+          collectionName: collection.name,
+          address: peer.address,
+          client: peer.client,
+          lastSeen: DateTime.fromMillisecondsSinceEpoch(
+              peer.lastSeenAt.toInt() ~/ 1000000),
+          downBytes: peer.downBytes.toInt(),
+          upBytes: peer.upBytes.toInt(),
+          downBytesPerSecond: peer.lastDownBytesPerSecond,
+          upBytesPerSecond: peer.lastUpBytesPerSecond,
+        ),
+    ];

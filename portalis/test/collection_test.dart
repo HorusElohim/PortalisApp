@@ -180,6 +180,7 @@ void main() {
       expect(find.byType(GridView), findsOneWidget);
       expect(find.text('LIVE'), findsOneWidget);
       expect(find.text('Unknown client'), findsNWidgets(2));
+      expect(find.textContaining('self-reported'), findsNothing);
       // A moving peer shows a non-zero speed, while a quiet peer shows zero
       // rather than a rate that stopped being true.
       expect(find.text('512 KB/s'), findsOneWidget);

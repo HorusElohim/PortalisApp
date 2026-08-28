@@ -34,11 +34,12 @@ use redb::{Database, ReadableTable, TableDefinition};
 use thiserror::Error;
 
 use records::{
-    Malformed, StoredCollection, StoredContact, StoredEntry, StoredImportEntry, StoredSample,
+    Malformed, StoredCollection, StoredContact, StoredEntry, StoredImportEntry, StoredPeerHistory,
+    StoredSample,
 };
 use schema::{
-    COLLECTIONS, CONTACTS, DEVICE_LOG, ENTRIES, IDENTITY, MANIFESTS, META, OUTBOX, REVISIONS,
-    SAMPLES, SCHEMA_VERSION, SCHEMA_VERSION_KEY, TORRENT_IMPORT_DESCRIPTORS,
+    COLLECTIONS, CONTACTS, DEVICE_LOG, ENTRIES, IDENTITY, MANIFESTS, META, OUTBOX, PEER_HISTORY,
+    REVISIONS, SAMPLES, SCHEMA_VERSION, SCHEMA_VERSION_KEY, TORRENT_IMPORT_DESCRIPTORS,
     TORRENT_IMPORT_ENTRIES, TORRENT_IMPORTS,
 };
 
@@ -188,6 +189,7 @@ impl Store {
             write.open_table(TORRENT_IMPORT_DESCRIPTORS)?;
             write.open_table(OUTBOX)?;
             write.open_table(SAMPLES)?;
+            write.open_table(PEER_HISTORY)?;
             write
                 .open_table(META)?
                 .insert(SCHEMA_VERSION_KEY, u64::from(SCHEMA_VERSION))?;
@@ -309,6 +311,7 @@ impl Store {
     /// Returns [`StoreError`] when the write fails.
     pub fn forget_collection(&self, collection_id: &[u8]) -> Result<(), StoreError> {
         let (low, high) = schema::range_of(collection_id);
+        let (peer_low, peer_high) = schema::peer_history_range(collection_id);
         let write = self.database.begin_write()?;
         {
             write.open_table(COLLECTIONS)?.remove(collection_id)?;
@@ -318,6 +321,9 @@ impl Store {
             write
                 .open_table(REVISIONS)?
                 .retain_in(low.as_slice()..=high.as_slice(), |_, _| false)?;
+            write
+                .open_table(PEER_HISTORY)?
+                .retain_in(peer_low.as_slice()..=peer_high.as_slice(), |_, _| false)?;
         }
         write.commit()?;
         Ok(())
@@ -661,6 +667,36 @@ impl Store {
             samples.push((at, StoredSample::decode(value.value())?));
         }
         Ok(samples)
+    }
+
+    /// Writes the accumulated ledger for one exact endpoint/client tuple.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the write fails.
+    pub fn put_peer_history(
+        &self,
+        collection_id: &[u8],
+        peer: &StoredPeerHistory,
+    ) -> Result<(), StoreError> {
+        let key = schema::peer_history_key(collection_id, &peer.address, peer.client.as_deref());
+        self.put(PEER_HISTORY, &key, &peer.encode())
+    }
+
+    /// Every durable peer ledger under one collection, newest snapshot first.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the table cannot be read or a row is malformed.
+    pub fn peer_history(&self, collection_id: &[u8]) -> Result<Vec<StoredPeerHistory>, StoreError> {
+        let (low, high) = schema::peer_history_range(collection_id);
+        let read = self.database.begin_read()?;
+        let table = read.open_table(PEER_HISTORY)?;
+        let mut peers = Vec::new();
+        for row in table.range(low.as_slice()..=high.as_slice())? {
+            let (_, value) = row?;
+            peers.push(StoredPeerHistory::decode(value.value())?);
+        }
+        peers.sort_by_key(|peer| std::cmp::Reverse(peer.last_seen_at));
+        Ok(peers)
     }
 
     /// A collection's readings after `at`, oldest first.
@@ -1019,7 +1055,7 @@ mod tests {
             StoredLifecycle::TorrentAwaitingSelection,
             "selected-by-default is presentation state, not download consent"
         );
-        assert_eq!(migrated.version().expect("reads version"), 10);
+        assert_eq!(migrated.version().expect("reads version"), 11);
     }
 
     #[test]

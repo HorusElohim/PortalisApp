@@ -168,9 +168,7 @@ class PeerCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      peer.client == null
-                          ? peer.address
-                          : '${peer.address}  ·  self-reported client',
+                      peer.address,
                       overflow: TextOverflow.ellipsis,
                       style: monoLabel(
                         size: 10,

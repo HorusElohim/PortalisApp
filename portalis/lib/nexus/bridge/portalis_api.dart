@@ -7,7 +7,7 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `collection_projection`, `detail_projection`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Opens the local Nexus runtime once. Calling it again is harmless.
 ///
@@ -47,6 +47,16 @@ Stream<AppDetail?> watchDetail({int? collection}) =>
 /// collection list. Asked for by the one screen that shows them.
 Future<List<AppCollectionPeer>> peers() =>
     RustLib.instance.api.cratePortalisApiPeers();
+
+/// The selected collection's cumulative peer ledger. This is an on-demand
+/// history tier, deliberately separate from live peer polling and snapshots.
+Future<List<AppPeerHistory>> peerHistory({required int collection}) =>
+    RustLib.instance.api.cratePortalisApiPeerHistory(collection: collection);
+
+/// Backend-owned People projection. Saved history is replaced by the same
+/// collection's effective live observation before endpoint/client grouping.
+Future<List<AppPeoplePeer>> peoplePeers() =>
+    RustLib.instance.api.cratePortalisApiPeoplePeers();
 
 /// The collection's shareable magnet URI, when the local substrate has a real
 /// persisted info hash for it. The URI is fetched on demand rather than added
@@ -509,6 +519,55 @@ class AppPeer {
           upBytesPerSecond == other.upBytesPerSecond;
 }
 
+/// One cumulative endpoint ledger returned only for the collection that asked
+/// for it. The totals are backend-calculated across saved app sessions.
+class AppPeerHistory {
+  final String address;
+  final String? client;
+  final BigInt firstSeenAt;
+  final BigInt lastSeenAt;
+  final BigInt downBytes;
+  final BigInt upBytes;
+  final int lastDownBytesPerSecond;
+  final int lastUpBytesPerSecond;
+
+  const AppPeerHistory({
+    required this.address,
+    this.client,
+    required this.firstSeenAt,
+    required this.lastSeenAt,
+    required this.downBytes,
+    required this.upBytes,
+    required this.lastDownBytesPerSecond,
+    required this.lastUpBytesPerSecond,
+  });
+
+  @override
+  int get hashCode =>
+      address.hashCode ^
+      client.hashCode ^
+      firstSeenAt.hashCode ^
+      lastSeenAt.hashCode ^
+      downBytes.hashCode ^
+      upBytes.hashCode ^
+      lastDownBytesPerSecond.hashCode ^
+      lastUpBytesPerSecond.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppPeerHistory &&
+          runtimeType == other.runtimeType &&
+          address == other.address &&
+          client == other.client &&
+          firstSeenAt == other.firstSeenAt &&
+          lastSeenAt == other.lastSeenAt &&
+          downBytes == other.downBytes &&
+          upBytes == other.upBytes &&
+          lastDownBytesPerSecond == other.lastDownBytesPerSecond &&
+          lastUpBytesPerSecond == other.lastUpBytesPerSecond;
+}
+
 /// A locally accepted command that has not settled yet.
 class AppPending {
   final BigInt command;
@@ -529,6 +588,28 @@ class AppPending {
           runtimeType == other.runtimeType &&
           command == other.command &&
           queued == other.queued;
+}
+
+/// One exact endpoint/client observation accumulated across collections.
+class AppPeoplePeer {
+  final AppPeer peer;
+  final Uint32List collections;
+
+  const AppPeoplePeer({
+    required this.peer,
+    required this.collections,
+  });
+
+  @override
+  int get hashCode => peer.hashCode ^ collections.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppPeoplePeer &&
+          runtimeType == other.runtimeType &&
+          peer == other.peer &&
+          collections == other.collections;
 }
 
 /// The complete, app-renderable Nexus projection.

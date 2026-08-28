@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -116,6 +117,36 @@ class AppController extends ChangeNotifier {
       // Recorded, not announced. This is a poll for one screen, and notifying
       // every listener from it rebuilds the whole app — including, if the poll
       // began during a build, the widget currently being built.
+      lastError = '$error';
+      return const [];
+    }
+  }
+
+  /// Seeds the projection for widgets that exercise app composition without a
+  /// native runtime. Production state always arrives through [watchStates].
+  Future<List<AppPeoplePeer>> peoplePeers() async {
+    final seeded = _debugPeers;
+    if (seeded != null) {
+      return [
+        for (final entry in seeded)
+          AppPeoplePeer(
+            peer: entry.peer,
+            collections: Uint32List.fromList([entry.collection]),
+          ),
+      ];
+    }
+    try {
+      return await _repository.peoplePeers();
+    } catch (error) {
+      lastError = '$error';
+      return const [];
+    }
+  }
+
+  Future<List<AppPeerHistory>> peerHistory(int collection) async {
+    try {
+      return await _repository.peerHistory(collection);
+    } catch (error) {
       lastError = '$error';
       return const [];
     }

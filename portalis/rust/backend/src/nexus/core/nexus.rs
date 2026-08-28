@@ -588,6 +588,23 @@ impl Nexus {
             .collect()
     }
 
+    /// Durable cumulative endpoint ledgers for one collection, newest first.
+    #[must_use]
+    pub fn peer_history(
+        &self,
+        collection: Handle,
+    ) -> Vec<crate::nexus::store::records::StoredPeerHistory> {
+        let Some(key) = self
+            .collections
+            .lock()
+            .ok()
+            .and_then(|index| index.key(collection).map(ToOwned::to_owned))
+        else {
+            return Vec::new();
+        };
+        self.store.peer_history(&key).unwrap_or_default()
+    }
+
     pub fn watch_detail(&self, collection: Option<Handle>) -> watch::Receiver<Option<Detail>> {
         self.projector
             .lock()
