@@ -126,6 +126,27 @@ pub struct AppCollectionPeer {
     pub peer: AppPeer,
 }
 
+/// One cumulative endpoint ledger returned only for the collection that asked
+/// for it. The totals are backend-calculated across saved app sessions.
+#[derive(Clone, Debug)]
+pub struct AppPeerHistory {
+    pub address: String,
+    pub client: Option<String>,
+    pub first_seen_at: u64,
+    pub last_seen_at: u64,
+    pub down_bytes: u64,
+    pub up_bytes: u64,
+    pub last_down_bytes_per_second: u32,
+    pub last_up_bytes_per_second: u32,
+}
+
+/// One exact endpoint/client observation accumulated across collections.
+#[derive(Clone, Debug)]
+pub struct AppPeoplePeer {
+    pub peer: AppPeer,
+    pub collections: Vec<u32>,
+}
+
 /// A selectable media entry in a collection detail projection.
 #[derive(Clone, Debug)]
 pub struct AppEntry {
@@ -306,6 +327,88 @@ pub fn peers() -> Result<Vec<AppCollectionPeer>, String> {
             },
         })
         .collect())
+}
+
+/// The selected collection's cumulative peer ledger. This is an on-demand
+/// history tier, deliberately separate from live peer polling and snapshots.
+pub fn peer_history(collection: u32) -> Result<Vec<AppPeerHistory>, String> {
+    Ok(locked_runtime()?
+        .as_ref()
+        .ok_or_else(|| "start Nexus before reading peer history".to_owned())?
+        .peer_history(crate::nexus::projection::state::Handle(collection))
+        .into_iter()
+        .map(|peer| AppPeerHistory {
+            address: peer.address,
+            client: peer.client,
+            first_seen_at: peer.first_seen_at,
+            last_seen_at: peer.last_seen_at,
+            down_bytes: peer.total_down_bytes,
+            up_bytes: peer.total_up_bytes,
+            last_down_bytes_per_second: peer.last_down_bytes_per_second,
+            last_up_bytes_per_second: peer.last_up_bytes_per_second,
+        })
+        .collect())
+}
+
+/// Backend-owned People projection. Saved history is replaced by the same
+/// collection's effective live observation before endpoint/client grouping.
+pub fn people_peers() -> Result<Vec<AppPeoplePeer>, String> {
+    use std::collections::BTreeMap;
+    let runtime = locked_runtime()?;
+    let nexus = runtime
+        .as_ref()
+        .ok_or_else(|| "start Nexus before listing peers".to_owned())?;
+    let mut rows = BTreeMap::new();
+    for collection in nexus.state().collections {
+        for peer in nexus.peer_history(collection.id) {
+            rows.insert(
+                (collection.id, peer.address.clone(), peer.client.clone()),
+                AppPeer {
+                    address: peer.address,
+                    client: peer.client,
+                    down_bytes: peer.total_down_bytes,
+                    up_bytes: peer.total_up_bytes,
+                    down_bytes_per_second: 0,
+                    up_bytes_per_second: 0,
+                },
+            );
+        }
+    }
+    for (collection, peer) in nexus.peers() {
+        rows.insert(
+            (collection, peer.address.clone(), peer.client.clone()),
+            AppPeer {
+                address: peer.address,
+                client: peer.client,
+                down_bytes: peer.down_bytes,
+                up_bytes: peer.up_bytes,
+                down_bytes_per_second: peer.down_bytes_per_second,
+                up_bytes_per_second: peer.up_bytes_per_second,
+            },
+        );
+    }
+    let mut grouped = BTreeMap::<(String, Option<String>), AppPeoplePeer>::new();
+    for ((collection, address, client), peer) in rows {
+        let entry = grouped
+            .entry((address, client))
+            .or_insert_with(|| AppPeoplePeer {
+                peer: AppPeer {
+                    address: peer.address.clone(),
+                    client: peer.client.clone(),
+                    down_bytes: 0,
+                    up_bytes: 0,
+                    down_bytes_per_second: 0,
+                    up_bytes_per_second: 0,
+                },
+                collections: Vec::new(),
+            });
+        entry.peer.down_bytes += peer.down_bytes;
+        entry.peer.up_bytes += peer.up_bytes;
+        entry.peer.down_bytes_per_second += peer.down_bytes_per_second;
+        entry.peer.up_bytes_per_second += peer.up_bytes_per_second;
+        entry.collections.push(collection.0);
+    }
+    Ok(grouped.into_values().collect())
 }
 
 /// The collection's shareable magnet URI, when the local substrate has a real

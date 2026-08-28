@@ -579,6 +579,83 @@ impl StoredSample {
     }
 }
 
+/// The durable traffic ledger for one exact swarm endpoint/client tuple in one
+/// collection. The engine counters are connection-scoped, so checkpoints and a
+/// runtime epoch let the transfer worker add only bytes not already captured
+/// by an earlier completion or shutdown snapshot.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredPeerHistory {
+    pub address: String,
+    pub client: Option<String>,
+    pub first_seen_at: u64,
+    pub last_seen_at: u64,
+    pub total_down_bytes: u64,
+    pub total_up_bytes: u64,
+    pub checkpoint_down_bytes: u64,
+    pub checkpoint_up_bytes: u64,
+    pub checkpoint_epoch: u64,
+    pub last_down_bytes_per_second: u32,
+    pub last_up_bytes_per_second: u32,
+}
+
+impl StoredPeerHistory {
+    #[must_use]
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(
+            self.address.len() + self.client.as_ref().map_or(0, String::len) + 64,
+        );
+        write_string(&mut bytes, &self.address);
+        match &self.client {
+            Some(client) => {
+                bytes.push(1);
+                write_string(&mut bytes, client);
+            }
+            None => bytes.push(0),
+        }
+        for value in [
+            self.first_seen_at,
+            self.last_seen_at,
+            self.total_down_bytes,
+            self.total_up_bytes,
+            self.checkpoint_down_bytes,
+            self.checkpoint_up_bytes,
+            self.checkpoint_epoch,
+        ] {
+            bytes.extend_from_slice(&value.to_be_bytes());
+        }
+        bytes.extend_from_slice(&self.last_down_bytes_per_second.to_be_bytes());
+        bytes.extend_from_slice(&self.last_up_bytes_per_second.to_be_bytes());
+        bytes
+    }
+
+    /// # Errors
+    /// Returns [`Malformed`] unless every field is present and exact.
+    pub fn decode(bytes: &[u8]) -> Result<Self, Malformed> {
+        let mut reader = Reader::new(bytes);
+        let address = reader.string()?;
+        let client = match reader.byte()? {
+            0 => None,
+            1 => Some(reader.string()?),
+            _ => return Err(Malformed),
+        };
+        let peer = Self {
+            address,
+            client,
+            first_seen_at: reader.u64()?,
+            last_seen_at: reader.u64()?,
+            total_down_bytes: reader.u64()?,
+            total_up_bytes: reader.u64()?,
+            checkpoint_down_bytes: reader.u64()?,
+            checkpoint_up_bytes: reader.u64()?,
+            checkpoint_epoch: reader.u64()?,
+            last_down_bytes_per_second: reader.u32()?,
+            last_up_bytes_per_second: reader.u32()?,
+        };
+        reader.finish()?;
+        Ok(peer)
+    }
+}
+
 /// A person this device knows.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StoredContact {
@@ -985,6 +1062,30 @@ mod tests {
         let mut padded = encoded;
         padded.push(0);
         assert_eq!(StoredSample::decode(&padded), Err(Malformed));
+    }
+
+    #[test]
+    fn a_peer_ledger_row_keeps_its_exact_endpoint_client_and_checkpoints() {
+        let peer = StoredPeerHistory {
+            address: "203.0.113.5:6881".to_owned(),
+            client: Some("qBittorrent/5.2.3".to_owned()),
+            first_seen_at: 10,
+            last_seen_at: 20,
+            total_down_bytes: 15_000_000,
+            total_up_bytes: 2_000_000,
+            checkpoint_down_bytes: 5_000_000,
+            checkpoint_up_bytes: 100_000,
+            checkpoint_epoch: 42,
+            last_down_bytes_per_second: 500_000,
+            last_up_bytes_per_second: 10_000,
+        };
+
+        let encoded = peer.encode();
+        assert_eq!(StoredPeerHistory::decode(&encoded), Ok(peer));
+        assert_eq!(
+            StoredPeerHistory::decode(&encoded[..encoded.len() - 1]),
+            Err(Malformed)
+        );
     }
 
     #[test]

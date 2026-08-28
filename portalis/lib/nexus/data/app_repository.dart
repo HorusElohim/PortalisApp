@@ -32,6 +32,8 @@ abstract interface class AppRepository {
   /// them in the snapshot would rewrite every collection list once a second
   /// for one screen's benefit.
   Future<List<AppCollectionPeer>> peers();
+  Future<List<AppPeoplePeer>> peoplePeers();
+  Future<List<AppPeerHistory>> peerHistory(int collection);
   Future<AppAccepted> send(EngineCommand command);
 }
 
@@ -64,6 +66,13 @@ class FrbAppRepository implements AppRepository {
 
   @override
   Future<List<AppCollectionPeer>> peers() => bridge.peers();
+
+  @override
+  Future<List<AppPeoplePeer>> peoplePeers() => bridge.peoplePeers();
+
+  @override
+  Future<List<AppPeerHistory>> peerHistory(int collection) =>
+      bridge.peerHistory(collection: collection);
 
   @override
   Future<AppAccepted> send(EngineCommand command) =>

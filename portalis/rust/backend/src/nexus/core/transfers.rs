@@ -18,9 +18,9 @@ use std::time::Duration;
 
 use tokio::sync::watch;
 
-use crate::nexus::projection::state::{Handle, PortalisState, Status, Transfer};
+use crate::nexus::projection::state::{Handle, PeerState, PortalisState, Status, Transfer};
 use crate::nexus::store::Store;
-use crate::nexus::store::records::{StoredCollection, StoredSample};
+use crate::nexus::store::records::{StoredCollection, StoredPeerHistory, StoredSample};
 use crate::nexus::substrate::Substrate;
 use crate::nexus::torrent::TorrentInfo;
 
@@ -103,9 +103,15 @@ pub(crate) async fn follow_transfers(
     // unchanged one can be recognised without reading back what was just
     // stored, and so a rate can be measured against real elapsed time.
     let mut written: HashMap<Vec<u8>, LastReading> = HashMap::new();
+    let epoch = unix_time_ns();
+    let mut peer_ledgers: HashMap<Vec<u8>, HashMap<PeerKey, StoredPeerHistory>> = HashMap::new();
+    let mut last_current: HashMap<Vec<u8>, Holding> = HashMap::new();
     loop {
         tokio::select! {
-            () = shutdown.requested() => return,
+            () = shutdown.requested() => {
+                snapshot_holdings(&store, &last_current, &mut peer_ledgers, epoch);
+                return;
+            },
             _ = tick.tick() => {}
         }
 
@@ -165,15 +171,21 @@ pub(crate) async fn follow_transfers(
             let elapsed = written
                 .get(&key)
                 .map_or(0, |previous| unix_time_ns().saturating_sub(previous.at));
-            let peers = measured_peers(info, written.get(&key), elapsed);
+            let peers = effective_peers(
+                &store,
+                &key,
+                measured_peers(info, written.get(&key), elapsed),
+                &mut peer_ledgers,
+                epoch,
+            );
             // Reads performed by ReferencedStorage while an owner torrent is
             // being checked are local source I/O. Keep the rate visible, but
             // carry the explicit source_reading marker so the UI does not call
             // it a download.
             let rates = measured;
             if info.knows_progress() && (!local_source || rates.down > 0 || rates.up > 0) {
-                if !local_source {
-                    mark_moments(&store, &key, info);
+                if !local_source && mark_moments(&store, &key, info) {
+                    snapshot_peers(&store, &key, info, &peers, &mut peer_ledgers, epoch);
                 }
                 let now = unix_time_ns();
                 let sample = record(
@@ -226,6 +238,7 @@ pub(crate) async fn follow_transfers(
         // Replaced before refreshing, so a detail rebuilt below reads this
         // tick's holdings rather than the last one's.
         holdings.replace(current);
+        last_current = holdings.lock().clone();
         // The detail tier is where peers, the piece map and per-file progress
         // live. Without this an open collection shows whatever was true when
         // it was opened and never moves, which is what made a running
@@ -274,16 +287,16 @@ fn carried_collections(
 ///
 /// A failure is logged and dropped: losing the moment is not a reason to stop
 /// reporting the transfer it belongs to.
-fn mark_moments(store: &Store, key: &[u8], info: &TorrentInfo) {
+fn mark_moments(store: &Store, key: &[u8], info: &TorrentInfo) -> bool {
     let Ok(Some(stored)) = store.collection(key) else {
-        return;
+        return false;
     };
     // Bytes are what starts a transfer, not the decision to allow one — a
     // collection queued behind a dead swarm has not started.
     let starting = stored.started_at.is_none() && info.progress_bytes > 0;
     let finishing = stored.completed_at.is_none() && info.finished;
     if !starting && !finishing {
-        return;
+        return false;
     }
     let now = unix_time_ns();
     let updated = StoredCollection {
@@ -297,6 +310,142 @@ fn mark_moments(store: &Store, key: &[u8], info: &TorrentInfo) {
     };
     if let Err(error) = store.put_collection(key, &updated) {
         crate::nexus::log::clog!("nexus", "could not record a transfer moment: {error}");
+    }
+    finishing
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+struct PeerKey {
+    address: String,
+    client: Option<String>,
+}
+
+impl PeerKey {
+    fn of(peer: &PeerState) -> Self {
+        Self {
+            address: peer.address.clone(),
+            client: peer.client.clone(),
+        }
+    }
+}
+
+fn effective_peers(
+    store: &Store,
+    collection: &[u8],
+    mut peers: Vec<PeerState>,
+    ledgers: &mut HashMap<Vec<u8>, HashMap<PeerKey, StoredPeerHistory>>,
+    epoch: u64,
+) -> Vec<PeerState> {
+    let ledger = ledgers.entry(collection.to_vec()).or_insert_with(|| {
+        store
+            .peer_history(collection)
+            .unwrap_or_else(|error| {
+                crate::nexus::log::clog!("nexus", "could not read peer history: {error}");
+                Vec::new()
+            })
+            .into_iter()
+            .map(|peer| {
+                (
+                    PeerKey {
+                        address: peer.address.clone(),
+                        client: peer.client.clone(),
+                    },
+                    peer,
+                )
+            })
+            .collect()
+    });
+    for peer in &mut peers {
+        let Some(saved) = ledger.get(&PeerKey::of(peer)) else {
+            continue;
+        };
+        peer.down_bytes = saved.total_down_bytes.saturating_add(unsaved(
+            peer.down_bytes,
+            saved.checkpoint_down_bytes,
+            saved.checkpoint_epoch,
+            epoch,
+        ));
+        peer.up_bytes = saved.total_up_bytes.saturating_add(unsaved(
+            peer.up_bytes,
+            saved.checkpoint_up_bytes,
+            saved.checkpoint_epoch,
+            epoch,
+        ));
+    }
+    peers
+}
+
+fn unsaved(raw: u64, checkpoint: u64, checkpoint_epoch: u64, epoch: u64) -> u64 {
+    if checkpoint_epoch == epoch && raw >= checkpoint {
+        raw - checkpoint
+    } else {
+        raw
+    }
+}
+
+fn snapshot_holdings(
+    store: &Store,
+    holdings: &HashMap<Vec<u8>, Holding>,
+    ledgers: &mut HashMap<Vec<u8>, HashMap<PeerKey, StoredPeerHistory>>,
+    epoch: u64,
+) {
+    for (key, holding) in holdings {
+        snapshot_peers(store, key, &holding.info, &holding.peers, ledgers, epoch);
+    }
+}
+
+fn snapshot_peers(
+    store: &Store,
+    collection: &[u8],
+    info: &TorrentInfo,
+    peers: &[PeerState],
+    ledgers: &mut HashMap<Vec<u8>, HashMap<PeerKey, StoredPeerHistory>>,
+    epoch: u64,
+) {
+    let now = unix_time_ns();
+    let ledger = ledgers.entry(collection.to_vec()).or_default();
+    for raw in &info.live_peer_addrs {
+        let key = PeerKey {
+            address: raw.address.clone(),
+            client: raw.client.clone(),
+        };
+        let rates = peers.iter().find(|peer| PeerKey::of(peer) == key);
+        let peer = ledger
+            .entry(key.clone())
+            .or_insert_with(|| StoredPeerHistory {
+                address: key.address.clone(),
+                client: key.client.clone(),
+                first_seen_at: now,
+                last_seen_at: now,
+                total_down_bytes: 0,
+                total_up_bytes: 0,
+                checkpoint_down_bytes: 0,
+                checkpoint_up_bytes: 0,
+                checkpoint_epoch: 0,
+                last_down_bytes_per_second: 0,
+                last_up_bytes_per_second: 0,
+            });
+        peer.total_down_bytes = peer.total_down_bytes.saturating_add(unsaved(
+            raw.fetched_bytes,
+            peer.checkpoint_down_bytes,
+            peer.checkpoint_epoch,
+            epoch,
+        ));
+        peer.total_up_bytes = peer.total_up_bytes.saturating_add(unsaved(
+            raw.uploaded_bytes,
+            peer.checkpoint_up_bytes,
+            peer.checkpoint_epoch,
+            epoch,
+        ));
+        peer.checkpoint_down_bytes = raw.fetched_bytes;
+        peer.checkpoint_up_bytes = raw.uploaded_bytes;
+        peer.checkpoint_epoch = epoch;
+        peer.last_seen_at = now;
+        peer.last_down_bytes_per_second = rates.map_or(0, |peer| peer.down_bytes_per_second);
+        peer.last_up_bytes_per_second = rates.map_or(0, |peer| peer.up_bytes_per_second);
+        if let Err(error) = store.put_peer_history(collection, peer) {
+            crate::nexus::log::clog!("nexus", "could not snapshot peer history: {error}");
+        }
     }
 }
 

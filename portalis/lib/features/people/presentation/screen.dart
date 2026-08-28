@@ -35,7 +35,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
   static const _refresh = Duration(seconds: 2);
 
   Timer? _timer;
-  List<AppCollectionPeer> _peers = const [];
+  List<AppPeoplePeer> _peers = const [];
 
   @override
   void initState() {
@@ -57,7 +57,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
   }
 
   Future<void> _load() async {
-    final peers = await AppControllers.engine.peers();
+    final peers = await AppControllers.engine.peoplePeers();
     if (!mounted) return;
     setState(() => _peers = peers);
   }
@@ -169,8 +169,10 @@ class _PeopleScreenState extends State<PeopleScreen> {
     final observations = [
       for (final entry in _peers)
         PeerObservation(
-          collectionId: '${entry.collection}',
-          collectionName: names[entry.collection] ?? 'Unknown collection',
+          collectionId: entry.collections.join(','),
+          collectionName: entry.collections
+              .map((id) => names[id] ?? 'Unknown collection')
+              .join(' · '),
           address: entry.peer.address,
           lastSeen: now,
           client: entry.peer.client,

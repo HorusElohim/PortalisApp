@@ -17,7 +17,7 @@ use redb::TableDefinition;
 /// [`super::StoreError::FromTheFuture`]) rather than being read with the wrong
 /// assumptions — silently misreading a user's own data is worse than declining
 /// to start.
-pub const SCHEMA_VERSION: u32 = 10;
+pub const SCHEMA_VERSION: u32 = 11;
 
 /// Where the schema version itself lives.
 pub const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
@@ -54,6 +54,9 @@ pub const OUTBOX: TableDefinition<u64, &[u8]> = TableDefinition::new("outbox");
 /// In Rust deliberately (D8): it is sampled from backend numbers, and keeping
 /// it in Flutter made it a second source of truth re-encoded on every tick.
 pub const SAMPLES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("samples");
+/// Snapshot-only cumulative traffic ledgers, keyed by collection, address and
+/// reported client name. This stays separate from the fast transfer ring.
+pub const PEER_HISTORY: TableDefinition<&[u8], &[u8]> = TableDefinition::new("peer_history");
 
 /// A key that groups every row of one owner or collection together, ordered by
 /// the number that follows.
@@ -81,6 +84,35 @@ pub fn number_of(key: &[u8]) -> Option<u64> {
     <[u8; 8]>::try_from(&key[start..])
         .ok()
         .map(u64::from_be_bytes)
+}
+
+/// A collision-free key for one exact endpoint/client observation.
+#[must_use]
+pub fn peer_history_key(collection: &[u8], address: &str, client: Option<&str>) -> Vec<u8> {
+    let mut key =
+        Vec::with_capacity(collection.len() + address.len() + client.map_or(0, str::len) + 10);
+    key.extend_from_slice(collection);
+    key.extend_from_slice(&(address.len() as u32).to_be_bytes());
+    key.extend_from_slice(address.as_bytes());
+    match client {
+        Some(client) => {
+            key.push(1);
+            key.extend_from_slice(&(client.len() as u32).to_be_bytes());
+            key.extend_from_slice(client.as_bytes());
+        }
+        None => key.push(0),
+    }
+    key
+}
+
+/// Inclusive range covering every peer-history key under one collection.
+#[must_use]
+pub fn peer_history_range(collection: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let mut low = collection.to_vec();
+    low.extend_from_slice(&0_u32.to_be_bytes());
+    let mut high = collection.to_vec();
+    high.extend_from_slice(&u32::MAX.to_be_bytes());
+    (low, high)
 }
 
 #[cfg(test)]

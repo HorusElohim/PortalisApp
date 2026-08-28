@@ -28,6 +28,8 @@ export '../bridge/portalis_api.dart'
         AppEntry,
         AppPending,
         AppPeer,
+        AppPeerHistory,
+        AppPeoplePeer,
         AppSnapshot,
         AppSourceFile,
         AppTransfer;

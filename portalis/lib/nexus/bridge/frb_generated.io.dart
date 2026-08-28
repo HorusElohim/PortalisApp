@@ -67,7 +67,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppPeer dco_decode_app_peer(dynamic raw);
 
   @protected
+  AppPeerHistory dco_decode_app_peer_history(dynamic raw);
+
+  @protected
   AppPending dco_decode_app_pending(dynamic raw);
+
+  @protected
+  AppPeoplePeer dco_decode_app_people_peer(dynamic raw);
 
   @protected
   AppSnapshot dco_decode_app_snapshot(dynamic raw);
@@ -134,6 +140,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AppPeer> dco_decode_list_app_peer(dynamic raw);
+
+  @protected
+  List<AppPeerHistory> dco_decode_list_app_peer_history(dynamic raw);
+
+  @protected
+  List<AppPeoplePeer> dco_decode_list_app_people_peer(dynamic raw);
 
   @protected
   List<AppSourceFile> dco_decode_list_app_source_file(dynamic raw);
@@ -231,7 +243,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppPeer sse_decode_app_peer(SseDeserializer deserializer);
 
   @protected
+  AppPeerHistory sse_decode_app_peer_history(SseDeserializer deserializer);
+
+  @protected
   AppPending sse_decode_app_pending(SseDeserializer deserializer);
+
+  @protected
+  AppPeoplePeer sse_decode_app_people_peer(SseDeserializer deserializer);
 
   @protected
   AppSnapshot sse_decode_app_snapshot(SseDeserializer deserializer);
@@ -302,6 +320,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AppPeer> sse_decode_list_app_peer(SseDeserializer deserializer);
+
+  @protected
+  List<AppPeerHistory> sse_decode_list_app_peer_history(
+      SseDeserializer deserializer);
+
+  @protected
+  List<AppPeoplePeer> sse_decode_list_app_people_peer(
+      SseDeserializer deserializer);
 
   @protected
   List<AppSourceFile> sse_decode_list_app_source_file(
@@ -407,7 +433,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_app_peer(AppPeer self, SseSerializer serializer);
 
   @protected
+  void sse_encode_app_peer_history(
+      AppPeerHistory self, SseSerializer serializer);
+
+  @protected
   void sse_encode_app_pending(AppPending self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_people_peer(AppPeoplePeer self, SseSerializer serializer);
 
   @protected
   void sse_encode_app_snapshot(AppSnapshot self, SseSerializer serializer);
@@ -485,6 +518,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_app_peer(List<AppPeer> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_app_peer_history(
+      List<AppPeerHistory> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_app_people_peer(
+      List<AppPeoplePeer> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_app_source_file(
