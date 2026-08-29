@@ -293,9 +293,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       embedded: widget.embedded,
       forceShowBack: _advanced,
       onBack: _handleBack,
-      // Wider than the shared reading cap once there's room: this is the one
-      // screen with something to do with it (see SettingsSectionsLayout).
-      wideMaxWidth: 1100,
+      // Shared across the whole Settings/User family — see
+      // PageBody.settingsWideMaxWidth — so Storage, File formats and
+      // Diagnostics read at the same width as Settings itself rather than
+      // narrowing back down to the app's default reading measure.
+      wideMaxWidth: PageBody.settingsWideMaxWidth,
       body: _SettingsScrollSurface(
         controller: _scrollController,
         child: ListenableBuilder(

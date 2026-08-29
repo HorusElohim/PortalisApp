@@ -159,6 +159,11 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       embedded: widget.embedded,
       forceShowBack: true,
       onBack: widget.onBack,
+      // Same measure as Settings — see PageBody.settingsWideMaxWidth. This
+      // was the screen that surfaced the inconsistency: reached from
+      // Settings but still on the app's narrower default measure, it read
+      // visibly cramped next to the screen it was opened from.
+      wideMaxWidth: PageBody.settingsWideMaxWidth,
       footer: Row(
         children: [
           Expanded(

@@ -84,6 +84,8 @@ class _StorageScreenState extends State<StorageScreen> {
       embedded: widget.embedded,
       forceShowBack: true,
       onBack: widget.onBack,
+      // Same measure as Settings — see PageBody.settingsWideMaxWidth.
+      wideMaxWidth: PageBody.settingsWideMaxWidth,
       body: _body(entries),
     );
   }
