@@ -19,7 +19,7 @@ static APPLICATION_CONTEXT: OnceLock<Global<JObject<'static>>> = OnceLock::new()
 /// startup. Keeping the application context, not an Activity, prevents a
 /// rotation from invalidating long-lived torrent I/O.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_example_portalis_PortalisNative_installContext(
+pub extern "system" fn Java_com_portalis_PortalisNative_installContext(
     mut env: EnvUnowned<'_>,
     _class: JClass,
     context: JObject,

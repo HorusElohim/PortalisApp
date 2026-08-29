@@ -5,6 +5,21 @@ inputs:
     description: Path to Flutter project
     required: false
     default: portalis
+  keystore-base64:
+    description: >-
+      Base64-encoded release keystore (.jks). When empty, the release APK
+      falls back to debug signing, which is fine for a quick sideload but is
+      not upload-key-stable across builds.
+    required: false
+    default: ''
+  keystore-password:
+    description: Keystore/key password (this project's generator uses one PKCS12 password for both).
+    required: false
+    default: ''
+  keystore-alias:
+    description: Key alias inside the keystore.
+    required: false
+    default: 'portalis'
 runs:
   using: composite
   steps:
@@ -32,6 +47,20 @@ runs:
         extract-backend-version: 'true'
         working-dir: ${{ inputs.working-dir }}
 
+    - name: Install release keystore
+      if: ${{ inputs.keystore-base64 != '' }}
+      shell: bash
+      working-directory: ${{ inputs.working-dir }}
+      run: |
+        set -euo pipefail
+        echo "${{ inputs.keystore-base64 }}" | base64 -d > android/app/portalis-release.jks
+        cat > android/key.properties <<EOF
+        storePassword=${{ inputs.keystore-password }}
+        keyPassword=${{ inputs.keystore-password }}
+        keyAlias=${{ inputs.keystore-alias }}
+        storeFile=portalis-release.jks
+        EOF
+
     - name: Build Rust JNI libs (release)
       shell: bash
       working-directory: ${{ inputs.working-dir }}
@@ -42,9 +71,15 @@ runs:
       working-directory: ${{ inputs.working-dir }}
       run: flutter build apk --release
 
+    - name: Remove release keystore
+      if: always()
+      shell: bash
+      working-directory: ${{ inputs.working-dir }}
+      run: rm -f android/app/portalis-release.jks android/key.properties
+
     - name: Upload apk
       uses: actions/upload-artifact@v4
       with:
         name: Portalis-${{ steps.setup.outputs.backend-version }}-Android-${{ steps.setup.outputs.app-version }}-${{ steps.meta.outputs.short_sha }}-release
         path: ${{ inputs.working-dir }}/build/app/outputs/flutter-apk/app-release.apk
-        retention-days: 1
+        retention-days: 14

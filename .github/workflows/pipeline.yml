@@ -83,6 +83,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: 🤖 Android
         uses: ./.github/actions/build-android
+        with:
+          keystore-base64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
 
   linux:
     name: 🐧 Linux
