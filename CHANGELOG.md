@@ -9,6 +9,13 @@
   downloaded/uploaded bytes and current download/upload speeds.
 - Active peers are marked `LIVE`; quiet connections remain visible without
   implying that they are still transferring.
+- Completed collections keep their checkpointed peers visible after the live
+  socket closes, including the last measured per-peer rates.
+- Zero-copy owners now establish peer counter baselines while idle, so a peer's
+  upload speed becomes measurable as soon as serving begins instead of staying
+  at zero.
+- People reuses the full collection peer card, keeping peer identity claims,
+  totals and upload/download speeds consistent across both screens.
 
 ## 1.0.43+44
 

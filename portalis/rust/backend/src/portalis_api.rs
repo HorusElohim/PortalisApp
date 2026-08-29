@@ -393,28 +393,44 @@ pub fn peer_history(collection: u32) -> Result<Vec<AppPeerHistory>, String> {
 /// Backend-owned People projection. Saved history is replaced by the same
 /// collection's effective live observation before endpoint/client grouping.
 pub fn people_peers() -> Result<Vec<AppPeoplePeer>, String> {
-    use std::collections::BTreeMap;
     let runtime = locked_runtime()?;
     let nexus = runtime
         .as_ref()
         .ok_or_else(|| "start Nexus before listing peers".to_owned())?;
+    let history = nexus
+        .state()
+        .collections
+        .into_iter()
+        .flat_map(|collection| {
+            nexus
+                .peer_history(collection.id)
+                .into_iter()
+                .map(move |peer| (collection.id, peer))
+        });
+    Ok(group_people_peers(history, nexus.peers()))
+}
+
+fn group_people_peers(
+    history: impl IntoIterator<Item = (Handle, crate::nexus::store::records::StoredPeerHistory)>,
+    live: impl IntoIterator<Item = (Handle, crate::nexus::projection::state::PeerState)>,
+) -> Vec<AppPeoplePeer> {
+    use std::collections::BTreeMap;
+
     let mut rows = BTreeMap::new();
-    for collection in nexus.state().collections {
-        for peer in nexus.peer_history(collection.id) {
-            rows.insert(
-                (collection.id, peer.address.clone(), peer.client.clone()),
-                AppPeer {
-                    address: peer.address,
-                    client: peer.client,
-                    down_bytes: peer.total_down_bytes,
-                    up_bytes: peer.total_up_bytes,
-                    down_bytes_per_second: 0,
-                    up_bytes_per_second: 0,
-                },
-            );
-        }
+    for (collection, peer) in history {
+        rows.insert(
+            (collection, peer.address.clone(), peer.client.clone()),
+            AppPeer {
+                address: peer.address,
+                client: peer.client,
+                down_bytes: peer.total_down_bytes,
+                up_bytes: peer.total_up_bytes,
+                down_bytes_per_second: peer.last_down_bytes_per_second,
+                up_bytes_per_second: peer.last_up_bytes_per_second,
+            },
+        );
     }
-    for (collection, peer) in nexus.peers() {
+    for (collection, peer) in live {
         rows.insert(
             (collection, peer.address.clone(), peer.client.clone()),
             AppPeer {
@@ -448,7 +464,7 @@ pub fn people_peers() -> Result<Vec<AppPeoplePeer>, String> {
         entry.peer.up_bytes_per_second += peer.up_bytes_per_second;
         entry.collections.push(collection.0);
     }
-    Ok(grouped.into_values().collect())
+    grouped.into_values().collect()
 }
 
 /// The collection's shareable magnet URI, when the local substrate has a real
@@ -840,6 +856,7 @@ fn detail_projection(detail: &Detail) -> AppDetail {
 mod tests {
     use super::*;
     use crate::nexus::projection::state::{Connectivity, DeviceState};
+    use crate::nexus::store::records::StoredPeerHistory;
 
     fn command(kind: &str) -> AppCommand {
         AppCommand {
@@ -931,6 +948,34 @@ mod tests {
         assert_eq!(app.device.name, "Mina's Mac");
         assert_eq!(app.connectivity, "LocalOnly");
         assert!(app.collections.is_empty());
+    }
+
+    #[test]
+    fn remembered_peer_rates_survive_the_people_projection() {
+        let peers = group_people_peers(
+            [(
+                Handle(7),
+                StoredPeerHistory {
+                    address: "203.0.113.5:6881".to_owned(),
+                    client: Some("qBittorrent 4.6".to_owned()),
+                    first_seen_at: 1,
+                    last_seen_at: 2,
+                    total_down_bytes: 4_000_000,
+                    total_up_bytes: 1_000_000,
+                    checkpoint_down_bytes: 4_000_000,
+                    checkpoint_up_bytes: 1_000_000,
+                    checkpoint_epoch: 9,
+                    last_down_bytes_per_second: 512_000,
+                    last_up_bytes_per_second: 64_000,
+                },
+            )],
+            std::iter::empty(),
+        );
+
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].collections, vec![7]);
+        assert_eq!(peers[0].peer.down_bytes_per_second, 512_000);
+        assert_eq!(peers[0].peer.up_bytes_per_second, 64_000);
     }
 
     #[test]

@@ -61,7 +61,8 @@ Future<void> sendDeleteCollection(
 class EngineCollectionSource extends CollectionSource with ChangeNotifier {
   EngineCollectionSource(
       {required this.controller, required this.collectionId}) {
-    controller.addListener(notifyListeners);
+    _completedAt = _live?.completedAt;
+    controller.addListener(_onControllerChanged);
     _detailSubscription = controller.watchDetail(collectionId).listen((detail) {
       _detail = detail;
       notifyListeners();
@@ -83,6 +84,8 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
   AppDetail? _detail;
   final List<Reading> _readings = [];
   List<AppPeerHistory> _peerHistory = const [];
+  BigInt? _completedAt;
+  int _peerHistoryRequest = 0;
   late final StreamSubscription<AppDetail?> _detailSubscription;
   late final StreamSubscription<Uint8List> _historySubscription;
 
@@ -130,7 +133,22 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
   }
 
   Future<void> _loadPeerHistory() async {
-    _peerHistory = await controller.peerHistory(collectionId);
+    final request = ++_peerHistoryRequest;
+    final peers = await controller.peerHistory(collectionId);
+    if (request != _peerHistoryRequest) return;
+    _peerHistory = peers;
+    notifyListeners();
+  }
+
+  void _onControllerChanged() {
+    final completedAt = _live?.completedAt;
+    if (_completedAt == null && completedAt != null) {
+      // Completion is the backend's durable peer-ledger checkpoint. Refresh
+      // immediately so a peer that disconnects after finishing is replaced by
+      // its saved observation instead of disappearing from the open screen.
+      unawaited(_loadPeerHistory());
+    }
+    _completedAt = completedAt;
     notifyListeners();
   }
 
@@ -228,7 +246,7 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
 
   @override
   void dispose() {
-    controller.removeListener(notifyListeners);
+    controller.removeListener(_onControllerChanged);
     unawaited(_detailSubscription.cancel());
     unawaited(_historySubscription.cancel());
     super.dispose();

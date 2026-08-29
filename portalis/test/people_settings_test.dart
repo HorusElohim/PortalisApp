@@ -85,7 +85,7 @@ void main() {
               client: 'qBittorrent 4.6',
               downBytes: 4194304,
               upBytes: 1048576,
-              downBytesPerSecond: 524288,
+              downBytesPerSecond: 512000,
             ),
           ),
           AppCollectionPeer(
@@ -97,14 +97,16 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('203.0.113.5:6881'), findsOneWidget);
+      expect(find.textContaining('203.0.113.5:6881'), findsOneWidget);
       expect(find.textContaining('Iceland trip'), findsWidgets);
-      // A self-reported name is shown as reported, never as an identity.
-      expect(find.textContaining('reports qBittorrent 4.6'), findsOneWidget);
-      expect(find.textContaining('/s'), findsOneWidget);
-      // A connected peer that has exchanged nothing says so rather than
-      // being hidden or dressed up as active.
-      expect(find.text('connected · idle'), findsOneWidget);
+      // People reuses the full collection peer card instead of maintaining a
+      // second, less informative connection-card design.
+      expect(find.text('qBittorrent 4.6'), findsOneWidget);
+      expect(find.text('DOWNLOADED'), findsWidgets);
+      expect(find.text('UPLOADED'), findsWidgets);
+      expect(find.text('DOWN SPEED'), findsWidgets);
+      expect(find.text('UP SPEED'), findsWidgets);
+      expect(find.text('512 KB/s'), findsOneWidget);
       // Connections are never presented as verified people.
       expect(find.text('VERIFIED'), findsNothing);
     });

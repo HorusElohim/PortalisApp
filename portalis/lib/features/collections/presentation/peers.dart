@@ -133,9 +133,10 @@ class _NamedPeer extends StatelessWidget {
 /// measurements readable together. The client name is still explicitly a
 /// report from the peer, not a verified identity.
 class PeerCard extends StatelessWidget {
-  const PeerCard({super.key, required this.peer});
+  const PeerCard({super.key, required this.peer, this.contextLabel});
 
   final PeerObservation peer;
+  final String? contextLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -168,7 +169,9 @@ class PeerCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      peer.address,
+                      contextLabel == null
+                          ? peer.address
+                          : '${peer.address} · $contextLabel',
                       overflow: TextOverflow.ellipsis,
                       style: monoLabel(
                         size: 10,
