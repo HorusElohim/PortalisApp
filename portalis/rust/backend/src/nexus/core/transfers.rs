@@ -645,10 +645,11 @@ struct LastReading {
     at: u64,
     fetched: u64,
     uploaded: u64,
-    /// Per-peer counters at that moment, keyed by address, so a peer's rate
-    /// can be measured the same way the collection's is. Peers that went away
-    /// are simply absent next tick and measure as gone rather than as idle.
-    peers: HashMap<String, (u64, u64)>,
+    /// Per-peer counters at that moment, keyed by endpoint and client claim,
+    /// so a peer's rate is measured against the same identity as its durable
+    /// ledger. Peers that went away are simply absent next tick and measure as
+    /// gone rather than as idle.
+    peers: HashMap<PeerKey, (u64, u64)>,
 }
 
 /// Per-peer live rates for one reading.
@@ -665,9 +666,12 @@ fn measured_peers(
     info.live_peer_addrs
         .iter()
         .map(|peer| {
-            let previous = last
-                .filter(|_| elapsed_ns > 0)
-                .and_then(|reading| reading.peers.get(&peer.address));
+            let previous = last.filter(|_| elapsed_ns > 0).and_then(|reading| {
+                reading.peers.get(&PeerKey {
+                    address: peer.address.clone(),
+                    client: peer.client.clone(),
+                })
+            });
             let (down, up) = previous.map_or((0, 0), |(fetched, uploaded)| {
                 (
                     rate(peer.fetched_bytes.saturating_sub(*fetched), elapsed_ns),
@@ -686,12 +690,15 @@ fn measured_peers(
         .collect()
 }
 
-fn peer_counters(info: &TorrentInfo) -> HashMap<String, (u64, u64)> {
+fn peer_counters(info: &TorrentInfo) -> HashMap<PeerKey, (u64, u64)> {
     info.live_peer_addrs
         .iter()
         .map(|peer| {
             (
-                peer.address.clone(),
+                PeerKey {
+                    address: peer.address.clone(),
+                    client: peer.client.clone(),
+                },
                 (peer.fetched_bytes, peer.uploaded_bytes),
             )
         })
@@ -1125,7 +1132,13 @@ mod tests {
             at: unix_time_ns().saturating_sub(1_000_000_000),
             fetched: 0,
             uploaded: 0,
-            peers: HashMap::from([("10.0.0.7:6881".to_owned(), (1_000_000, 500_000))]),
+            peers: HashMap::from([(
+                PeerKey {
+                    address: "10.0.0.7:6881".to_owned(),
+                    client: Some("qBittorrent 4.6".to_owned()),
+                },
+                (1_000_000, 500_000),
+            )]),
         };
 
         let measured = measured_peers(&reading, Some(&a_second_ago), 1_000_000_000);
@@ -1142,8 +1155,120 @@ mod tests {
         let first_sight = measured_peers(&reading, None, 0);
         assert_eq!(first_sight[0].down_bytes_per_second, 0);
         assert_eq!(
+            peer_counters(&reading).len(),
+            1,
+            "the client-qualified endpoint has one independent baseline"
+        );
+        assert_eq!(unsaved(8, 5, 7, 7), 3, "same epoch adds only the delta");
+        assert_eq!(unsaved(2, 5, 7, 7), 2, "a reset starts a new segment");
+        assert_eq!(unsaved(5, 5, 7, 8), 5, "a new runtime is a new segment");
+        assert_eq!(
             first_sight[0].down_bytes, 3_000_000,
             "but its totals are still true"
         );
+    }
+
+    #[test]
+    fn peers_sharing_an_endpoint_keep_client_qualified_rate_baselines() {
+        let peer = |client: &str, fetched: u64, uploaded: u64| crate::nexus::torrent::PeerLink {
+            address: "10.0.0.7:6881".to_owned(),
+            fetched_bytes: fetched,
+            uploaded_bytes: uploaded,
+            client: Some(client.to_owned()),
+        };
+        let mut reading = info(0, 100, false);
+        reading.live_peer_addrs = vec![
+            peer("qBittorrent 4.6", 3_000_000, 1_000_000),
+            peer("Transmission 4.0", 4_000_000, 2_000_000),
+        ];
+        let a_second_ago = LastReading {
+            sample: StoredSample {
+                done: 0,
+                total: 100,
+                down_bytes_per_second: 0,
+                up_bytes_per_second: 0,
+                peers: 2,
+            },
+            at: unix_time_ns().saturating_sub(1_000_000_000),
+            fetched: 0,
+            uploaded: 0,
+            peers: HashMap::from([
+                (
+                    PeerKey {
+                        address: "10.0.0.7:6881".to_owned(),
+                        client: Some("qBittorrent 4.6".to_owned()),
+                    },
+                    (1_000_000, 500_000),
+                ),
+                (
+                    PeerKey {
+                        address: "10.0.0.7:6881".to_owned(),
+                        client: Some("Transmission 4.0".to_owned()),
+                    },
+                    (3_000_000, 1_500_000),
+                ),
+            ]),
+        };
+
+        let measured = measured_peers(&reading, Some(&a_second_ago), 1_000_000_000);
+
+        assert_eq!(measured.len(), 2);
+        assert_eq!(measured[0].down_bytes_per_second, 2_000_000);
+        assert_eq!(measured[0].up_bytes_per_second, 500_000);
+        assert_eq!(measured[1].down_bytes_per_second, 1_000_000);
+        assert_eq!(measured[1].up_bytes_per_second, 500_000);
+        assert_eq!(
+            peer_counters(&reading).len(),
+            2,
+            "each client claim retains an independent baseline at one endpoint"
+        );
+    }
+
+    #[test]
+    fn a_live_peer_overlays_its_checkpointed_history_once() {
+        let dir = std::env::temp_dir().join(format!(
+            "portalis-peer-history-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let store = Store::open(dir.join("portalis.redb")).expect("opens");
+        store
+            .put_peer_history(
+                b"collection",
+                &StoredPeerHistory {
+                    address: "10.0.0.7:6881".to_owned(),
+                    client: Some("qBittorrent 4.6".to_owned()),
+                    first_seen_at: 1,
+                    last_seen_at: 2,
+                    total_down_bytes: 100,
+                    total_up_bytes: 50,
+                    checkpoint_down_bytes: 40,
+                    checkpoint_up_bytes: 20,
+                    checkpoint_epoch: 7,
+                    last_down_bytes_per_second: 0,
+                    last_up_bytes_per_second: 0,
+                },
+            )
+            .expect("writes the checkpoint");
+
+        let mut current = info(0, 100, false);
+        current.live_peer_addrs = vec![crate::nexus::torrent::PeerLink {
+            address: "10.0.0.7:6881".to_owned(),
+            fetched_bytes: 55,
+            uploaded_bytes: 32,
+            client: Some("qBittorrent 4.6".to_owned()),
+        }];
+        let live = measured_peers(&current, None, 0);
+        let mut ledgers = HashMap::new();
+
+        let effective = effective_peers(&store, b"collection", live, &mut ledgers, 7);
+
+        assert_eq!(effective.len(), 1);
+        assert_eq!(effective[0].down_bytes, 115);
+        assert_eq!(effective[0].up_bytes, 62);
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
