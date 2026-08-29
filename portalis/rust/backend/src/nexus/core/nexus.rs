@@ -91,6 +91,7 @@ pub struct Nexus {
     publisher: Arc<Notify>,
     /// Wakes the worker that resolves torrent sources and starts downloads.
     torrents: Arc<Notify>,
+    activity: crate::nexus::activity::DeviceActivityTracker,
 }
 
 /// Everything the detail tier is assembled from.
@@ -405,6 +406,10 @@ impl Nexus {
         let torrents = Arc::new(Notify::new());
         let substrate_for_torrents = Arc::clone(&substrate);
         let holdings = super::transfers::Holdings::default();
+        let activity = crate::nexus::activity::DeviceActivityTracker::start(
+            Arc::clone(&store),
+            unix_time_ns(),
+        )?;
         let details: Arc<Mutex<HashMap<Handle, watch::Sender<Option<Detail>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let sources = DetailSources {
@@ -445,6 +450,7 @@ impl Nexus {
             let collections = Arc::clone(&collections);
             let holdings = holdings.clone();
             let sources_for_transfers = sources.clone();
+            let activity_for_transfers = activity.clone();
             move |shutdown| {
                 super::transfers::follow_transfers(
                     store,
@@ -454,6 +460,7 @@ impl Nexus {
                     holdings,
                     shutdown,
                     sources_for_transfers,
+                    activity_for_transfers,
                 )
             }
         });
@@ -498,6 +505,7 @@ impl Nexus {
             holdings,
             publisher,
             torrents,
+            activity,
         })
     }
 
@@ -525,6 +533,12 @@ impl Nexus {
             return;
         }
         self.active = active;
+        if let Err(error) = self.activity.set_active(active, unix_time_ns()) {
+            crate::nexus::log::clog!(
+                "activity",
+                "could not checkpoint lifecycle transition: {error}"
+            );
+        }
         // Deliberately not touched here: this device's own reachability from
         // the network's point of view does not depend on whether the app is
         // in the foreground.
@@ -603,6 +617,25 @@ impl Nexus {
             return Vec::new();
         };
         self.store.peer_history(&key).unwrap_or_default()
+    }
+
+    /// The current in-memory activity truth plus bounded durable runs.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when recent runs cannot be read.
+    pub fn activity_summary(
+        &self,
+    ) -> Result<crate::nexus::activity::DeviceActivitySnapshot, StoreError> {
+        self.activity.snapshot()
+    }
+
+    /// Clears only durable device activity and bounded run history. Identity,
+    /// collections, settings, and collection-scoped peer history survive.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the store transaction fails.
+    pub fn clear_activity(&self) -> Result<(), StoreError> {
+        self.activity.clear(unix_time_ns())
     }
 
     pub fn watch_detail(&self, collection: Option<Handle>) -> watch::Receiver<Option<Detail>> {
@@ -1399,6 +1432,12 @@ impl Nexus {
     /// Stops every component and returns when the runtime is quiet.
     pub async fn close(self) {
         self.supervisor.shutdown().await;
+        if let Err(error) = self.activity.finish(unix_time_ns()) {
+            crate::nexus::log::clog!(
+                "activity",
+                "could not checkpoint graceful shutdown: {error}"
+            );
+        }
     }
 }
 
@@ -1838,6 +1877,48 @@ mod tests {
             scratch,
             Arc::new(crate::nexus::substrate::Recorded::default()),
         )
+    }
+
+    #[tokio::test]
+    async fn activity_summary_starts_a_run_and_clearing_preserves_collections() {
+        let scratch = Scratch::new("activity-summary");
+        let nexus = open(&scratch);
+        std::fs::write(scratch.0.join("kept.bin"), b"data").expect("writes source file");
+
+        nexus
+            .command(&Command::CreateCollection {
+                name: "kept".to_owned(),
+                files: vec![LocalFile {
+                    name: "kept.bin".to_owned(),
+                    path: scratch.0.join("kept.bin"),
+                    bytes: 4,
+                }],
+            })
+            .expect("accepts import");
+
+        let before = nexus.activity_summary().expect("reads summary");
+        assert_eq!(before.activity.runs_started, 1);
+        assert_eq!(
+            before.run.end_reason,
+            crate::nexus::store::records::AppRunEnd::Current
+        );
+
+        nexus.clear_activity().expect("clears activity");
+        let after = nexus.activity_summary().expect("reads summary");
+        assert_eq!(
+            after.activity.runs_started, 1,
+            "clearing starts a fresh run"
+        );
+        assert!(after.recent_runs.len() <= 1);
+
+        let survives = nexus
+            .state()
+            .collections
+            .iter()
+            .any(|collection| collection.name == "kept");
+        assert!(survives, "clearing activity never destroys collections");
+
+        nexus.close().await;
     }
 
     /// Waits for a background worker to reach `done`, or fails the test.
@@ -3281,6 +3362,11 @@ mod tests {
         ]));
 
         let holdings = Holdings::default();
+        let activity = crate::nexus::activity::DeviceActivityTracker::start(
+            Arc::clone(&store),
+            unix_time_ns(),
+        )
+        .expect("starts activity ledger");
         let sources = super::DetailSources {
             store: Arc::clone(&store),
             collections: Arc::clone(&local),
@@ -3297,9 +3383,10 @@ mod tests {
             let sources = sources.clone();
             let store = Arc::clone(&store);
             let holdings = holdings.clone();
+            let activity = activity.clone();
             async move {
                 transfers::follow_transfers(
-                    store, states, local, substrate, holdings, shutdown, sources,
+                    store, states, local, substrate, holdings, shutdown, sources, activity,
                 )
                 .await
             }
@@ -3350,6 +3437,9 @@ mod tests {
 
         shutdown_tx.send(true).expect("asks the poller to stop");
         poller.await.expect("the poller winds up");
+        let activity = activity.snapshot().expect("reads activity");
+        assert_eq!(activity.run.network_down_bytes, 100);
+        assert_eq!(activity.run.completed_downloads, 1);
 
         assert_eq!(
             released.as_slice(),

@@ -88,6 +88,7 @@ impl Holdings {
 }
 
 /// Polls the substrate until shutdown, publishing state and writing history.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn follow_transfers(
     store: Arc<Store>,
     states: watch::Sender<PortalisState>,
@@ -96,6 +97,7 @@ pub(crate) async fn follow_transfers(
     holdings: Holdings,
     mut shutdown: super::supervisor::Shutdown,
     details: super::nexus::DetailSources,
+    activity: crate::nexus::activity::DeviceActivityTracker,
 ) {
     let mut tick = tokio::time::interval(POLL_INTERVAL);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -184,20 +186,40 @@ pub(crate) async fn follow_transfers(
             // it a download.
             let rates = measured;
             let previous_sample = written.get(&key).map(|previous| previous.sample);
-            let sample =
-                if info.knows_progress() && (!local_source || rates.down > 0 || rates.up > 0) {
-                    if !local_source && mark_moments(&store, &key, info) {
-                        snapshot_peers(&store, &key, info, &peers, &mut peer_ledgers, epoch);
-                    }
-                    record(&store, &key, info, rates, previous_sample.as_ref())
-                } else {
-                    previous_sample.unwrap_or_else(|| sample_of(info, rates))
-                };
+            let records_payload =
+                info.knows_progress() && (!local_source || rates.down > 0 || rates.up > 0);
+            let completed_download =
+                records_payload && !local_source && mark_moments(&store, &key, info);
+            if completed_download {
+                snapshot_peers(&store, &key, info, &peers, &mut peer_ledgers, epoch);
+            }
+            let sample = if records_payload {
+                record(&store, &key, info, rates, previous_sample.as_ref())
+            } else {
+                previous_sample.unwrap_or_else(|| sample_of(info, rates))
+            };
             // Measurement baselines are independent from payload-history
             // writes. An idle zero-copy owner must remember a peer's counters
             // before that peer starts downloading; otherwise every later poll
             // is another unmeasurable first poll and upload stays at zero.
             remember_reading(&mut written, &key, info, sample, unix_time_ns());
+            let observed_at = unix_time_ns();
+            activity.observe(
+                &key,
+                info.fetched_bytes,
+                info.uploaded_bytes,
+                rates.down,
+                rates.up,
+                local_source,
+                completed_download,
+                observed_at,
+            );
+            if completed_download && let Err(error) = activity.checkpoint(observed_at) {
+                crate::nexus::log::clog!(
+                    "activity",
+                    "could not checkpoint completed transfer: {error}"
+                );
+            }
             #[cfg(target_os = "ios")]
             if let Err(error) =
                 crate::nexus::torrent::move_completed_import_entries(&store, &key, info).await

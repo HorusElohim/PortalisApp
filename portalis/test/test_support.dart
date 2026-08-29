@@ -181,6 +181,68 @@ AppSnapshot buildNexusState(List<AppCollection> collections) => AppSnapshot(
       alerts: const [],
     );
 
+AppAppRun buildAppRun({
+  int runId = 1,
+  int startedAt = 0,
+  int? endedAt,
+  String endReason = 'current',
+  int networkDownBytes = 0,
+  int networkUpBytes = 0,
+}) => AppAppRun(
+      runId: BigInt.from(runId),
+      startedAt: BigInt.from(startedAt),
+      endedAt: endedAt == null ? null : BigInt.from(endedAt),
+      engineRunningNs: BigInt.zero,
+      foregroundNs: BigInt.zero,
+      networkDownBytes: BigInt.from(networkDownBytes),
+      networkUpBytes: BigInt.from(networkUpBytes),
+      completedDownloads: BigInt.zero,
+      peakDownBytesPerSecond: 0,
+      peakUpBytesPerSecond: 0,
+      endReason: endReason,
+    );
+
+AppUserSummary buildUserSummary({
+  AppAppRun? currentRun,
+  int trackedSince = 0,
+  int runsStarted = 1,
+  int lifetimeNetworkDownBytes = 0,
+  int lifetimeNetworkUpBytes = 0,
+  int collectionsOwned = 0,
+  int collectionsReceived = 0,
+  List<AppAppRun> recentRuns = const [],
+}) => AppUserSummary(
+      device: const AppDevice(
+        name: 'Portalis',
+        handle: null,
+        fingerprint: 'test-fingerprint',
+        devices: 1,
+      ),
+      trackedSince: BigInt.from(trackedSince),
+      currentRun: currentRun ?? buildAppRun(),
+      runsStarted: BigInt.from(runsStarted),
+      runsCompletedCleanly: BigInt.zero,
+      runsInterrupted: BigInt.zero,
+      lifetimeEngineRunningNs: BigInt.zero,
+      lifetimeForegroundNs: BigInt.zero,
+      lifetimeNetworkDownBytes: BigInt.from(lifetimeNetworkDownBytes),
+      lifetimeNetworkUpBytes: BigInt.from(lifetimeNetworkUpBytes),
+      lifetimeCompletedDownloads: BigInt.zero,
+      lifetimePeakDownBytesPerSecond: 0,
+      lifetimePeakUpBytesPerSecond: 0,
+      lastActivityAt: BigInt.zero,
+      lastCleanShutdownAt: BigInt.zero,
+      collectionsOwned: collectionsOwned,
+      collectionsReceived: collectionsReceived,
+      entriesTotal: 0,
+      catalogBytes: BigInt.zero,
+      heldBytes: BigInt.zero,
+      verifiedContacts: 0,
+      unverifiedContacts: 0,
+      connectivity: 'LocalOnly',
+      recentRuns: recentRuns,
+    );
+
 EngineSettings buildEngineSettings() => const EngineSettings(
       listenPortStart: 6881,
       listenPortEnd: 6999,
@@ -197,6 +259,7 @@ Future<void> pumpApp(
   Size size = phoneSize,
   List<AppCollection> engineCollections = const [],
   String? error,
+  AppUserSummary? userSummary,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -209,6 +272,7 @@ Future<void> pumpApp(
     buildNexusState(engineCollections),
     details: const Stream<AppDetail?>.empty(),
     error: error,
+    userSummary: userSummary,
   );
   await tester.pump();
 }

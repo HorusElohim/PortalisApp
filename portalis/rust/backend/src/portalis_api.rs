@@ -299,6 +299,167 @@ pub fn log_diagnostic(tag: String, message: String) {
     crate::nexus::log::clog!(&tag, "{message}");
 }
 
+/// One bounded recent local backend run.
+#[derive(Clone, Debug)]
+pub struct AppAppRun {
+    pub run_id: u64,
+    pub started_at: u64,
+    pub ended_at: Option<u64>,
+    pub engine_running_ns: u64,
+    pub foreground_ns: u64,
+    pub network_down_bytes: u64,
+    pub network_up_bytes: u64,
+    pub completed_downloads: u64,
+    pub peak_down_bytes_per_second: u32,
+    pub peak_up_bytes_per_second: u32,
+    /// One of `"current"`, `"graceful"`, `"interrupted"`.
+    pub end_reason: String,
+}
+
+/// This device's own locally measured activity. Never leaves the device on
+/// its own, never contains collection names, paths, peer endpoints, or
+/// signing material.
+#[derive(Clone, Debug)]
+pub struct AppUserSummary {
+    pub device: AppDevice,
+    pub tracked_since: u64,
+    pub current_run: AppAppRun,
+    pub runs_started: u64,
+    pub runs_completed_cleanly: u64,
+    pub runs_interrupted: u64,
+    pub lifetime_engine_running_ns: u64,
+    pub lifetime_foreground_ns: u64,
+    pub lifetime_network_down_bytes: u64,
+    pub lifetime_network_up_bytes: u64,
+    pub lifetime_completed_downloads: u64,
+    pub lifetime_peak_down_bytes_per_second: u32,
+    pub lifetime_peak_up_bytes_per_second: u32,
+    pub last_activity_at: u64,
+    pub last_clean_shutdown_at: u64,
+    pub collections_owned: u32,
+    pub collections_received: u32,
+    pub entries_total: u32,
+    pub catalog_bytes: u64,
+    pub held_bytes: u64,
+    pub verified_contacts: u32,
+    pub unverified_contacts: u32,
+    pub connectivity: String,
+    pub recent_runs: Vec<AppAppRun>,
+}
+
+fn app_run(run: &crate::nexus::store::records::StoredAppRun) -> AppAppRun {
+    use crate::nexus::store::records::AppRunEnd;
+
+    AppAppRun {
+        run_id: run.run_id,
+        started_at: run.started_at,
+        ended_at: run.ended_at,
+        engine_running_ns: run.engine_running_ns,
+        foreground_ns: run.foreground_ns,
+        network_down_bytes: run.network_down_bytes,
+        network_up_bytes: run.network_up_bytes,
+        completed_downloads: run.completed_downloads,
+        peak_down_bytes_per_second: run.peak_down_bytes_per_second,
+        peak_up_bytes_per_second: run.peak_up_bytes_per_second,
+        end_reason: match run.end_reason {
+            AppRunEnd::Current => "current",
+            AppRunEnd::Graceful => "graceful",
+            AppRunEnd::Interrupted => "interrupted",
+        }
+        .to_owned(),
+    }
+}
+
+/// This device's own locally measured activity: current run, lifetime
+/// counters, library facts, and bounded recent runs. On-demand and
+/// low-rate, deliberately separate from the fast `AppSnapshot` stream.
+///
+/// # Errors
+/// Returns a displayable reason when the runtime is not started or the
+/// durable ledger cannot be read.
+pub fn user_summary() -> Result<AppUserSummary, String> {
+    use crate::nexus::projection::state::Role;
+
+    let runtime = locked_runtime()?;
+    let nexus = runtime
+        .as_ref()
+        .ok_or_else(|| "start Nexus before reading the user summary".to_owned())?;
+    let snapshot = nexus
+        .activity_summary()
+        .map_err(|error| error.to_string())?;
+    let state = nexus.state();
+
+    let mut collections_owned = 0u32;
+    let mut collections_received = 0u32;
+    let mut entries_total = 0u32;
+    let mut catalog_bytes = 0u64;
+    let mut held_bytes = 0u64;
+    let mut verified_contacts = 0u32;
+    let mut unverified_contacts = 0u32;
+    for collection in &state.collections {
+        match collection.role {
+            Role::Owner => collections_owned += 1,
+            Role::Member => collections_received += 1,
+        }
+        entries_total += collection.entries;
+        catalog_bytes += collection.total_bytes;
+        held_bytes += collection.on_disk_bytes;
+    }
+    for contact in &state.contacts {
+        if contact.verified {
+            verified_contacts += 1;
+        } else {
+            unverified_contacts += 1;
+        }
+    }
+
+    Ok(AppUserSummary {
+        device: AppDevice {
+            name: state.device.name,
+            handle: state.device.handle,
+            fingerprint: state.device.fingerprint,
+            devices: state.device.devices,
+        },
+        tracked_since: snapshot.activity.stats_started_at,
+        current_run: app_run(&snapshot.run),
+        runs_started: snapshot.activity.runs_started,
+        runs_completed_cleanly: snapshot.activity.runs_completed_cleanly,
+        runs_interrupted: snapshot.activity.runs_interrupted,
+        lifetime_engine_running_ns: snapshot.activity.engine_running_ns,
+        lifetime_foreground_ns: snapshot.activity.foreground_ns,
+        lifetime_network_down_bytes: snapshot.activity.total_network_down_bytes,
+        lifetime_network_up_bytes: snapshot.activity.total_network_up_bytes,
+        lifetime_completed_downloads: snapshot.activity.completed_downloads,
+        lifetime_peak_down_bytes_per_second: snapshot.activity.peak_down_bytes_per_second,
+        lifetime_peak_up_bytes_per_second: snapshot.activity.peak_up_bytes_per_second,
+        last_activity_at: snapshot.activity.last_activity_at,
+        last_clean_shutdown_at: snapshot.activity.last_clean_shutdown_at,
+        collections_owned,
+        collections_received,
+        entries_total,
+        catalog_bytes,
+        held_bytes,
+        verified_contacts,
+        unverified_contacts,
+        connectivity: format!("{:?}", state.connectivity),
+        recent_runs: snapshot.recent_runs.iter().map(app_run).collect(),
+    })
+}
+
+/// Clears only durable device activity and bounded run history. Identity,
+/// collections, and settings are never touched.
+///
+/// # Errors
+/// Returns a displayable reason when the runtime is not started or the
+/// store transaction fails.
+pub fn clear_user_activity() -> Result<(), String> {
+    locked_runtime()?
+        .as_ref()
+        .ok_or_else(|| "start Nexus before clearing activity".to_owned())?
+        .clear_activity()
+        .map_err(|error| error.to_string())
+}
+
 /// Streams complete app snapshots. The current state is sent first.
 pub async fn watch_states(sink: StreamSink<AppSnapshot>) -> Result<(), String> {
     let mut states = locked_runtime()?

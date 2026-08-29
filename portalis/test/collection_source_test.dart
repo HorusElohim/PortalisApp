@@ -185,8 +185,57 @@ class _Repository implements AppRepository {
   Future<void> logDiagnostic(String tag, String message) async {}
 
   @override
+  Future<AppUserSummary> userSummary() async => _fakeUserSummary();
+
+  @override
+  Future<void> clearUserActivity() async {}
+
+  @override
   Future<AppAccepted> send(EngineCommand command) async {
     commands.add(command);
     return AppAccepted(id: BigInt.one, collection: null, queued: true);
   }
 }
+
+AppUserSummary _fakeUserSummary() => AppUserSummary(
+      device: const AppDevice(
+        name: 'Portalis',
+        handle: null,
+        fingerprint: 'test-fingerprint',
+        devices: 1,
+      ),
+      trackedSince: BigInt.zero,
+      currentRun: AppAppRun(
+        runId: BigInt.one,
+        startedAt: BigInt.zero,
+        engineRunningNs: BigInt.zero,
+        foregroundNs: BigInt.zero,
+        networkDownBytes: BigInt.zero,
+        networkUpBytes: BigInt.zero,
+        completedDownloads: BigInt.zero,
+        peakDownBytesPerSecond: 0,
+        peakUpBytesPerSecond: 0,
+        endReason: 'current',
+      ),
+      runsStarted: BigInt.one,
+      runsCompletedCleanly: BigInt.zero,
+      runsInterrupted: BigInt.zero,
+      lifetimeEngineRunningNs: BigInt.zero,
+      lifetimeForegroundNs: BigInt.zero,
+      lifetimeNetworkDownBytes: BigInt.zero,
+      lifetimeNetworkUpBytes: BigInt.zero,
+      lifetimeCompletedDownloads: BigInt.zero,
+      lifetimePeakDownBytesPerSecond: 0,
+      lifetimePeakUpBytesPerSecond: 0,
+      lastActivityAt: BigInt.zero,
+      lastCleanShutdownAt: BigInt.zero,
+      collectionsOwned: 0,
+      collectionsReceived: 0,
+      entriesTotal: 0,
+      catalogBytes: BigInt.zero,
+      heldBytes: BigInt.zero,
+      verifiedContacts: 0,
+      unverifiedContacts: 0,
+      connectivity: 'LocalOnly',
+      recentRuns: const [],
+    );

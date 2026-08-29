@@ -6,8 +6,8 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `collection_projection`, `detail_projection`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `app_run`, `collection_projection`, `detail_projection`, `group_people_peers`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Opens the local Nexus runtime once. Calling it again is harmless.
 ///
@@ -67,6 +67,25 @@ Future<String> diagnosticsLogPath() =>
 Future<void> logDiagnostic({required String tag, required String message}) =>
     RustLib.instance.api
         .cratePortalisApiLogDiagnostic(tag: tag, message: message);
+
+/// This device's own locally measured activity: current run, lifetime
+/// counters, library facts, and bounded recent runs. On-demand and
+/// low-rate, deliberately separate from the fast `AppSnapshot` stream.
+///
+/// # Errors
+/// Returns a displayable reason when the runtime is not started or the
+/// durable ledger cannot be read.
+Future<AppUserSummary> userSummary() =>
+    RustLib.instance.api.cratePortalisApiUserSummary();
+
+/// Clears only durable device activity and bounded run history. Identity,
+/// collections, and settings are never touched.
+///
+/// # Errors
+/// Returns a displayable reason when the runtime is not started or the
+/// store transaction fails.
+Future<void> clearUserActivity() =>
+    RustLib.instance.api.cratePortalisApiClearUserActivity();
 
 /// Streams complete app snapshots. The current state is sent first.
 Stream<AppSnapshot> watchStates() =>
@@ -163,6 +182,68 @@ class AppAccepted {
           id == other.id &&
           collection == other.collection &&
           queued == other.queued;
+}
+
+/// One bounded recent local backend run.
+class AppAppRun {
+  final BigInt runId;
+  final BigInt startedAt;
+  final BigInt? endedAt;
+  final BigInt engineRunningNs;
+  final BigInt foregroundNs;
+  final BigInt networkDownBytes;
+  final BigInt networkUpBytes;
+  final BigInt completedDownloads;
+  final int peakDownBytesPerSecond;
+  final int peakUpBytesPerSecond;
+
+  /// One of `"current"`, `"graceful"`, `"interrupted"`.
+  final String endReason;
+
+  const AppAppRun({
+    required this.runId,
+    required this.startedAt,
+    this.endedAt,
+    required this.engineRunningNs,
+    required this.foregroundNs,
+    required this.networkDownBytes,
+    required this.networkUpBytes,
+    required this.completedDownloads,
+    required this.peakDownBytesPerSecond,
+    required this.peakUpBytesPerSecond,
+    required this.endReason,
+  });
+
+  @override
+  int get hashCode =>
+      runId.hashCode ^
+      startedAt.hashCode ^
+      endedAt.hashCode ^
+      engineRunningNs.hashCode ^
+      foregroundNs.hashCode ^
+      networkDownBytes.hashCode ^
+      networkUpBytes.hashCode ^
+      completedDownloads.hashCode ^
+      peakDownBytesPerSecond.hashCode ^
+      peakUpBytesPerSecond.hashCode ^
+      endReason.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppAppRun &&
+          runtimeType == other.runtimeType &&
+          runId == other.runId &&
+          startedAt == other.startedAt &&
+          endedAt == other.endedAt &&
+          engineRunningNs == other.engineRunningNs &&
+          foregroundNs == other.foregroundNs &&
+          networkDownBytes == other.networkDownBytes &&
+          networkUpBytes == other.networkUpBytes &&
+          completedDownloads == other.completedDownloads &&
+          peakDownBytesPerSecond == other.peakDownBytesPerSecond &&
+          peakUpBytesPerSecond == other.peakUpBytesPerSecond &&
+          endReason == other.endReason;
 }
 
 /// One collection in the inexpensive list projection.
@@ -789,4 +870,119 @@ class AppTransfer {
           upBytesPerSecond == other.upBytesPerSecond &&
           peers == other.peers &&
           etaSecs == other.etaSecs;
+}
+
+/// This device's own locally measured activity. Never leaves the device on
+/// its own, never contains collection names, paths, peer endpoints, or
+/// signing material.
+class AppUserSummary {
+  final AppDevice device;
+  final BigInt trackedSince;
+  final AppAppRun currentRun;
+  final BigInt runsStarted;
+  final BigInt runsCompletedCleanly;
+  final BigInt runsInterrupted;
+  final BigInt lifetimeEngineRunningNs;
+  final BigInt lifetimeForegroundNs;
+  final BigInt lifetimeNetworkDownBytes;
+  final BigInt lifetimeNetworkUpBytes;
+  final BigInt lifetimeCompletedDownloads;
+  final int lifetimePeakDownBytesPerSecond;
+  final int lifetimePeakUpBytesPerSecond;
+  final BigInt lastActivityAt;
+  final BigInt lastCleanShutdownAt;
+  final int collectionsOwned;
+  final int collectionsReceived;
+  final int entriesTotal;
+  final BigInt catalogBytes;
+  final BigInt heldBytes;
+  final int verifiedContacts;
+  final int unverifiedContacts;
+  final String connectivity;
+  final List<AppAppRun> recentRuns;
+
+  const AppUserSummary({
+    required this.device,
+    required this.trackedSince,
+    required this.currentRun,
+    required this.runsStarted,
+    required this.runsCompletedCleanly,
+    required this.runsInterrupted,
+    required this.lifetimeEngineRunningNs,
+    required this.lifetimeForegroundNs,
+    required this.lifetimeNetworkDownBytes,
+    required this.lifetimeNetworkUpBytes,
+    required this.lifetimeCompletedDownloads,
+    required this.lifetimePeakDownBytesPerSecond,
+    required this.lifetimePeakUpBytesPerSecond,
+    required this.lastActivityAt,
+    required this.lastCleanShutdownAt,
+    required this.collectionsOwned,
+    required this.collectionsReceived,
+    required this.entriesTotal,
+    required this.catalogBytes,
+    required this.heldBytes,
+    required this.verifiedContacts,
+    required this.unverifiedContacts,
+    required this.connectivity,
+    required this.recentRuns,
+  });
+
+  @override
+  int get hashCode =>
+      device.hashCode ^
+      trackedSince.hashCode ^
+      currentRun.hashCode ^
+      runsStarted.hashCode ^
+      runsCompletedCleanly.hashCode ^
+      runsInterrupted.hashCode ^
+      lifetimeEngineRunningNs.hashCode ^
+      lifetimeForegroundNs.hashCode ^
+      lifetimeNetworkDownBytes.hashCode ^
+      lifetimeNetworkUpBytes.hashCode ^
+      lifetimeCompletedDownloads.hashCode ^
+      lifetimePeakDownBytesPerSecond.hashCode ^
+      lifetimePeakUpBytesPerSecond.hashCode ^
+      lastActivityAt.hashCode ^
+      lastCleanShutdownAt.hashCode ^
+      collectionsOwned.hashCode ^
+      collectionsReceived.hashCode ^
+      entriesTotal.hashCode ^
+      catalogBytes.hashCode ^
+      heldBytes.hashCode ^
+      verifiedContacts.hashCode ^
+      unverifiedContacts.hashCode ^
+      connectivity.hashCode ^
+      recentRuns.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppUserSummary &&
+          runtimeType == other.runtimeType &&
+          device == other.device &&
+          trackedSince == other.trackedSince &&
+          currentRun == other.currentRun &&
+          runsStarted == other.runsStarted &&
+          runsCompletedCleanly == other.runsCompletedCleanly &&
+          runsInterrupted == other.runsInterrupted &&
+          lifetimeEngineRunningNs == other.lifetimeEngineRunningNs &&
+          lifetimeForegroundNs == other.lifetimeForegroundNs &&
+          lifetimeNetworkDownBytes == other.lifetimeNetworkDownBytes &&
+          lifetimeNetworkUpBytes == other.lifetimeNetworkUpBytes &&
+          lifetimeCompletedDownloads == other.lifetimeCompletedDownloads &&
+          lifetimePeakDownBytesPerSecond ==
+              other.lifetimePeakDownBytesPerSecond &&
+          lifetimePeakUpBytesPerSecond == other.lifetimePeakUpBytesPerSecond &&
+          lastActivityAt == other.lastActivityAt &&
+          lastCleanShutdownAt == other.lastCleanShutdownAt &&
+          collectionsOwned == other.collectionsOwned &&
+          collectionsReceived == other.collectionsReceived &&
+          entriesTotal == other.entriesTotal &&
+          catalogBytes == other.catalogBytes &&
+          heldBytes == other.heldBytes &&
+          verifiedContacts == other.verifiedContacts &&
+          unverifiedContacts == other.unverifiedContacts &&
+          connectivity == other.connectivity &&
+          recentRuns == other.recentRuns;
 }

@@ -104,3 +104,34 @@ String formatLastSeen(DateTime lastSeen, {DateTime? now}) {
 /// An optional duration setting, in seconds.
 String formatSeconds(int? seconds) =>
     seconds == null ? 'Engine default' : '${seconds}s';
+
+/// A nanosecond duration as `3h 12m` / `42m` / `8s` — for lifetime/session
+/// running and foreground time, which are recorded in nanoseconds.
+String formatNanosDuration(int nanoseconds) {
+  final seconds = nanoseconds ~/ 1000000000;
+  if (seconds < 60) return '${seconds}s';
+  final minutes = seconds ~/ 60;
+  if (minutes < 60) return '${minutes}m';
+  final hours = minutes ~/ 60;
+  final remainingMinutes = minutes % 60;
+  if (hours < 24) {
+    return remainingMinutes > 0 ? '${hours}h ${remainingMinutes}m' : '${hours}h';
+  }
+  final days = hours ~/ 24;
+  final remainingHours = hours % 24;
+  return remainingHours > 0 ? '${days}d ${remainingHours}h' : '${days}d';
+}
+
+/// A Unix-nanosecond moment as a short absolute date, or `never` for zero —
+/// zero is what an untracked/cleared ledger honestly reports, and rendering
+/// it as an epoch date would be a fabricated timestamp.
+String formatTrackedSince(int unixNanoseconds) {
+  if (unixNanoseconds <= 0) return 'not yet tracked';
+  final date =
+      DateTime.fromMicrosecondsSinceEpoch(unixNanoseconds ~/ 1000).toLocal();
+  final months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  return '${months[date.month - 1]} ${date.day}, ${date.year}';
+}

@@ -20,6 +20,7 @@ import '../bridge/portalis_api.dart';
 export '../bridge/portalis_api.dart'
     show
         AppAccepted,
+        AppAppRun,
         AppCollection,
         AppCollectionPeer,
         AppContact,
@@ -32,7 +33,8 @@ export '../bridge/portalis_api.dart'
         AppPeoplePeer,
         AppSnapshot,
         AppSourceFile,
-        AppTransfer;
+        AppTransfer,
+        AppUserSummary;
 
 /// The piece map a detail carries, decoded.
 ///

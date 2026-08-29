@@ -43,6 +43,15 @@ abstract interface class AppRepository {
   Future<void> clearDiagnosticsLog();
   Future<String> diagnosticsLogPath();
   Future<void> logDiagnostic(String tag, String message);
+
+  /// This device's own locally measured activity: current run, lifetime
+  /// counters, library facts, and bounded recent runs. Backend-owned and
+  /// on-demand — Flutter renders it, it never aggregates it locally.
+  Future<AppUserSummary> userSummary();
+
+  /// Clears only durable device activity and bounded run history. Identity,
+  /// collections, and settings are never touched.
+  Future<void> clearUserActivity();
 }
 
 class FrbAppRepository implements AppRepository {
@@ -98,4 +107,10 @@ class FrbAppRepository implements AppRepository {
   @override
   Future<void> logDiagnostic(String tag, String message) =>
       bridge.logDiagnostic(tag: tag, message: message);
+
+  @override
+  Future<AppUserSummary> userSummary() => bridge.userSummary();
+
+  @override
+  Future<void> clearUserActivity() => bridge.clearUserActivity();
 }

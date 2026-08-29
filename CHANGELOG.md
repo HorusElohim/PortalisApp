@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.45+46
+
+- Added a backend-owned durable local device activity ledger (ADR-0011,
+  schema 12): per-run session accounting, lifetime network/foreground
+  totals, crash-interrupted-run recovery, and idempotent checkpointing that
+  never double-counts across background/completion/shutdown boundaries.
+  Local-source (zero-copy) reads are never counted as network downloads.
+- Redesigned the User page around the new `AppUserSummary` bridge
+  projection: Current Session, Lifetime, and Library sections now render
+  backend truth directly instead of Flutter summing the live collection
+  snapshot. Replaced the misleading `RECEIVED · SESSION` figure (which used
+  durable on-disk bytes, not network traffic) with correctly labeled
+  network received/sent, held-locally, and catalog-size figures.
+- Added a "Clear activity history" action (behind a confirmation dialog)
+  that resets session/lifetime activity without touching identity,
+  collections, or settings.
+
 ## 1.0.44+45
 
 - Unified the Settings, Storage, File formats and Diagnostics page measure on

@@ -4,6 +4,7 @@
 //! (and the generated `api` + `bridge` modules for FRB). Everything else is
 //! an implementation detail reachable through `crate::nexus::...`.
 
+pub mod activity;
 pub mod collections;
 pub mod content_location;
 pub mod core;

@@ -3,34 +3,43 @@ import 'package:flutter/material.dart';
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
 import '../../identity/domain/device_profile.dart';
+import '../../../nexus/domain/app_state.dart';
 
-/// Device identity, session totals, and identity-related destinations.
+/// Device identity, backend-owned activity, and identity-related
+/// destinations.
+///
+/// Every figure here comes from [AppUserSummary] — the backend's own durable
+/// ledger — rather than being summed from the current collection snapshot.
+/// `null` means the summary has not loaded yet or the runtime is not
+/// started; the section renders a loading state rather than zeros.
 class DeviceProfileSection extends StatelessWidget {
   const DeviceProfileSection({
     super.key,
     required this.profile,
     required this.identityError,
-    required this.sentBytes,
-    required this.receivedBytes,
+    required this.summary,
+    required this.summaryError,
     required this.people,
     required this.collections,
     required this.onRename,
     required this.onOpenPeople,
     required this.onOpenFormats,
+    required this.onClearActivity,
   });
 
   final DeviceProfile? profile;
   final String? identityError;
 
-  /// Totals, already summed. The screen above owns where they come from —
-  /// this only renders them.
-  final int sentBytes;
-  final int receivedBytes;
+  /// The backend's own activity ledger. `null` while loading or unavailable.
+  final AppUserSummary? summary;
+  final String? summaryError;
+
   final int people;
   final int collections;
   final VoidCallback? onRename;
   final VoidCallback onOpenPeople;
   final VoidCallback onOpenFormats;
+  final VoidCallback onClearActivity;
 
   @override
   Widget build(BuildContext context) {
@@ -38,8 +47,9 @@ class DeviceProfileSection extends StatelessWidget {
     final initials = profile != null && nickname.isNotEmpty
         ? nickname[0].toUpperCase()
         : '·';
-    final sent = sentBytes;
-    final received = receivedBytes;
+    final trackedSince = summary == null
+        ? null
+        : formatTrackedSince(summary!.trackedSince.toInt());
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 4, 0, 26),
@@ -62,6 +72,13 @@ class DeviceProfileSection extends StatelessWidget {
                           '${profile!.deviceId.substring(0, profile!.deviceId.length.clamp(0, 8)).toUpperCase()}',
                   style: monoLabel(size: 10.5, letterSpacing: 0.6),
                 ),
+                if (trackedSince != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'TRACKED SINCE $trackedSince'.toUpperCase(),
+                    style: monoLabel(size: 9.5, color: AppColors.textFaint),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 PillButton(
                   label: 'Change name',
@@ -71,9 +88,21 @@ class DeviceProfileSection extends StatelessWidget {
               ],
             ),
           ),
-          Padding(
-            padding:
-                const EdgeInsets.fromLTRB(kScreenGutter, 26, kScreenGutter, 0),
+          if (summaryError != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                kScreenGutter,
+                18,
+                kScreenGutter,
+                0,
+              ),
+              child: Text(
+                'Couldn\'t read activity: $summaryError',
+                style: AppText.caption(color: AppColors.danger),
+              ),
+            ),
+          _Section(
+            title: 'CURRENT SESSION',
             child: GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -82,12 +111,87 @@ class DeviceProfileSection extends StatelessWidget {
               crossAxisSpacing: 10,
               childAspectRatio: 2.0,
               children: [
-                _ProfileStat(label: 'SENT · SESSION', value: formatBytes(sent)),
                 _ProfileStat(
-                  label: 'RECEIVED · SESSION',
-                  value: formatBytes(received),
-                  highlight: received > 0,
+                  label: 'RUNNING',
+                  value: summary == null
+                      ? '…'
+                      : formatNanosDuration(
+                          summary!.currentRun.engineRunningNs.toInt()),
                 ),
+                _ProfileStat(
+                  label: 'RECEIVED',
+                  value: summary == null
+                      ? '…'
+                      : formatBytes(
+                          summary!.currentRun.networkDownBytes.toInt()),
+                ),
+                _ProfileStat(
+                  label: 'SENT',
+                  value: summary == null
+                      ? '…'
+                      : formatBytes(
+                          summary!.currentRun.networkUpBytes.toInt()),
+                ),
+                _ProfileStat(
+                  label: 'COMPLETED',
+                  value: summary == null
+                      ? '…'
+                      : plural(
+                          summary!.currentRun.completedDownloads.toInt(),
+                          'download'),
+                ),
+              ],
+            ),
+          ),
+          _Section(
+            title: 'LIFETIME',
+            child: GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 2.0,
+              children: [
+                _ProfileStat(
+                  label: 'TOTAL RECEIVED',
+                  value: summary == null
+                      ? '…'
+                      : formatBytes(
+                          summary!.lifetimeNetworkDownBytes.toInt()),
+                  highlight: summary != null &&
+                      summary!.lifetimeNetworkDownBytes > BigInt.zero,
+                ),
+                _ProfileStat(
+                  label: 'TOTAL SENT',
+                  value: summary == null
+                      ? '…'
+                      : formatBytes(summary!.lifetimeNetworkUpBytes.toInt()),
+                ),
+                _ProfileStat(
+                  label: 'SESSIONS',
+                  value: summary == null ? '…' : '${summary!.runsStarted}',
+                ),
+                _ProfileStat(
+                  label: 'ACTIVE TIME',
+                  value: summary == null
+                      ? '…'
+                      : formatNanosDuration(
+                          summary!.lifetimeForegroundNs.toInt()),
+                ),
+              ],
+            ),
+          ),
+          _Section(
+            title: 'LIBRARY',
+            child: GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 2.0,
+              children: [
                 _ProfileStat(
                   label: 'COLLECTIONS',
                   value: '$collections',
@@ -96,6 +200,18 @@ class DeviceProfileSection extends StatelessWidget {
                   label: 'PEOPLE',
                   value: '$people',
                   onTap: onOpenPeople,
+                ),
+                _ProfileStat(
+                  label: 'HELD LOCALLY',
+                  value: summary == null
+                      ? '…'
+                      : formatBytes(summary!.heldBytes.toInt()),
+                ),
+                _ProfileStat(
+                  label: 'CATALOG SIZE',
+                  value: summary == null
+                      ? '…'
+                      : formatBytes(summary!.catalogBytes.toInt()),
                 ),
               ],
             ),
@@ -129,10 +245,46 @@ class DeviceProfileSection extends StatelessWidget {
               onTap: onOpenFormats,
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              kScreenGutter,
+              12,
+              kScreenGutter,
+              0,
+            ),
+            child: DestinationRow(
+              icon: Icons.history_toggle_off,
+              title: 'Clear activity history',
+              subtitle: 'Resets session and lifetime totals on this device. '
+                  'Never touches your identity or collections.',
+              onTap: onClearActivity,
+            ),
+          ),
         ],
       ),
     );
   }
+}
+
+class _Section extends StatelessWidget {
+  const _Section({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding:
+            const EdgeInsets.fromLTRB(kScreenGutter, 22, kScreenGutter, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionLabel(title),
+            const SizedBox(height: 10),
+            child,
+          ],
+        ),
+      );
 }
 
 class _ProfileStat extends StatelessWidget {
