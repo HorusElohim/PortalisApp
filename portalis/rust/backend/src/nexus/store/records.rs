@@ -656,6 +656,167 @@ impl StoredPeerHistory {
     }
 }
 
+/// Cumulative activity measured by this local device since tracking began.
+/// Contains only aggregate counters: never paths, collection names, endpoints,
+/// client claims, credentials, or signing material.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StoredDeviceActivity {
+    pub stats_started_at: u64,
+    pub runs_started: u64,
+    pub runs_completed_cleanly: u64,
+    pub runs_interrupted: u64,
+    pub engine_running_ns: u64,
+    pub foreground_ns: u64,
+    pub total_network_down_bytes: u64,
+    pub total_network_up_bytes: u64,
+    pub completed_downloads: u64,
+    pub peak_down_bytes_per_second: u32,
+    pub peak_up_bytes_per_second: u32,
+    pub last_activity_at: u64,
+    pub last_clean_shutdown_at: u64,
+}
+
+impl StoredDeviceActivity {
+    #[must_use]
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(96);
+        for value in [
+            self.stats_started_at,
+            self.runs_started,
+            self.runs_completed_cleanly,
+            self.runs_interrupted,
+            self.engine_running_ns,
+            self.foreground_ns,
+            self.total_network_down_bytes,
+            self.total_network_up_bytes,
+            self.completed_downloads,
+        ] {
+            bytes.extend_from_slice(&value.to_be_bytes());
+        }
+        bytes.extend_from_slice(&self.peak_down_bytes_per_second.to_be_bytes());
+        bytes.extend_from_slice(&self.peak_up_bytes_per_second.to_be_bytes());
+        bytes.extend_from_slice(&self.last_activity_at.to_be_bytes());
+        bytes.extend_from_slice(&self.last_clean_shutdown_at.to_be_bytes());
+        bytes
+    }
+
+    /// # Errors
+    /// Returns [`Malformed`] unless every field is present and exact.
+    pub fn decode(bytes: &[u8]) -> Result<Self, Malformed> {
+        let mut reader = Reader::new(bytes);
+        let activity = Self {
+            stats_started_at: reader.u64()?,
+            runs_started: reader.u64()?,
+            runs_completed_cleanly: reader.u64()?,
+            runs_interrupted: reader.u64()?,
+            engine_running_ns: reader.u64()?,
+            foreground_ns: reader.u64()?,
+            total_network_down_bytes: reader.u64()?,
+            total_network_up_bytes: reader.u64()?,
+            completed_downloads: reader.u64()?,
+            peak_down_bytes_per_second: reader.u32()?,
+            peak_up_bytes_per_second: reader.u32()?,
+            last_activity_at: reader.u64()?,
+            last_clean_shutdown_at: reader.u64()?,
+        };
+        reader.finish()?;
+        Ok(activity)
+    }
+}
+
+/// Why a recorded app run ended. `Current` has no end timestamp yet.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AppRunEnd {
+    #[default]
+    Current,
+    Graceful,
+    Interrupted,
+}
+
+/// One bounded recent run of the local backend.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StoredAppRun {
+    pub run_id: u64,
+    pub started_at: u64,
+    pub last_checkpoint_at: u64,
+    pub ended_at: Option<u64>,
+    pub engine_running_ns: u64,
+    pub foreground_ns: u64,
+    pub network_down_bytes: u64,
+    pub network_up_bytes: u64,
+    pub completed_downloads: u64,
+    pub peak_down_bytes_per_second: u32,
+    pub peak_up_bytes_per_second: u32,
+    pub end_reason: AppRunEnd,
+}
+
+impl StoredAppRun {
+    #[must_use]
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(82);
+        for value in [self.run_id, self.started_at, self.last_checkpoint_at] {
+            bytes.extend_from_slice(&value.to_be_bytes());
+        }
+        bytes.push(u8::from(self.ended_at.is_some()));
+        bytes.extend_from_slice(&self.ended_at.unwrap_or_default().to_be_bytes());
+        for value in [
+            self.engine_running_ns,
+            self.foreground_ns,
+            self.network_down_bytes,
+            self.network_up_bytes,
+            self.completed_downloads,
+        ] {
+            bytes.extend_from_slice(&value.to_be_bytes());
+        }
+        bytes.extend_from_slice(&self.peak_down_bytes_per_second.to_be_bytes());
+        bytes.extend_from_slice(&self.peak_up_bytes_per_second.to_be_bytes());
+        bytes.push(match self.end_reason {
+            AppRunEnd::Current => 0,
+            AppRunEnd::Graceful => 1,
+            AppRunEnd::Interrupted => 2,
+        });
+        bytes
+    }
+
+    /// # Errors
+    /// Returns [`Malformed`] unless every field is present and exact.
+    pub fn decode(bytes: &[u8]) -> Result<Self, Malformed> {
+        let mut reader = Reader::new(bytes);
+        let run_id = reader.u64()?;
+        let started_at = reader.u64()?;
+        let last_checkpoint_at = reader.u64()?;
+        let ended_at = match reader.byte()? {
+            0 => {
+                let _ = reader.u64()?;
+                None
+            }
+            1 => Some(reader.u64()?),
+            _ => return Err(Malformed),
+        };
+        let run = Self {
+            run_id,
+            started_at,
+            last_checkpoint_at,
+            ended_at,
+            engine_running_ns: reader.u64()?,
+            foreground_ns: reader.u64()?,
+            network_down_bytes: reader.u64()?,
+            network_up_bytes: reader.u64()?,
+            completed_downloads: reader.u64()?,
+            peak_down_bytes_per_second: reader.u32()?,
+            peak_up_bytes_per_second: reader.u32()?,
+            end_reason: match reader.byte()? {
+                0 => AppRunEnd::Current,
+                1 => AppRunEnd::Graceful,
+                2 => AppRunEnd::Interrupted,
+                _ => return Err(Malformed),
+            },
+        };
+        reader.finish()?;
+        Ok(run)
+    }
+}
+
 /// A person this device knows.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StoredContact {
@@ -757,6 +918,48 @@ impl<'a> Reader<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn device_activity_and_app_runs_round_trip_exactly() {
+        let activity = StoredDeviceActivity {
+            stats_started_at: 1,
+            runs_started: 4,
+            runs_completed_cleanly: 2,
+            runs_interrupted: 1,
+            engine_running_ns: 50,
+            foreground_ns: 40,
+            total_network_down_bytes: 30,
+            total_network_up_bytes: 20,
+            completed_downloads: 3,
+            peak_down_bytes_per_second: 10,
+            peak_up_bytes_per_second: 9,
+            last_activity_at: 8,
+            last_clean_shutdown_at: 7,
+        };
+        assert_eq!(
+            StoredDeviceActivity::decode(&activity.encode()).expect("activity decodes"),
+            activity
+        );
+
+        let run = StoredAppRun {
+            run_id: 11,
+            started_at: 12,
+            last_checkpoint_at: 13,
+            ended_at: Some(14),
+            engine_running_ns: 15,
+            foreground_ns: 16,
+            network_down_bytes: 17,
+            network_up_bytes: 18,
+            completed_downloads: 19,
+            peak_down_bytes_per_second: 20,
+            peak_up_bytes_per_second: 21,
+            end_reason: AppRunEnd::Graceful,
+        };
+        assert_eq!(
+            StoredAppRun::decode(&run.encode()).expect("run decodes"),
+            run
+        );
+    }
 
     fn collection() -> StoredCollection {
         StoredCollection {

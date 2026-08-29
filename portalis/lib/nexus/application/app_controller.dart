@@ -22,6 +22,7 @@ class AppController extends ChangeNotifier {
   Stream<AppDetail?>? _debugDetails;
   Stream<Uint8List>? _debugHistory;
   List<AppCollectionPeer>? _debugPeers;
+  AppUserSummary? _debugUserSummary;
   AppSnapshot? get state => _state;
 
   /// What the engine is doing, derived from the one state this controller
@@ -167,6 +168,19 @@ class AppController extends ChangeNotifier {
   Future<void> logDiagnostic(String tag, String message) =>
       _repository.logDiagnostic(tag, message);
 
+  /// This device's own locally measured activity: current run, lifetime
+  /// counters, library facts, and bounded recent runs. Backend-owned and
+  /// on-demand — this controller never aggregates it locally.
+  Future<AppUserSummary> userSummary() async {
+    final seeded = _debugUserSummary;
+    if (seeded != null) return seeded;
+    return _repository.userSummary();
+  }
+
+  /// Clears only durable device activity and bounded run history. Identity,
+  /// collections, and settings are never touched.
+  Future<void> clearUserActivity() => _repository.clearUserActivity();
+
   /// Seeds the projection for widgets that exercise app composition without a
   /// native runtime. Production state always arrives through [watchStates].
   @visibleForTesting
@@ -176,6 +190,7 @@ class AppController extends ChangeNotifier {
     Stream<AppDetail?>? details,
     Stream<Uint8List>? history,
     List<AppCollectionPeer>? peers,
+    AppUserSummary? userSummary,
   }) {
     _state = state;
     lastError = error;
@@ -185,6 +200,7 @@ class AppController extends ChangeNotifier {
     // library is missing at the moment something happens to subscribe.
     _debugHistory = history ?? const Stream<Uint8List>.empty();
     _debugPeers = peers ?? const [];
+    _debugUserSummary = userSummary ?? _emptyUserSummary;
     notifyListeners();
   }
 
@@ -204,3 +220,49 @@ class AppController extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// The debug default for a seeded controller: an honest all-zero summary
+/// rather than a null that would make every widget's loading state stick
+/// forever in a test that never seeds one explicitly.
+final _emptyUserSummary = AppUserSummary(
+  device: const AppDevice(
+    name: 'Portalis',
+    handle: null,
+    fingerprint: 'test-fingerprint',
+    devices: 1,
+  ),
+  trackedSince: BigInt.zero,
+  currentRun: AppAppRun(
+    runId: BigInt.one,
+    startedAt: BigInt.zero,
+    engineRunningNs: BigInt.zero,
+    foregroundNs: BigInt.zero,
+    networkDownBytes: BigInt.zero,
+    networkUpBytes: BigInt.zero,
+    completedDownloads: BigInt.zero,
+    peakDownBytesPerSecond: 0,
+    peakUpBytesPerSecond: 0,
+    endReason: 'current',
+  ),
+  runsStarted: BigInt.one,
+  runsCompletedCleanly: BigInt.zero,
+  runsInterrupted: BigInt.zero,
+  lifetimeEngineRunningNs: BigInt.zero,
+  lifetimeForegroundNs: BigInt.zero,
+  lifetimeNetworkDownBytes: BigInt.zero,
+  lifetimeNetworkUpBytes: BigInt.zero,
+  lifetimeCompletedDownloads: BigInt.zero,
+  lifetimePeakDownBytesPerSecond: 0,
+  lifetimePeakUpBytesPerSecond: 0,
+  lastActivityAt: BigInt.zero,
+  lastCleanShutdownAt: BigInt.zero,
+  collectionsOwned: 0,
+  collectionsReceived: 0,
+  entriesTotal: 0,
+  catalogBytes: BigInt.zero,
+  heldBytes: BigInt.zero,
+  verifiedContacts: 0,
+  unverifiedContacts: 0,
+  connectivity: 'LocalOnly',
+  recentRuns: const [],
+);

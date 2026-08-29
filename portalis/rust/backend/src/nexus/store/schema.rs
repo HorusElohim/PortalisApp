@@ -17,7 +17,7 @@ use redb::TableDefinition;
 /// [`super::StoreError::FromTheFuture`]) rather than being read with the wrong
 /// assumptions — silently misreading a user's own data is worse than declining
 /// to start.
-pub const SCHEMA_VERSION: u32 = 11;
+pub const SCHEMA_VERSION: u32 = 12;
 
 /// Where the schema version itself lives.
 pub const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
@@ -57,6 +57,12 @@ pub const SAMPLES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("samples
 /// Snapshot-only cumulative traffic ledgers, keyed by collection, address and
 /// reported client name. This stays separate from the fast transfer ring.
 pub const PEER_HISTORY: TableDefinition<&[u8], &[u8]> = TableDefinition::new("peer_history");
+
+/// One singleton aggregate for locally measured device activity.
+pub const DEVICE_ACTIVITY: TableDefinition<&str, &[u8]> = TableDefinition::new("device_activity");
+
+/// Bounded recent backend runs, keyed by their nanosecond start/run ID.
+pub const APP_RUNS: TableDefinition<u64, &[u8]> = TableDefinition::new("app_runs");
 
 /// A key that groups every row of one owner or collection together, ordered by
 /// the number that follows.

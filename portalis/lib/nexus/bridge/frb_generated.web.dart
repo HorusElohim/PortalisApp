@@ -45,6 +45,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppAccepted dco_decode_app_accepted(dynamic raw);
 
   @protected
+  AppAppRun dco_decode_app_app_run(dynamic raw);
+
+  @protected
   AppCollection dco_decode_app_collection(dynamic raw);
 
   @protected
@@ -90,6 +93,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppTransfer dco_decode_app_transfer(dynamic raw);
 
   @protected
+  AppUserSummary dco_decode_app_user_summary(dynamic raw);
+
+  @protected
   bool dco_decode_bool(dynamic raw);
 
   @protected
@@ -127,6 +133,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<AppAppRun> dco_decode_list_app_app_run(dynamic raw);
 
   @protected
   List<AppCollection> dco_decode_list_app_collection(dynamic raw);
@@ -220,6 +229,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppAccepted sse_decode_app_accepted(SseDeserializer deserializer);
 
   @protected
+  AppAppRun sse_decode_app_app_run(SseDeserializer deserializer);
+
+  @protected
   AppCollection sse_decode_app_collection(SseDeserializer deserializer);
 
   @protected
@@ -266,6 +278,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppTransfer sse_decode_app_transfer(SseDeserializer deserializer);
 
   @protected
+  AppUserSummary sse_decode_app_user_summary(SseDeserializer deserializer);
+
+  @protected
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
@@ -305,6 +320,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<AppAppRun> sse_decode_list_app_app_run(SseDeserializer deserializer);
 
   @protected
   List<AppCollection> sse_decode_list_app_collection(
@@ -410,6 +428,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_app_accepted(AppAccepted self, SseSerializer serializer);
 
   @protected
+  void sse_encode_app_app_run(AppAppRun self, SseSerializer serializer);
+
+  @protected
   void sse_encode_app_collection(AppCollection self, SseSerializer serializer);
 
   @protected
@@ -458,6 +479,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_app_transfer(AppTransfer self, SseSerializer serializer);
 
   @protected
+  void sse_encode_app_user_summary(
+      AppUserSummary self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
@@ -502,6 +527,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_app_app_run(
+      List<AppAppRun> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_app_collection(

@@ -34,13 +34,13 @@ use redb::{Database, ReadableTable, TableDefinition};
 use thiserror::Error;
 
 use records::{
-    Malformed, StoredCollection, StoredContact, StoredEntry, StoredImportEntry, StoredPeerHistory,
-    StoredSample,
+    Malformed, StoredAppRun, StoredCollection, StoredContact, StoredDeviceActivity, StoredEntry,
+    StoredImportEntry, StoredPeerHistory, StoredSample,
 };
 use schema::{
-    COLLECTIONS, CONTACTS, DEVICE_LOG, ENTRIES, IDENTITY, MANIFESTS, META, OUTBOX, PEER_HISTORY,
-    REVISIONS, SAMPLES, SCHEMA_VERSION, SCHEMA_VERSION_KEY, TORRENT_IMPORT_DESCRIPTORS,
-    TORRENT_IMPORT_ENTRIES, TORRENT_IMPORTS,
+    APP_RUNS, COLLECTIONS, CONTACTS, DEVICE_ACTIVITY, DEVICE_LOG, ENTRIES, IDENTITY, MANIFESTS,
+    META, OUTBOX, PEER_HISTORY, REVISIONS, SAMPLES, SCHEMA_VERSION, SCHEMA_VERSION_KEY,
+    TORRENT_IMPORT_DESCRIPTORS, TORRENT_IMPORT_ENTRIES, TORRENT_IMPORTS,
 };
 
 /// Why the store could not answer.
@@ -190,6 +190,8 @@ impl Store {
             write.open_table(OUTBOX)?;
             write.open_table(SAMPLES)?;
             write.open_table(PEER_HISTORY)?;
+            write.open_table(DEVICE_ACTIVITY)?;
+            write.open_table(APP_RUNS)?;
             write
                 .open_table(META)?
                 .insert(SCHEMA_VERSION_KEY, u64::from(SCHEMA_VERSION))?;
@@ -699,6 +701,88 @@ impl Store {
         Ok(peers)
     }
 
+    /// Atomically persists the cumulative device ledger and its current run.
+    /// Only the newest thirty runs are retained.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the transaction cannot be committed.
+    pub fn checkpoint_device_activity(
+        &self,
+        activity: &StoredDeviceActivity,
+        run: &StoredAppRun,
+    ) -> Result<(), StoreError> {
+        const RETAINED_RUNS: usize = 30;
+        let write = self.database.begin_write()?;
+        {
+            write
+                .open_table(DEVICE_ACTIVITY)?
+                .insert("summary", activity.encode().as_slice())?;
+            let mut runs = write.open_table(APP_RUNS)?;
+            runs.insert(run.run_id, run.encode().as_slice())?;
+            let keys = runs
+                .iter()?
+                .map(|row| row.map(|(key, _)| key.value()))
+                .collect::<Result<Vec<_>, _>>()?;
+            let remove = keys.len().saturating_sub(RETAINED_RUNS);
+            for key in keys.into_iter().take(remove) {
+                runs.remove(key)?;
+            }
+        }
+        write.commit()?;
+        Ok(())
+    }
+
+    /// Returns the cumulative device activity ledger, if tracking has begun.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the row cannot be read or decoded.
+    pub fn device_activity(&self) -> Result<Option<StoredDeviceActivity>, StoreError> {
+        let read = self.database.begin_read()?;
+        let table = read.open_table(DEVICE_ACTIVITY)?;
+        table
+            .get("summary")?
+            .map(|value| StoredDeviceActivity::decode(value.value()).map_err(StoreError::from))
+            .transpose()
+    }
+
+    /// Returns bounded recent app runs, newest first.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when a row cannot be read or decoded.
+    pub fn app_runs(&self) -> Result<Vec<StoredAppRun>, StoreError> {
+        let read = self.database.begin_read()?;
+        let table = read.open_table(APP_RUNS)?;
+        let mut runs = Vec::new();
+        for row in table.iter()? {
+            let (_, value) = row?;
+            runs.push(StoredAppRun::decode(value.value())?);
+        }
+        runs.sort_unstable_by_key(|run| std::cmp::Reverse(run.run_id));
+        Ok(runs)
+    }
+
+    /// Clears only device-level activity and run history.
+    /// Identity, collections, settings, and collection peer history survive.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the transaction cannot be committed.
+    pub fn clear_device_activity(&self) -> Result<(), StoreError> {
+        let write = self.database.begin_write()?;
+        {
+            write.open_table(DEVICE_ACTIVITY)?.remove("summary")?;
+            let mut runs = write.open_table(APP_RUNS)?;
+            let keys = runs
+                .iter()?
+                .map(|row| row.map(|(key, _)| key.value()))
+                .collect::<Result<Vec<_>, _>>()?;
+            for key in keys {
+                runs.remove(key)?;
+            }
+        }
+        write.commit()?;
+        Ok(())
+    }
+
     /// A collection's readings after `at`, oldest first.
     ///
     /// The history only ever grows at the end, so a subscriber that already
@@ -1108,7 +1192,10 @@ mod tests {
             StoredLifecycle::TorrentAwaitingSelection,
             "selected-by-default is presentation state, not download consent"
         );
-        assert_eq!(migrated.version().expect("reads version"), 11);
+        assert_eq!(
+            migrated.version().expect("reads version"),
+            u64::from(SCHEMA_VERSION)
+        );
     }
 
     #[test]
@@ -1320,6 +1407,51 @@ mod tests {
         // Forgetting something absent is not an error: the end state is what
         // was asked for either way.
         store.forget_collection(&COLLECTION).expect("forgets again");
+    }
+
+    #[test]
+    fn device_activity_checkpoints_survive_restart_and_clear_in_isolation() {
+        let scratch = Scratch::new("device-activity");
+        let activity = records::StoredDeviceActivity {
+            stats_started_at: 10,
+            runs_started: 1,
+            total_network_down_bytes: 400,
+            total_network_up_bytes: 200,
+            ..Default::default()
+        };
+        let run = records::StoredAppRun {
+            run_id: 11,
+            started_at: 10,
+            last_checkpoint_at: 12,
+            network_down_bytes: 400,
+            network_up_bytes: 200,
+            ..Default::default()
+        };
+        {
+            let store = Store::open(scratch.file()).expect("opens");
+            store
+                .put_collection(&COLLECTION, &collection("kept"))
+                .expect("writes collection");
+            store
+                .checkpoint_device_activity(&activity, &run)
+                .expect("checkpoints atomically");
+        }
+
+        let store = Store::open(scratch.file()).expect("reopens");
+        assert_eq!(store.device_activity().expect("reads"), Some(activity));
+        assert_eq!(store.app_runs().expect("reads"), vec![run]);
+
+        store.clear_device_activity().expect("clears activity");
+        assert_eq!(store.device_activity().expect("reads"), None);
+        assert!(store.app_runs().expect("reads").is_empty());
+        assert_eq!(
+            store
+                .collection(&COLLECTION)
+                .expect("reads collection")
+                .map(|row| row.name),
+            Some("kept".to_owned()),
+            "clearing activity never destroys collections"
+        );
     }
 
     #[test]
