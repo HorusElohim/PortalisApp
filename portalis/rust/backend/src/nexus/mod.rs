@@ -9,6 +9,7 @@ pub mod content_location;
 pub mod core;
 pub mod crypto;
 pub mod device;
+pub mod diagnostics;
 pub mod domain;
 pub mod linked_source_store;
 pub mod log;

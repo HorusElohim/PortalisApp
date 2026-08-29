@@ -152,6 +152,21 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  /// The local diagnostics log, oldest line first. Never leaves the device
+  /// on its own — see [AppRepository.diagnosticsLog].
+  Future<String> diagnosticsLog() => _repository.diagnosticsLog();
+
+  Future<void> clearDiagnosticsLog() => _repository.clearDiagnosticsLog();
+
+  Future<String> diagnosticsLogPath() => _repository.diagnosticsLogPath();
+
+  /// Appends one line to the same diagnostics log the native backend
+  /// writes to. Used by [runPortalisApp]'s global error handlers, so a
+  /// Flutter-side crash lands in the one report a person shares rather than
+  /// only on a console nobody is attached to in a release build.
+  Future<void> logDiagnostic(String tag, String message) =>
+      _repository.logDiagnostic(tag, message);
+
   /// Seeds the projection for widgets that exercise app composition without a
   /// native runtime. Production state always arrives through [watchStates].
   @visibleForTesting

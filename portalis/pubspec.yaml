@@ -66,6 +66,8 @@ dependencies:
   image_picker: ^1.2.3
   qr_flutter: ^4.1.0
   desktop_drop: ^0.8.0
+  share_plus: ^13.3.0
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:
@@ -81,6 +83,7 @@ dev_dependencies:
   # Generates platform-native app icons from assets/PortalisNature.png.
   # Run with: dart run flutter_launcher_icons
   flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.8
 
 # The media stack constrains these Android plugins to legacy KGP releases.
 # Keep the AGP 9-compatible implementations until those upstream constraints
@@ -105,6 +108,27 @@ flutter_launcher_icons:
     generate: true
   web:
     generate: true
+
+# Native splash screen shown by each platform's OS while the Flutter engine
+# and the Rust backend start up (see app/bootstrap.dart — the native backend
+# is awaited before runApp). Same artwork and exact background colour as the
+# app icon (assets/PortalisNature.png's corners are pure #000000) so the
+# splash blends into a full-bleed background instead of showing a seam on
+# screens whose aspect ratio differs from the square source image.
+# Run with: dart run flutter_native_splash:create
+flutter_native_splash:
+  color: "#000000"
+  image: assets/PortalisNature.png
+  color_dark: "#000000"
+  image_dark: assets/PortalisNature.png
+  android_12:
+    color: "#000000"
+    image: assets/PortalisNature.png
+    color_dark: "#000000"
+    image_dark: assets/PortalisNature.png
+  android: true
+  ios: true
+  web: false
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

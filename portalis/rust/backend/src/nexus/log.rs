@@ -26,6 +26,12 @@
 /// exactly that on macOS. A diagnostic aid must never be able to break the
 /// thing it is diagnosing, so the write error is dropped: losing a log line
 /// is always preferable to losing the operation.
+///
+/// Every line also goes to [`crate::nexus::diagnostics`]'s bounded local
+/// file, so it survives after stderr is gone — a release build launched
+/// from a home screen has no attached console for a beta tester to read at
+/// all. That file is never transmitted anywhere on its own; sharing it is
+/// always the person's own action from the Diagnostics screen.
 pub fn log(tag: &str, args: std::fmt::Arguments) {
     use std::io::Write;
 
@@ -33,8 +39,10 @@ pub fn log(tag: &str, args: std::fmt::Arguments) {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
+    let line = format!("[{millis}] [{tag}] {args}");
     let mut stderr = std::io::stderr().lock();
-    let _ = writeln!(stderr, "[{millis}] [{tag}] {args}");
+    let _ = writeln!(stderr, "{line}");
+    crate::nexus::diagnostics::append(&line);
 }
 
 /// `clog!("collab", "join: name={name:?}")` — tag first, then

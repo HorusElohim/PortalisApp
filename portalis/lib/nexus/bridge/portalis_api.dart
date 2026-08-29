@@ -31,6 +31,43 @@ Future<void> stop() => RustLib.instance.api.cratePortalisApiStop();
 Future<void> setActive({required bool active}) =>
     RustLib.instance.api.cratePortalisApiSetActive(active: active);
 
+/// The complete local diagnostics log, oldest line first — the same lines
+/// every [`crate::nexus::log::clog!`] call already writes to stderr,
+/// additionally kept in a bounded file so they survive after the console is
+/// gone.
+///
+/// This never leaves the device on its own: it is read here only so the app
+/// can show it, and sharing it anywhere is the person's own choice from the
+/// Diagnostics screen — no telemetry, no server, no account.
+///
+/// # Errors
+/// Returns a description when the log cannot be read. An empty result (no
+/// error) is the normal case before anything has been logged yet.
+Future<String> diagnosticsLog() =>
+    RustLib.instance.api.cratePortalisApiDiagnosticsLog();
+
+/// Deletes everything logged so far. Nothing in Portalis calls this except
+/// a person tapping "Clear" on the Diagnostics screen.
+///
+/// # Errors
+/// Returns a description when the file exists but cannot be removed.
+Future<void> clearDiagnosticsLog() =>
+    RustLib.instance.api.cratePortalisApiClearDiagnosticsLog();
+
+/// Where the diagnostics log lives on disk, so the Diagnostics screen can
+/// show a person exactly what file they would be sharing.
+Future<String> diagnosticsLogPath() =>
+    RustLib.instance.api.cratePortalisApiDiagnosticsLogPath();
+
+/// Appends one line to the same local diagnostics log every
+/// [`crate::nexus::log::clog!`] call writes to — the Flutter-side counterpart,
+/// so a Dart error caught by `FlutterError.onError` or
+/// `PlatformDispatcher.onError` lands in the one report a person shares,
+/// not silently on a console nobody is attached to.
+Future<void> logDiagnostic({required String tag, required String message}) =>
+    RustLib.instance.api
+        .cratePortalisApiLogDiagnostic(tag: tag, message: message);
+
 /// Streams complete app snapshots. The current state is sent first.
 Stream<AppSnapshot> watchStates() =>
     RustLib.instance.api.cratePortalisApiWatchStates();

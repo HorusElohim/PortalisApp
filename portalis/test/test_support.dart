@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/app/app_controllers.dart';
+import 'package:portalis/app/onboarding_controller.dart';
 import 'package:portalis/features/collections/domain/collection.dart';
 import 'package:portalis/nexus/domain/app_state.dart';
 import 'package:portalis/features/settings/domain/engine.dart';
@@ -199,6 +200,9 @@ Future<void> pumpApp(
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
+  // Every shell test exercises RootShell, not the first-run introduction —
+  // see OnboardingScreen's own tests for that.
+  OnboardingController.instance.markCompletedForTesting();
   await tester.pumpWidget(const MyApp());
   await tester.pump();
   AppControllers.engine.debugSeed(

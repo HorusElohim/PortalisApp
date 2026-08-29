@@ -14,6 +14,8 @@ import 'theme_picker_row.dart';
 import '../../../shell/navigation.dart';
 import '../../../design/theme.dart';
 import 'storage_screen.dart';
+import 'diagnostics_screen.dart';
+import '../../../app/onboarding_screen.dart';
 
 /// Settings for the transfer engine and its storage.
 class SettingsScreen extends StatefulWidget {
@@ -54,6 +56,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Embedded only: shows [StorageScreen] in place of Settings instead of
   /// pushing it over the shell's sidebar and list — see [_openStorage].
   bool _showStorage = false;
+
+  /// Embedded only: same pattern as [_showStorage], for
+  /// [DiagnosticsScreen] — see [_openDiagnostics].
+  bool _showDiagnostics = false;
 
   @override
   void initState() {
@@ -120,6 +126,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         embedded: widget.embedded,
         showInPlace: () => setState(() => _showStorage = true),
         push: (_) => StorageScreen(embedded: widget.embedded),
+      );
+
+  void _openDiagnostics() => openNestedScreen(
+        context,
+        embedded: widget.embedded,
+        showInPlace: () => setState(() => _showDiagnostics = true),
+        push: (_) => DiagnosticsScreen(embedded: widget.embedded),
       );
 
   /// Collapses Advanced back to Basic in place when embedded — there is no
@@ -265,6 +278,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return StorageScreen(
         embedded: widget.embedded,
         onBack: () => setState(() => _showStorage = false),
+      );
+    }
+    if (_showDiagnostics) {
+      return DiagnosticsScreen(
+        embedded: widget.embedded,
+        onBack: () => setState(() => _showDiagnostics = false),
       );
     }
     return AppScreen(
@@ -429,6 +448,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: _openStorage,
           ),
         ],
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(kScreenGutter, 18, kScreenGutter, 0),
+        child: DestinationRow(
+          icon: Icons.bug_report_outlined,
+          title: 'Diagnostics',
+          subtitle: 'A local log for reporting a problem — stays on this '
+              'device unless you choose to share it',
+          onTap: _openDiagnostics,
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(kScreenGutter, 10, kScreenGutter, 0),
+        child: DestinationRow(
+          icon: Icons.info_outline,
+          title: 'How Portalis works',
+          subtitle: 'Show the introduction again',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => OnboardingScreen(
+                onDone: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ),
+        ),
       ),
     ];
   }

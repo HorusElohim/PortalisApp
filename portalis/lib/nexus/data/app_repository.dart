@@ -35,6 +35,14 @@ abstract interface class AppRepository {
   Future<List<AppPeoplePeer>> peoplePeers();
   Future<List<AppPeerHistory>> peerHistory(int collection);
   Future<AppAccepted> send(EngineCommand command);
+
+  /// The local diagnostics log — see `rust/backend/src/nexus/diagnostics.rs`.
+  /// Never transmitted anywhere on its own; a person's own choice to share
+  /// or clear it.
+  Future<String> diagnosticsLog();
+  Future<void> clearDiagnosticsLog();
+  Future<String> diagnosticsLogPath();
+  Future<void> logDiagnostic(String tag, String message);
 }
 
 class FrbAppRepository implements AppRepository {
@@ -77,4 +85,17 @@ class FrbAppRepository implements AppRepository {
   @override
   Future<AppAccepted> send(EngineCommand command) =>
       bridge.send(command: command.toBridge());
+
+  @override
+  Future<String> diagnosticsLog() => bridge.diagnosticsLog();
+
+  @override
+  Future<void> clearDiagnosticsLog() => bridge.clearDiagnosticsLog();
+
+  @override
+  Future<String> diagnosticsLogPath() => bridge.diagnosticsLogPath();
+
+  @override
+  Future<void> logDiagnostic(String tag, String message) =>
+      bridge.logDiagnostic(tag: tag, message: message);
 }
