@@ -1,4 +1,4 @@
-package com.example.portalis
+package com.portalis
 
 import android.content.Context
 import android.content.Intent

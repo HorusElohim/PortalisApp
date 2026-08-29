@@ -44,6 +44,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Release signing material — never commit a keystore or its passwords.
+/android/key.properties
+/android/app/*.jks
+/android/app/*.keystore
+
 # # # # #
 # RUST
 
