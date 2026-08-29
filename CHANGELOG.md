@@ -2,6 +2,8 @@
 
 ## 1.0.44+45
 
+- Unified the Settings, Storage, File formats and Diagnostics page measure on
+  spacious windows so nested screens no longer shrink relative to Settings.
 - Reworked collection-detail swarm peers into compact cards.
 - Each peer card groups the self-reported client name and address with total
   downloaded/uploaded bytes and current download/upload speeds.

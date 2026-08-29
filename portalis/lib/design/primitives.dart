@@ -55,6 +55,21 @@ class PageBody extends StatelessWidget {
   /// literal that could drift from this one.
   static const double defaultWideMaxWidth = 720;
 
+  /// The cap for the Settings/User family — Settings itself, and every
+  /// screen reached by drilling into it (Storage, File formats,
+  /// Diagnostics, Network & engine). Wider than [defaultWideMaxWidth]
+  /// because Settings splits into two columns at this width (see
+  /// `SettingsSectionsLayout`) and its siblings read as one connected
+  /// section of the app, not as separate screens each free to pick their
+  /// own measure. Before this existed, Settings used `1100` directly and
+  /// every screen reached from it quietly fell back to
+  /// [defaultWideMaxWidth] instead — the one concretely inconsistent case
+  /// in an app whose other screens are either this reading family or the
+  /// deliberately full-bleed family (Home, People, User's own top level,
+  /// a collection) that reflows its own grids and has no reading measure
+  /// to share.
+  static const double settingsWideMaxWidth = 1100;
+
   final Widget child;
 
   /// Roughly a large phone's width plus breathing room. Wide enough that

@@ -54,6 +54,8 @@ class _FormatsScreenState extends State<FormatsScreen> {
       embedded: widget.embedded,
       forceShowBack: true,
       onBack: widget.onBack,
+      // Same measure as Settings — see PageBody.settingsWideMaxWidth.
+      wideMaxWidth: PageBody.settingsWideMaxWidth,
       body: Column(
         children: [
           // Above the scroll rather than inside it: the field that filters
