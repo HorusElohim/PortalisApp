@@ -183,29 +183,21 @@ pub(crate) async fn follow_transfers(
             // carry the explicit source_reading marker so the UI does not call
             // it a download.
             let rates = measured;
-            if info.knows_progress() && (!local_source || rates.down > 0 || rates.up > 0) {
-                if !local_source && mark_moments(&store, &key, info) {
-                    snapshot_peers(&store, &key, info, &peers, &mut peer_ledgers, epoch);
-                }
-                let now = unix_time_ns();
-                let sample = record(
-                    &store,
-                    &key,
-                    info,
-                    rates,
-                    written.get(&key).map(|previous| &previous.sample),
-                );
-                written.insert(
-                    key.clone(),
-                    LastReading {
-                        sample,
-                        at: now,
-                        fetched: info.fetched_bytes,
-                        uploaded: info.uploaded_bytes,
-                        peers: peer_counters(info),
-                    },
-                );
-            }
+            let previous_sample = written.get(&key).map(|previous| previous.sample);
+            let sample =
+                if info.knows_progress() && (!local_source || rates.down > 0 || rates.up > 0) {
+                    if !local_source && mark_moments(&store, &key, info) {
+                        snapshot_peers(&store, &key, info, &peers, &mut peer_ledgers, epoch);
+                    }
+                    record(&store, &key, info, rates, previous_sample.as_ref())
+                } else {
+                    previous_sample.unwrap_or_else(|| sample_of(info, rates))
+                };
+            // Measurement baselines are independent from payload-history
+            // writes. An idle zero-copy owner must remember a peer's counters
+            // before that peer starts downloading; otherwise every later poll
+            // is another unmeasurable first poll and upload stays at zero.
+            remember_reading(&mut written, &key, info, sample, unix_time_ns());
             #[cfg(target_os = "ios")]
             if let Err(error) =
                 crate::nexus::torrent::move_completed_import_entries(&store, &key, info).await
@@ -467,13 +459,7 @@ fn record(
     rates: Rates,
     last: Option<&StoredSample>,
 ) -> StoredSample {
-    let sample = StoredSample {
-        done: info.progress_bytes,
-        total: info.total_bytes,
-        down_bytes_per_second: rates.down,
-        up_bytes_per_second: rates.up,
-        peers: u16::try_from(info.live_peers).unwrap_or(u16::MAX),
-    };
+    let sample = sample_of(info, rates);
     if last == Some(&sample) {
         return sample;
     }
@@ -485,6 +471,16 @@ fn record(
         crate::nexus::log::clog!("nexus", "could not trim the transfer history: {error}");
     }
     sample
+}
+
+fn sample_of(info: &TorrentInfo, rates: Rates) -> StoredSample {
+    StoredSample {
+        done: info.progress_bytes,
+        total: info.total_bytes,
+        down_bytes_per_second: rates.down,
+        up_bytes_per_second: rates.up,
+        peers: u16::try_from(info.live_peers).unwrap_or(u16::MAX),
+    }
 }
 
 /// Updates one collection's progress tier from one reading.
@@ -703,6 +699,25 @@ fn peer_counters(info: &TorrentInfo) -> HashMap<PeerKey, (u64, u64)> {
             )
         })
         .collect()
+}
+
+fn remember_reading(
+    readings: &mut HashMap<Vec<u8>, LastReading>,
+    key: &[u8],
+    info: &TorrentInfo,
+    sample: StoredSample,
+    at: u64,
+) {
+    readings.insert(
+        key.to_vec(),
+        LastReading {
+            sample,
+            at,
+            fetched: info.fetched_bytes,
+            uploaded: info.uploaded_bytes,
+            peers: peer_counters(info),
+        },
+    );
 }
 
 fn measured_rates(info: &TorrentInfo, last: Option<&LastReading>) -> Rates {
@@ -1166,6 +1181,32 @@ mod tests {
             first_sight[0].down_bytes, 3_000_000,
             "but its totals are still true"
         );
+    }
+
+    #[test]
+    fn an_idle_zero_copy_seed_still_establishes_a_peer_rate_baseline() {
+        let mut idle = info(100, 100, true);
+        idle.live_peer_addrs[0].uploaded_bytes = 0;
+        let mut readings = HashMap::new();
+        remember_reading(
+            &mut readings,
+            b"owner",
+            &idle,
+            StoredSample {
+                done: 100,
+                total: 100,
+                down_bytes_per_second: 0,
+                up_bytes_per_second: 0,
+                peers: 1,
+            },
+            1,
+        );
+
+        let mut uploading = idle;
+        uploading.live_peer_addrs[0].uploaded_bytes = 500_000;
+        let peers = measured_peers(&uploading, readings.get(b"owner".as_slice()), 1_000_000_000);
+
+        assert_eq!(peers[0].up_bytes_per_second, 500_000);
     }
 
     #[test]

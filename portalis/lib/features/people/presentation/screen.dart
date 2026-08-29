@@ -7,7 +7,7 @@ import '../../../design/design.dart';
 import '../../../design/theme.dart';
 import '../../../nexus/domain/app_state.dart';
 import '../../collections/domain/peer_observation.dart';
-import '../../collections/presentation/peer_color.dart';
+import '../../collections/presentation/peers.dart';
 
 /// The people and machines this device is connected to.
 ///
@@ -144,11 +144,22 @@ class _PeopleScreenState extends State<PeopleScreen> {
                       style: AppText.secondary(color: AppColors.textDim),
                     ),
                     const SizedBox(height: 10),
-                    for (final connection in connections)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: ConnectionCard(peer: connection),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 360,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                        mainAxisExtent: 154,
                       ),
+                      itemCount: connections.length,
+                      itemBuilder: (context, index) => PeerCard(
+                        peer: connections[index],
+                        contextLabel: connections[index].collectionName,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -296,123 +307,4 @@ class ContactCard extends StatelessWidget {
         'Blocked' => 'BLOCKED',
         _ => _reachable ? 'CONNECTED' : 'OFFLINE',
       };
-}
-
-/// One live swarm connection, with what it has actually exchanged.
-///
-/// Deliberately not shaped like a contact card: no avatar, no verification
-/// badge, no name in the title position. The address leads because it is the
-/// only thing here this device can vouch for. The client name is shown as a
-/// claim beside it, and the byte figures — which *are* this device's own
-/// measurements — get the emphasis a person actually wants.
-class ConnectionCard extends StatelessWidget {
-  const ConnectionCard({super.key, required this.peer});
-
-  final PeerObservation peer;
-
-  @override
-  Widget build(BuildContext context) {
-    final color =
-        peer.isMoving ? AppColors.ember : rememberedPeerColor(peer.address);
-    return SurfaceCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      glow: peer.isMoving ? GlowLevel.active : GlowLevel.none,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  peer.address,
-                  overflow: TextOverflow.ellipsis,
-                  style: monoLabel(size: 11.5, letterSpacing: 0),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _subtitle,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppText.secondary(color: AppColors.textDim),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          _Exchanged(peer: peer),
-        ],
-      ),
-    );
-  }
-
-  /// What the peer says it is, and which collection this connection belongs
-  /// to. The client name is prefixed as reported so the card never presents a
-  /// self-chosen string as though this device verified it.
-  String get _subtitle {
-    final client = peer.client;
-    return client == null
-        ? peer.collectionName
-        : '${peer.collectionName} · reports $client';
-  }
-}
-
-/// The transfer figures for one connection.
-///
-/// Rates when something is moving, totals when it is not. A connected peer
-/// that has gone quiet says so rather than showing a stale rate, and one that
-/// has exchanged nothing at all says that too — it is a real and common state.
-class _Exchanged extends StatelessWidget {
-  const _Exchanged({required this.peer});
-
-  final PeerObservation peer;
-
-  @override
-  Widget build(BuildContext context) {
-    if (peer.isMoving) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (peer.downBytesPerSecond > 0)
-            Text(
-              '↓ ${formatRate(peer.downBytesPerSecond)}',
-              style: monoLabel(
-                size: 11,
-                color: AppColors.signal,
-                letterSpacing: 0,
-              ),
-            ),
-          if (peer.upBytesPerSecond > 0)
-            Text(
-              '↑ ${formatRate(peer.upBytesPerSecond)}',
-              style: monoLabel(
-                size: 11,
-                color: AppColors.ember,
-                letterSpacing: 0,
-              ),
-            ),
-          const SizedBox(height: 2),
-          Text(
-            _totals,
-            style: monoLabel(size: 9, color: AppColors.textFaint),
-          ),
-        ],
-      );
-    }
-    return Text(
-      peer.hasExchanged ? _totals : 'connected · idle',
-      textAlign: TextAlign.end,
-      style: monoLabel(size: 10, color: AppColors.textDim, letterSpacing: 0),
-    );
-  }
-
-  String get _totals =>
-      '↓ ${formatBytes(peer.downBytes)} · ↑ ${formatBytes(peer.upBytes)}';
 }

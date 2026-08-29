@@ -65,10 +65,76 @@ void main() {
     expect(repository.commands.last.collection, 7);
     expect(repository.commands.last.paused, isFalse);
   });
+
+  test('completion reloads the durable peers before live peers disappear',
+      () async {
+    final repository = _Repository()
+      ..peerHistoryAnswers = [
+        const [],
+        [
+          AppPeerHistory(
+            address: '203.0.113.5:6881',
+            client: 'qBittorrent 4.6',
+            firstSeenAt: BigInt.one,
+            lastSeenAt: BigInt.two,
+            downBytes: BigInt.from(4000000),
+            upBytes: BigInt.from(1000000),
+            lastDownBytesPerSecond: 512000,
+            lastUpBytesPerSecond: 64000,
+          ),
+        ],
+      ];
+    final controller = AppController(repository: repository);
+    controller.debugSeed(_state(completedAt: null));
+    final source =
+        EngineCollectionSource(controller: controller, collectionId: 7);
+    addTearDown(source.dispose);
+    await Future<void>.delayed(Duration.zero);
+    expect(source.peerHistoryFor('7'), isEmpty);
+
+    controller.debugSeed(_state(completedAt: BigInt.two));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repository.peerHistoryCalls, 2);
+    expect(source.peerHistoryFor('7'), hasLength(1));
+    expect(source.peerHistoryFor('7').single.downBytesPerSecond, 512000);
+  });
 }
+
+AppSnapshot _state({required BigInt? completedAt}) => AppSnapshot(
+      device: const AppDevice(
+        name: 'Portalis',
+        handle: null,
+        fingerprint: 'test-fingerprint',
+        devices: 1,
+      ),
+      connectivity: 'LocalOnly',
+      contacts: const [],
+      collections: [
+        AppCollection(
+          id: 7,
+          name: 'Iceland',
+          nature: 'Torrent',
+          role: 'Receiver',
+          revision: BigInt.one,
+          status: completedAt == null ? 'Downloading' : 'Available',
+          members: Uint32List(0),
+          entries: 1,
+          totalBytes: BigInt.from(4000000),
+          onDiskBytes: BigInt.from(4000000),
+          uploadedBytes: BigInt.zero,
+          completedAt: completedAt,
+          transfer: null,
+          pending: null,
+        ),
+      ],
+      alerts: const [],
+    );
 
 class _Repository implements AppRepository {
   final commands = <EngineCommand>[];
+  List<List<AppPeerHistory>> peerHistoryAnswers = const [];
+  int peerHistoryCalls = 0;
 
   @override
   Future<void> start() async {}
@@ -98,7 +164,13 @@ class _Repository implements AppRepository {
   Future<List<AppPeoplePeer>> peoplePeers() async => const [];
 
   @override
-  Future<List<AppPeerHistory>> peerHistory(int collection) async => const [];
+  Future<List<AppPeerHistory>> peerHistory(int collection) async {
+    final answer = peerHistoryCalls < peerHistoryAnswers.length
+        ? peerHistoryAnswers[peerHistoryCalls]
+        : const <AppPeerHistory>[];
+    peerHistoryCalls += 1;
+    return answer;
+  }
 
   @override
   Future<String> diagnosticsLog() async => '';
