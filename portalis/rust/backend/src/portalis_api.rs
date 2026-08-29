@@ -259,6 +259,46 @@ pub fn set_active(active: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// The complete local diagnostics log, oldest line first — the same lines
+/// every [`crate::nexus::log::clog!`] call already writes to stderr,
+/// additionally kept in a bounded file so they survive after the console is
+/// gone.
+///
+/// This never leaves the device on its own: it is read here only so the app
+/// can show it, and sharing it anywhere is the person's own choice from the
+/// Diagnostics screen — no telemetry, no server, no account.
+///
+/// # Errors
+/// Returns a description when the log cannot be read. An empty result (no
+/// error) is the normal case before anything has been logged yet.
+pub fn diagnostics_log() -> Result<String, String> {
+    crate::nexus::diagnostics::read()
+}
+
+/// Deletes everything logged so far. Nothing in Portalis calls this except
+/// a person tapping "Clear" on the Diagnostics screen.
+///
+/// # Errors
+/// Returns a description when the file exists but cannot be removed.
+pub fn clear_diagnostics_log() -> Result<(), String> {
+    crate::nexus::diagnostics::clear()
+}
+
+/// Where the diagnostics log lives on disk, so the Diagnostics screen can
+/// show a person exactly what file they would be sharing.
+pub fn diagnostics_log_path() -> String {
+    crate::nexus::diagnostics::path()
+}
+
+/// Appends one line to the same local diagnostics log every
+/// [`crate::nexus::log::clog!`] call writes to — the Flutter-side counterpart,
+/// so a Dart error caught by `FlutterError.onError` or
+/// `PlatformDispatcher.onError` lands in the one report a person shares,
+/// not silently on a console nobody is attached to.
+pub fn log_diagnostic(tag: String, message: String) {
+    crate::nexus::log::clog!(&tag, "{message}");
+}
+
 /// Streams complete app snapshots. The current state is sent first.
 pub async fn watch_states(sink: StreamSink<AppSnapshot>) -> Result<(), String> {
     let mut states = locked_runtime()?

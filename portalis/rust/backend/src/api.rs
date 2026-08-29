@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1025323546;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1085148860;
 
 // Section: executor
 
@@ -47,6 +47,38 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
+fn wire__crate__portalis_api__clear_diagnostics_log_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "clear_diagnostics_log",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::portalis_api::clear_diagnostics_log()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__nexus__settings__default_engine_settings_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -138,6 +170,70 @@ fn wire__crate__nexus__device__device_identity_impl(
                         std::result::Result::Ok(output_ok)
                     })(),
                 )
+            }
+        },
+    )
+}
+fn wire__crate__portalis_api__diagnostics_log_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "diagnostics_log",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::portalis_api::diagnostics_log()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__portalis_api__diagnostics_log_path_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "diagnostics_log_path",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::portalis_api::diagnostics_log_path())?;
+                    std::result::Result::Ok(output_ok)
+                })())
             }
         },
     )
@@ -234,6 +330,42 @@ fn wire__crate__bridge__get_version_impl(
                 let output_ok = Ok::<_, ()>(crate::bridge::get_version())?;
                 std::result::Result::Ok(output_ok)
             })())
+        },
+    )
+}
+fn wire__crate__portalis_api__log_diagnostic_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "log_diagnostic",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_tag = <String>::sse_decode(&mut deserializer);
+            let api_message = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>({
+                        crate::portalis_api::log_diagnostic(api_tag, api_message);
+                    })?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -1601,39 +1733,47 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__nexus__settings__default_engine_settings_impl(
+        1 => {
+            wire__crate__portalis_api__clear_diagnostics_log_impl(port, ptr, rust_vec_len, data_len)
+        }
+        2 => wire__crate__nexus__settings__default_engine_settings_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        3 => wire__crate__nexus__device__device_identity_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__nexus__settings__engine_settings_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__nexus__settings__engine_settings_default_impl(
+        4 => wire__crate__nexus__device__device_identity_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__portalis_api__diagnostics_log_impl(port, ptr, rust_vec_len, data_len),
+        6 => {
+            wire__crate__portalis_api__diagnostics_log_path_impl(port, ptr, rust_vec_len, data_len)
+        }
+        7 => wire__crate__nexus__settings__engine_settings_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__nexus__settings__engine_settings_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        11 => wire__crate__portalis_api__peer_history_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__portalis_api__peers_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__portalis_api__people_peers_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__portalis_api__send_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__portalis_api__set_active_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__nexus__settings__set_engine_settings_impl(
+        10 => wire__crate__portalis_api__log_diagnostic_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__portalis_api__peer_history_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__portalis_api__peers_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__portalis_api__people_peers_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__portalis_api__send_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__portalis_api__set_active_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__nexus__settings__set_engine_settings_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        18 => wire__crate__nexus__device__set_nickname_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__portalis_api__share_uri_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__portalis_api__start_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__portalis_api__stop_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__portalis_api__storage_breakdown_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__portalis_api__watch_detail_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__portalis_api__watch_history_impl(port, ptr, rust_vec_len, data_len),
-        25 => wire__crate__portalis_api__watch_states_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__nexus__device__set_nickname_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__portalis_api__share_uri_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__portalis_api__start_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__portalis_api__stop_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__portalis_api__storage_breakdown_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__portalis_api__watch_detail_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__portalis_api__watch_history_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__portalis_api__watch_states_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1646,13 +1786,13 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        2 => wire__crate__bridge__device_identity_impl(ptr, rust_vec_len, data_len),
-        6 => wire__crate__bridge__get_version_impl(ptr, rust_vec_len, data_len),
-        7 => wire__crate__bridge__peer_hints_create_impl(ptr, rust_vec_len, data_len),
-        8 => wire__crate__bridge__peer_hints_discover_local_impl(ptr, rust_vec_len, data_len),
-        9 => wire__crate__bridge__peer_hints_from_magnet_impl(ptr, rust_vec_len, data_len),
-        10 => wire__crate__bridge__peer_hints_validate_address_impl(ptr, rust_vec_len, data_len),
-        17 => wire__crate__bridge__set_nickname_impl(ptr, rust_vec_len, data_len),
+        3 => wire__crate__bridge__device_identity_impl(ptr, rust_vec_len, data_len),
+        9 => wire__crate__bridge__get_version_impl(ptr, rust_vec_len, data_len),
+        11 => wire__crate__bridge__peer_hints_create_impl(ptr, rust_vec_len, data_len),
+        12 => wire__crate__bridge__peer_hints_discover_local_impl(ptr, rust_vec_len, data_len),
+        13 => wire__crate__bridge__peer_hints_from_magnet_impl(ptr, rust_vec_len, data_len),
+        14 => wire__crate__bridge__peer_hints_validate_address_impl(ptr, rust_vec_len, data_len),
+        21 => wire__crate__bridge__set_nickname_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

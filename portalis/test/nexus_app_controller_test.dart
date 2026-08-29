@@ -639,6 +639,18 @@ class _Repository implements AppRepository {
   Future<List<AppPeerHistory>> peerHistory(int collection) async => const [];
 
   @override
+  Future<String> diagnosticsLog() async => '';
+
+  @override
+  Future<void> clearDiagnosticsLog() async {}
+
+  @override
+  Future<String> diagnosticsLogPath() async => '';
+
+  @override
+  Future<void> logDiagnostic(String tag, String message) async {}
+
+  @override
   Future<AppAccepted> send(EngineCommand command) async {
     commands.add(command);
     return AppAccepted(id: BigInt.zero, collection: null, queued: false);
