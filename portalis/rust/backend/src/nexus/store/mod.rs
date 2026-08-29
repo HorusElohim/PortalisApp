@@ -895,6 +895,42 @@ mod tests {
             store
                 .put_sample(&COLLECTION, 20, &sample(2))
                 .expect("writes");
+            store
+                .put_peer_history(
+                    &COLLECTION,
+                    &StoredPeerHistory {
+                        address: "203.0.113.5:6881".to_owned(),
+                        client: Some("qBittorrent/5.2.3".to_owned()),
+                        first_seen_at: 10,
+                        last_seen_at: 20,
+                        total_down_bytes: 15,
+                        total_up_bytes: 4,
+                        checkpoint_down_bytes: 5,
+                        checkpoint_up_bytes: 2,
+                        checkpoint_epoch: 1,
+                        last_down_bytes_per_second: 3,
+                        last_up_bytes_per_second: 1,
+                    },
+                )
+                .expect("writes");
+            store
+                .put_peer_history(
+                    &COLLECTION,
+                    &StoredPeerHistory {
+                        address: "203.0.113.6:6881".to_owned(),
+                        client: None,
+                        first_seen_at: 11,
+                        last_seen_at: 21,
+                        total_down_bytes: 16,
+                        total_up_bytes: 5,
+                        checkpoint_down_bytes: 6,
+                        checkpoint_up_bytes: 3,
+                        checkpoint_epoch: 1,
+                        last_down_bytes_per_second: 4,
+                        last_up_bytes_per_second: 2,
+                    },
+                )
+                .expect("writes");
             store.put_identity("root", &ROOT).expect("writes");
             store.queue_command(1, b"publish").expect("writes");
         }
@@ -923,6 +959,23 @@ mod tests {
             store.samples(&COLLECTION).expect("reads"),
             vec![(10, sample(1)), (20, sample(2))],
             "including the transfer history"
+        );
+        assert_eq!(
+            store
+                .peer_history(&COLLECTION)
+                .expect("reads")
+                .into_iter()
+                .map(|peer| (peer.address, peer.client, peer.total_down_bytes))
+                .collect::<Vec<_>>(),
+            vec![
+                ("203.0.113.6:6881".to_owned(), None, 16),
+                (
+                    "203.0.113.5:6881".to_owned(),
+                    Some("qBittorrent/5.2.3".to_owned()),
+                    15,
+                ),
+            ],
+            "including decoded durable peer ledgers ordered by newest sight"
         );
         assert_eq!(store.identity("root").expect("reads"), Some(ROOT.to_vec()));
         assert_eq!(

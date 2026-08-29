@@ -147,4 +147,22 @@ mod tests {
         assert_eq!(number_of(&keyed(&[], u64::MAX)), Some(u64::MAX));
         assert_eq!(number_of(&[1, 2, 3]), None, "too short to hold one");
     }
+
+    #[test]
+    fn peer_history_keys_keep_client_claims_distinct_and_scoped() {
+        let collection = [7_u8; 16];
+        let neighbour = [8_u8; 16];
+        let without_client = peer_history_key(&collection, "203.0.113.5:6881", None);
+        let qbittorrent =
+            peer_history_key(&collection, "203.0.113.5:6881", Some("qBittorrent/5.2.3"));
+        let transmission =
+            peer_history_key(&collection, "203.0.113.5:6881", Some("Transmission/4.0.6"));
+
+        assert_ne!(without_client, qbittorrent);
+        assert_ne!(qbittorrent, transmission);
+        let (low, high) = peer_history_range(&collection);
+        assert!(low <= qbittorrent && qbittorrent <= high);
+        let other = peer_history_key(&neighbour, "203.0.113.5:6881", Some("qBittorrent/5.2.3"));
+        assert!(other < low || other > high);
+    }
 }
