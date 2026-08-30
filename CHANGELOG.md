@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.47+48
+
+- Fixed peer retention: a peer that connects, moves bytes, and disconnects
+  before its collection finishes or the app shuts down is now durably
+  remembered. Peer history is snapshotted every poll tick instead of only
+  at completion/shutdown, so the People screen no longer loses a connection
+  the moment it drops mid-transfer.
+- Standardized layout: Home/Collections' leftover raw `22` gutters now use
+  the shared `kScreenGutter` constant, matching Settings/People/User.
+- Shrunk the User page's activity cards, and made them responsive: card
+  count per row now grows with window width instead of a fixed two-column
+  grid stretched wide on desktop.
+- Moved File formats and Clear activity history from the User page to
+  Settings — they are engine/device configuration, not identity.
+- Removed the "Identity lives on this device" info row from the User page.
+
 ## 1.0.46+47
 
 - Accepted ADR-0011 with verified acceptance criteria: every ledger

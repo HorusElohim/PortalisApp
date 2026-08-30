@@ -125,7 +125,12 @@ class HomeLibrary extends StatelessWidget {
             if (_shown.isNotEmpty)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+                  padding: const EdgeInsets.fromLTRB(
+                    kScreenGutter,
+                    0,
+                    kScreenGutter,
+                    14,
+                  ),
                   child: _shareAction(),
                 ),
               ),
@@ -151,7 +156,8 @@ class HomeLibrary extends StatelessWidget {
       return SliverFillRemaining(hasScrollBody: false, child: _emptyState());
     }
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(22, 0, 22, 28),
+      padding: const EdgeInsets.fromLTRB(
+          kScreenGutter, 0, kScreenGutter, 28),
       sliver: SliverList.separated(
         itemCount: _shown.length,
         separatorBuilder: (_, __) => const SizedBox(height: 14),
@@ -172,7 +178,8 @@ class HomeLibrary extends StatelessWidget {
     final name = device?.name ?? 'Portalis';
     final initials = name.isEmpty ? '·' : name[0].toUpperCase();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
+      padding: const EdgeInsets.fromLTRB(
+          kScreenGutter, 14, kScreenGutter, 0),
       child: Row(
         children: [
           Avatar(initials: initials, size: 34, primary: true),
@@ -199,7 +206,7 @@ class HomeLibrary extends StatelessWidget {
   Widget _emptyState() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 22),
+        padding: const EdgeInsets.symmetric(horizontal: kScreenGutter),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

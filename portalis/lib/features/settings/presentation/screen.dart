@@ -15,6 +15,7 @@ import '../../../shell/navigation.dart';
 import '../../../design/theme.dart';
 import 'storage_screen.dart';
 import 'diagnostics_screen.dart';
+import 'formats_screen.dart';
 import '../../../app/onboarding_screen.dart';
 
 /// Settings for the transfer engine and its storage.
@@ -60,6 +61,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Embedded only: same pattern as [_showStorage], for
   /// [DiagnosticsScreen] — see [_openDiagnostics].
   bool _showDiagnostics = false;
+
+  /// Embedded only: same pattern as [_showStorage], for [FormatsScreen] —
+  /// see [_openFormats].
+  bool _showFormats = false;
 
   @override
   void initState() {
@@ -134,6 +139,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
         showInPlace: () => setState(() => _showDiagnostics = true),
         push: (_) => DiagnosticsScreen(embedded: widget.embedded),
       );
+
+  void _openFormats() => openNestedScreen(
+        context,
+        embedded: widget.embedded,
+        showInPlace: () => setState(() => _showFormats = true),
+        push: (_) => const FormatsScreen(),
+      );
+
+  Future<void> _clearActivity() async {
+    final confirmed = await confirmAction(
+      context,
+      title: 'Clear activity history?',
+      message: 'Resets session and lifetime totals on this device. Your '
+          'identity, collections, and settings are never touched.',
+      confirmLabel: 'Clear',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await AppControllers.engine.clearUserActivity();
+      if (mounted) showToast(context, 'Activity history cleared');
+    } catch (e) {
+      if (!mounted) return;
+      showToast(context, 'Couldn\'t clear activity: $e',
+          severity: ToastSeverity.error);
+    }
+  }
 
   /// Collapses Advanced back to Basic in place when embedded — there is no
   /// pushed route here to pop. Not embedded, this instance only exists
@@ -284,6 +316,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return DiagnosticsScreen(
         embedded: widget.embedded,
         onBack: () => setState(() => _showDiagnostics = false),
+      );
+    }
+    if (_showFormats) {
+      return FormatsScreen(
+        embedded: widget.embedded,
+        onBack: () => setState(() => _showFormats = false),
       );
     }
     return AppScreen(
@@ -459,6 +497,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: 'A local log for reporting a problem — stays on this '
               'device unless you choose to share it',
           onTap: _openDiagnostics,
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(kScreenGutter, 10, kScreenGutter, 0),
+        child: DestinationRow(
+          icon: Icons.category_outlined,
+          title: 'File formats',
+          subtitle: 'What Portalis can view, and what it converts',
+          onTap: _openFormats,
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(kScreenGutter, 10, kScreenGutter, 0),
+        child: DestinationRow(
+          icon: Icons.history_toggle_off,
+          title: 'Clear activity history',
+          subtitle: 'Resets session and lifetime totals on this device. '
+              'Never touches your identity or collections.',
+          onTap: _clearActivity,
         ),
       ),
       Padding(
