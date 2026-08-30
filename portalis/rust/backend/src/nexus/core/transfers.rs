@@ -141,7 +141,21 @@ pub(crate) async fn follow_transfers(
             .map(|collection| collection.handle.as_str())
             .collect();
         for info in &reported {
-            if !claimed.contains(info.info_hash.as_str())
+            let linked = match crate::nexus::linked_source_store::record_for(&info.info_hash) {
+                Ok(record) => record.is_some(),
+                Err(error) => {
+                    // This decision destroys the session's live seeder. When
+                    // the source vault cannot answer, preservation is safer
+                    // than misclassifying a newly admitted owner as orphaned.
+                    crate::nexus::log::clog!(
+                        "nexus",
+                        "could not determine whether torrent {} has linked sources: {error}",
+                        info.info_hash
+                    );
+                    continue;
+                }
+            };
+            if should_release_unclaimed_torrent(claimed.contains(info.info_hash.as_str()), linked)
                 && let Err(error) = substrate.release(&info.info_hash).await
             {
                 crate::nexus::log::clog!(
@@ -265,6 +279,13 @@ pub(crate) async fn follow_transfers(
             details.refresh(handle);
         }
     }
+}
+
+/// A linked source is an owner-side torrent that may have been admitted just
+/// before publication durably records its collection handle. It is not an
+/// orphan during that short transaction window.
+fn should_release_unclaimed_torrent(claimed: bool, linked: bool) -> bool {
+    !claimed && !linked
 }
 
 /// Every collection something is currently carrying, with its pause flag.
@@ -832,6 +853,13 @@ mod tests {
                 client: None,
             }],
         }
+    }
+
+    #[test]
+    fn a_newly_admitted_linked_source_is_not_an_orphan_before_its_handle_is_stored() {
+        assert!(!should_release_unclaimed_torrent(false, true,));
+        assert!(should_release_unclaimed_torrent(false, false,));
+        assert!(!should_release_unclaimed_torrent(true, false,));
     }
 
     /// A torrent being verified reports zero progress by design — the scan

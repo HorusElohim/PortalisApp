@@ -1,11 +1,20 @@
 # Changelog
 
+## 1.0.49+59
+
+- Fixed a source-seeding race: the transfer poller could forget a newly
+  admitted zero-copy owner torrent before publication persisted its collection
+  handle. A QR could then advertise a live port with no torrent available to
+  answer metadata requests, leaving receivers in Preparing. Linked source
+  torrents are now preserved through that transaction window.
+- Restored explicit receiver choice for scanned Portalis collections: scanning
+  opens the resolved collection and its selected media, but never starts a
+  download until the person presses Download.
+- Peer extended handshakes now identify the client as `Portalis 0.1.49`
+  instead of `rqbit`.
+
 ## 1.0.49+58
 
-- Fixed QR collection imports not starting their receiver download after
-  metadata resolved. Automatic download now uses the opened collection's live
-  detail subscription, while pasted magnets continue to wait for an explicit
-  selection.
 - Renamed the temporary import label to `Portalis collection import` and made
   the scanner feedback describe a collection rather than peer hints.
 
