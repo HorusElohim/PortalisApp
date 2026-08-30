@@ -1015,7 +1015,7 @@ impl Nexus {
             // Metadata resolution is active preparation, but not acquisition.
             // Once the file list exists the lifecycle becomes AwaitingSelection
             // and projects as Draft until the person presses Download.
-            status: Status::Preparing,
+            status: Status::ResolvingMetadata,
             members: Vec::new(),
             // Nothing is known about the contents until the worker has
             // resolved the source. Zero here is honest rather than a guess:
@@ -1366,6 +1366,9 @@ impl Nexus {
         // Do not turn a damaged local store row into a QR code that claims to
         // name a torrent. A valid v1 info hash is exactly forty hex digits.
         if handle.len() != 40 || !handle.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Ok(None);
+        }
+        if !crate::nexus::torrent::share_ready(&handle) {
             return Ok(None);
         }
         let peer_hints = crate::nexus::torrent::local_peer_hints();
@@ -2075,9 +2078,9 @@ mod tests {
         assert!(
             nexus
                 .share_uri(collection)
-                .expect("builds the URI")
-                .is_some_and(|uri| uri
-                    .starts_with("magnet:?xt=urn:btih:0101010101010101010101010101010101010101"))
+                .expect("checks live readiness")
+                .is_none(),
+            "a durable handle without a live loaded torrent must not produce a QR"
         );
         nexus.close().await;
     }
@@ -2140,16 +2143,19 @@ mod tests {
             .command(&Command::PublishDraft { collection })
             .expect("confirms");
         tokio::time::timeout(Duration::from_secs(2), async {
-            while nexus
-                .share_uri(collection)
-                .expect("the collection still exists")
-                .is_none()
-            {
+            while nexus.state().collections[0].status != Status::Seeding {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         })
         .await
-        .expect("publishes and exposes its share URI once confirmed");
+        .expect("publishes and exposes its live seed state once confirmed");
+        assert!(
+            nexus
+                .share_uri(collection)
+                .expect("the collection still exists")
+                .is_none(),
+            "an injected substrate is not proof that the active librqbit session is seeding"
+        );
 
         // Share begins the torrent rather than leaving a collection whose QR
         // claims it is shared while the engine has been told to remain idle.
@@ -2906,7 +2912,7 @@ mod tests {
                     .collections
                     .first()
                     .is_some_and(|collection| {
-                        collection.status == Status::Downloading && collection.revision == 1
+                        collection.status == Status::DownloadRequested && collection.revision == 1
                     });
                 if settled {
                     break;
@@ -2947,11 +2953,8 @@ mod tests {
             b"torrent descriptor"
         );
         assert!(
-            nexus
-                .share_uri(collection)
-                .expect("share URI")
-                .is_some_and(|uri| uri
-                    .starts_with("magnet:?xt=urn:btih:1111111111111111111111111111111111111111"))
+            nexus.share_uri(collection).expect("share URI").is_none(),
+            "a stored handle without a loaded torrent cannot be shared"
         );
         nexus.close().await;
     }
@@ -3134,7 +3137,7 @@ mod tests {
         // Resolution is active metadata work, not download authorization. The
         // collection becomes Draft only after a file list exists and awaits
         // the person's explicit Download decision.
-        assert_eq!(imported.status, Status::Preparing);
+        assert_eq!(imported.status, Status::ResolvingMetadata);
         assert_eq!(imported.entries, 0, "metadata has not resolved yet");
         nexus.close().await;
 
@@ -3143,7 +3146,10 @@ mod tests {
         // Still resolving after a restart: it is active metadata work but can
         // never acquire content until it reaches AwaitingSelection and the
         // person presses Download.
-        assert_eq!(reopened.state().collections[0].status, Status::Preparing);
+        assert_eq!(
+            reopened.state().collections[0].status,
+            Status::ResolvingMetadata
+        );
         let key = reopened
             .collection_key(reopened.state().collections[0].id)
             .expect("collection key");
@@ -3194,7 +3200,7 @@ mod tests {
         // Immediately: a row exists and metadata resolution is visibly active,
         // but this does not authorize downloading any content.
         let imported = nexus.state().collections[0].clone();
-        assert_eq!(imported.status, Status::Preparing);
+        assert_eq!(imported.status, Status::ResolvingMetadata);
         assert_eq!(imported.entries, 0, "nothing is known yet");
 
         let mut watching = nexus.watch_detail(Some(handle));
@@ -3213,7 +3219,7 @@ mod tests {
         assert_eq!(resolved.total_bytes, 12);
         assert_eq!(
             resolved.status,
-            Status::Draft,
+            Status::MetadataReady,
             "resolved choices wait for the explicit Download action"
         );
         let detail = watching.borrow().clone().expect("a selection");
