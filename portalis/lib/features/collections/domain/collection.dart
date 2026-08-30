@@ -60,7 +60,11 @@ class Collection {
   bool get isPaused => lifecycle == CollectionState.paused;
   bool get isConnecting => lifecycle == CollectionState.waitingForOwner;
   bool get isDownloading => lifecycle == CollectionState.downloading;
-  bool get isPreparing => lifecycle == CollectionState.preparing;
+  bool get isPreparing => lifecycle == CollectionState.resolvingMetadata;
+  bool get isWaitingForSender => lifecycle == CollectionState.waitingForSender;
+  bool get hasMetadata => lifecycle == CollectionState.metadataReady;
+  bool get isDownloadRequested => lifecycle == CollectionState.downloadRequested;
+  bool get isRetryingMetadata => lifecycle == CollectionState.retryingMetadata;
   bool get isSeeding => lifecycle == CollectionState.seeding;
 
   /// Complete, and with something to serve. Nothing to serve means nothing is

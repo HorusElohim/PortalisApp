@@ -102,8 +102,16 @@ pub enum Status {
     Paused,
     /// Chosen but not yet shared: private to this device, and free to abandon.
     Draft,
-    /// A descriptor arrived; the transfer has not started.
-    Preparing,
+    /// The receiver is resolving a magnet or descriptor into a file list.
+    ResolvingMetadata,
+    /// Metadata resolution has not started because the sender is offline.
+    WaitingForSender,
+    /// Metadata is available and the receiver must choose files.
+    MetadataReady,
+    /// The receiver explicitly requested the selected files.
+    DownloadRequested,
+    /// Metadata resolution failed and is waiting for its next retry.
+    RetryingMetadata,
     Downloading,
     /// The key was rotated and this device is republishing.
     Updating,
@@ -132,15 +140,20 @@ pub enum Status {
 /// and the engine's activity outranks what the store can infer without it.
 #[must_use]
 pub fn status_for(facts: StatusFacts<'_>) -> Status {
-    // Nothing has happened and nothing will until somebody says so. Resolving
-    // is different: the worker is doing something, so it falls through to
-    // Preparing rather than looking like it is waiting on the person.
+    // Nothing has happened and nothing will until somebody says so. Metadata
+    // readiness is distinct because it is waiting on a local selection, not
+    // on the network.
     if matches!(
         facts.lifecycle,
         crate::nexus::core::lifecycle::Lifecycle::NativeDraft
-            | crate::nexus::core::lifecycle::Lifecycle::TorrentAwaitingSelection
     ) {
         return Status::Draft;
+    }
+    if matches!(
+        facts.lifecycle,
+        crate::nexus::core::lifecycle::Lifecycle::TorrentAwaitingSelection
+    ) {
+        return Status::MetadataReady;
     }
     // A decision, so it outranks whatever the numbers are doing — a paused
     // collection still draining a buffer is paused, not downloading.
@@ -161,7 +174,7 @@ pub fn status_for(facts: StatusFacts<'_>) -> Status {
         return if live.finished {
             Status::Available
         } else if live.progress_bytes == 0 {
-            Status::Preparing
+            Status::DownloadRequested
         } else {
             Status::Downloading
         };
@@ -177,15 +190,15 @@ pub fn status_for(facts: StatusFacts<'_>) -> Status {
     // Preparing here is what made a completed torrent look unfinished for as
     // long as the app stayed shut.
     if facts.carried {
-        return Status::Downloading;
+        return Status::DownloadRequested;
     }
     // Its own files, not yet offered to anyone.
     if facts.publishing {
-        return Status::Preparing;
+        return Status::ResolvingMetadata;
     }
     // A source nobody has chosen from, or resolved and waiting.
     if facts.importing {
-        return Status::Preparing;
+        return Status::ResolvingMetadata;
     }
     Status::Available
 }
@@ -600,7 +613,7 @@ mod status_tests {
                 importing: true,
                 ..facts()
             }),
-            Status::Downloading,
+            Status::DownloadRequested,
         );
         // And a paused one says so rather than reporting itself as importing,
         // which is what made the start/stop button offer the wrong half.
@@ -622,7 +635,7 @@ mod status_tests {
                 importing: true,
                 ..facts()
             }),
-            Status::Preparing,
+            Status::ResolvingMetadata,
         );
     }
 }
@@ -736,7 +749,7 @@ mod tests {
         let statuses = [
             Status::Available,
             Status::Paused,
-            Status::Preparing,
+            Status::ResolvingMetadata,
             Status::Downloading,
             Status::Updating,
             Status::WaitingForOwner,

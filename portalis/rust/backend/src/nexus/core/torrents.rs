@@ -25,7 +25,11 @@
 //! intent durably and wakes this worker, which is also why closing the app
 //! mid-resolve loses nothing.
 
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 use tokio::sync::{Notify, watch};
 
@@ -37,10 +41,17 @@ use crate::nexus::substrate::Substrate;
 /// A failed resolve remains durable work. Back off before scanning it again so
 /// a temporarily unreachable magnet can recover without a restart, while a
 /// malformed source cannot hot-loop the runtime.
-const RETRY_AFTER_FAILURE: std::time::Duration = std::time::Duration::from_secs(5);
+const RETRY_DELAYS: [std::time::Duration; 4] = [
+    std::time::Duration::from_secs(5),
+    std::time::Duration::from_secs(15),
+    std::time::Duration::from_secs(30),
+    std::time::Duration::from_secs(60),
+];
 
-fn retry_delay_after(failed: bool) -> Option<std::time::Duration> {
-    failed.then_some(RETRY_AFTER_FAILURE)
+fn retry_delay(failures: u32) -> std::time::Duration {
+    RETRY_DELAYS[usize::try_from(failures.saturating_sub(1))
+        .unwrap_or(3)
+        .min(3)]
 }
 
 /// One collection this worker has something to do for.
@@ -79,12 +90,18 @@ pub(crate) async fn follow_torrent_imports(
     mut shutdown: super::supervisor::Shutdown,
     details: super::nexus::DetailSources,
 ) {
-    let mut retry_delay = None;
+    let mut failures: HashMap<Vec<u8>, u32> = HashMap::new();
+    let mut retry_deadlines: HashMap<Vec<u8>, Instant> = HashMap::new();
     loop {
+        let next_retry = retry_deadlines.values().min().copied();
         tokio::select! {
             () = shutdown.requested() => return,
             _ = wake.notified() => {}
-            () = tokio::time::sleep(retry_delay.unwrap_or(RETRY_AFTER_FAILURE)), if retry_delay.is_some() => {}
+            () = async {
+                if let Some(deadline) = next_retry {
+                    tokio::time::sleep_until(deadline.into()).await;
+                }
+            }, if next_retry.is_some() => {}
         }
 
         // Scanned rather than carried in the wake: a wake says "something
@@ -97,19 +114,18 @@ pub(crate) async fn follow_torrent_imports(
                 continue;
             }
         };
-        crate::nexus::log::clog!(
-            "nexus",
-            "torrent worker wake: pending_work_count={}",
-            pending.len()
-        );
-
-        let mut failed = false;
-        for work in pending {
-            let key = match &work {
-                Pending::Resolve { key, .. }
-                | Pending::Acquire { key, .. }
-                | Pending::Reconcile { key, .. } => key.clone(),
-            };
+        let now = Instant::now();
+        let due = pending
+            .into_iter()
+            .filter(|work| {
+                let key = work_key(work);
+                retry_deadlines
+                    .get(&key)
+                    .is_none_or(|deadline| *deadline <= now)
+            })
+            .collect::<Vec<_>>();
+        for work in due {
+            let key = work_key(&work);
             crate::nexus::log::clog!(
                 "nexus",
                 "torrent worker performing key={:?} {}",
@@ -131,11 +147,50 @@ pub(crate) async fn follow_torrent_imports(
                 done = perform(&store, substrate.as_ref(), &work) => done,
             };
             if let Err(error) = done {
-                crate::nexus::log::clog!("nexus", "torrent worker failed key={:?}: {error:#}", key);
-                failed = true;
+                let count = failures
+                    .entry(key.clone())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+                let delay = retry_delay(*count);
+                retry_deadlines.insert(key.clone(), Instant::now() + delay);
+                crate::nexus::log::clog!(
+                    "nexus",
+                    "torrent retry key={:?} failure={} after={}s: {error:#}",
+                    key,
+                    *count,
+                    delay.as_secs()
+                );
+                if matches!(work, Pending::Resolve { .. }) {
+                    let status = if error.to_string().to_ascii_lowercase().contains("timeout") {
+                        crate::nexus::projection::state::Status::RetryingMetadata
+                    } else {
+                        crate::nexus::projection::state::Status::WaitingForSender
+                    };
+                    if let Some(handle) = collections
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .handle(&key)
+                    {
+                        states.send_if_modified(|state| {
+                            let Some(collection) =
+                                state.collections.iter_mut().find(|item| item.id == handle)
+                            else {
+                                return false;
+                            };
+                            if collection.status == status {
+                                return false;
+                            }
+                            collection.status = status;
+                            true
+                        });
+                    }
+                }
                 continue;
             }
-            crate::nexus::log::clog!("nexus", "torrent worker completed key={:?}", key);
+            if failures.remove(&key).is_some() {
+                retry_deadlines.remove(&key);
+                crate::nexus::log::clog!("nexus", "torrent metadata recovered key={:?}", key);
+            }
             let handle = collections
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -148,7 +203,14 @@ pub(crate) async fn follow_torrent_imports(
                 details.refresh(handle);
             }
         }
-        retry_delay = retry_delay_after(failed);
+    }
+}
+
+fn work_key(work: &Pending) -> Vec<u8> {
+    match work {
+        Pending::Resolve { key, .. }
+        | Pending::Acquire { key, .. }
+        | Pending::Reconcile { key, .. } => key.clone(),
     }
 }
 
@@ -395,9 +457,12 @@ mod tests {
     use crate::nexus::store::records::Role as StoredRole;
 
     #[test]
-    fn failed_durable_imports_are_retried_with_a_bounded_backoff() {
-        assert_eq!(retry_delay_after(true), Some(RETRY_AFTER_FAILURE));
-        assert_eq!(retry_delay_after(false), None);
+    fn failed_durable_imports_use_exponential_backoff_capped_at_one_minute() {
+        assert_eq!(retry_delay(1), std::time::Duration::from_secs(5));
+        assert_eq!(retry_delay(2), std::time::Duration::from_secs(15));
+        assert_eq!(retry_delay(3), std::time::Duration::from_secs(30));
+        assert_eq!(retry_delay(4), std::time::Duration::from_secs(60));
+        assert_eq!(retry_delay(99), std::time::Duration::from_secs(60));
     }
 
     fn store() -> (Store, std::path::PathBuf) {
