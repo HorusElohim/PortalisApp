@@ -2026,7 +2026,7 @@ pub mod native {
             .name()
             .map(|name| name.into_owned())
             .filter(|name| !name.is_empty())
-            .unwrap_or_else(|| "Torrent import".to_owned());
+            .unwrap_or_else(|| "Portalis collection import".to_owned());
         let files = listed
             .info
             .iter_file_details()

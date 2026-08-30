@@ -61,7 +61,7 @@ class _QrPeerHintScannerState extends State<QrPeerHintScanner> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Peer hints scanned successfully!'),
+              content: Text('Portalis collection scanned successfully!'),
               backgroundColor: Colors.green,
             ),
           );

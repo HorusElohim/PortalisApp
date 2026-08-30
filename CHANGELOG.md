@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.49+58
+
+- Fixed QR collection imports not starting their receiver download after
+  metadata resolved. Automatic download now uses the opened collection's live
+  detail subscription, while pasted magnets continue to wait for an explicit
+  selection.
+- Renamed the temporary import label to `Portalis collection import` and made
+  the scanner feedback describe a collection rather than peer hints.
+
 ## 1.0.49+57
 
 - Fixed iOS HEIC thumbnails for media selected from Photos. These sources use
