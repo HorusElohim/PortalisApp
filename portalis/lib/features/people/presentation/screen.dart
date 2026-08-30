@@ -29,30 +29,26 @@ class PeopleScreen extends StatefulWidget {
   State<PeopleScreen> createState() => _PeopleScreenState();
 }
 
-class _PeopleScreenState extends State<PeopleScreen> {
-  /// Peers are polled rather than streamed: they change every engine tick, and
-  /// a stream would rebuild this screen far faster than a person can read it.
-  static const _refresh = Duration(seconds: 2);
-
-  Timer? _timer;
+class _PeopleScreenState extends State<PeopleScreen> with PollingState {
   List<AppPeoplePeer> _peers = const [];
 
   @override
   void initState() {
     super.initState();
-    unawaited(_load());
     // Also whenever the engine reports anything: a collection appearing or a
     // transfer starting changes who is connected, and waiting up to a full
     // refresh interval to notice would make this screen lag the rest of the
     // app for no reason.
     AppControllers.engine.addListener(_load);
-    _timer = Timer.periodic(_refresh, (_) => unawaited(_load()));
+    startPolling();
   }
+
+  @override
+  void onPoll() => unawaited(_load());
 
   @override
   void dispose() {
     AppControllers.engine.removeListener(_load);
-    _timer?.cancel();
     super.dispose();
   }
 

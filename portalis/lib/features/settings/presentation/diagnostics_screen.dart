@@ -35,26 +35,22 @@ class DiagnosticsScreen extends StatefulWidget {
   State<DiagnosticsScreen> createState() => _DiagnosticsScreenState();
 }
 
-class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
+class _DiagnosticsScreenState extends State<DiagnosticsScreen>
+    with PollingState {
   String? _log;
   String? _path;
   String? _error;
-  Timer? _poll;
 
   @override
   void initState() {
     super.initState();
-    _load();
     // The log grows while this screen is open — a torrent finishing, a peer
     // connecting — so it stays live the same way Storage's breakdown does.
-    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _load());
+    startPolling();
   }
 
   @override
-  void dispose() {
-    _poll?.cancel();
-    super.dispose();
-  }
+  void onPoll() => _load();
 
   Future<void> _load() async {
     try {
