@@ -46,6 +46,12 @@ extension _SeverityStyle on ToastSeverity {
       };
 }
 
+/// Set once, in `bootstrap.dart`, to route every error-severity [showToast]
+/// into the same shareable diagnostics log [FlutterError.onError] already
+/// reaches — see [showToast]'s own doc for why. `null` in tests and any
+/// context that never wires it up; calling [showToast] is then unaffected.
+void Function(String message)? onErrorToast;
+
 /// Shows a toast that rises and settles like a balloon.
 ///
 /// Replaces `ScaffoldMessenger.showSnackBar`, which docks a hard-edged bar to
@@ -66,6 +72,14 @@ void showToast(
   String? actionLabel,
   VoidCallback? onAction,
 }) {
+  // An error toast is shown for a few seconds and then gone. Without this,
+  // a person who dismissed one and later opened Diagnostics to report the
+  // very problem it described would find the log silent about it — the
+  // shareable report missing the one thing they were trying to report.
+  // [onErrorToast] is app-layer wiring (set once in bootstrap), kept out of
+  // this file's own imports the same way [FlutterError.onError] already is.
+  if (severity == ToastSeverity.error) onErrorToast?.call(message);
+
   final scope = ToastScope.maybeOf(context);
   // No scope means no app around us — a bare widget test, typically. Drop the
   // message rather than throwing inside what is usually an error path.

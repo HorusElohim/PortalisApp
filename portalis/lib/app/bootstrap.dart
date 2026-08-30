@@ -8,6 +8,7 @@ import 'collection_link_receiver.dart';
 import '../nexus/bridge/bridge.dart';
 import '../nexus/bridge/frb_generated.dart';
 import '../design/theme_controller.dart';
+import '../design/toast.dart';
 import '../version.dart';
 import 'app_controllers.dart';
 import 'onboarding_controller.dart';
@@ -92,10 +93,12 @@ class _StartupErrorApp extends StatelessWidget {
 /// throwing a second error trying to reach a backend that isn't there yet.
 bool _backendReady = false;
 
-/// Routes uncaught Flutter and Dart errors into the same local diagnostics
-/// log the native backend writes to (`nexus::diagnostics`), so a crash a
-/// beta tester hits lands in the one file the Diagnostics screen can share —
-/// not only on a console nobody is attached to in a release build.
+/// Routes uncaught Flutter and Dart errors, and every error-severity
+/// [showToast], into the same local diagnostics log the native backend
+/// writes to (`nexus::diagnostics`), so a crash or a caught failure a beta
+/// tester hits lands in the one file the Diagnostics screen can share — not
+/// only on a console nobody is attached to in a release build, and not only
+/// on screen for the few seconds before the toast that showed it vanishes.
 ///
 /// Installed before anything else in [runPortalisApp] so it also catches a
 /// failure during native startup itself, not just failures once the app is
@@ -104,6 +107,7 @@ bool _backendReady = false;
 /// Deliberately local-only, matching every other diagnostic in this app:
 /// nothing here transmits anywhere by itself.
 void _installDiagnosticsHandlers() {
+  onErrorToast = (message) => _recordDiagnostic('toast', message);
   final previousFlutterOnError = FlutterError.onError;
   FlutterError.onError = (FlutterErrorDetails details) {
     previousFlutterOnError?.call(details);
