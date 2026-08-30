@@ -15,7 +15,11 @@ void main() {
         'Seeding': CollectionState.seeding,
         'Paused': CollectionState.paused,
         'Draft': CollectionState.draft,
-        'Preparing': CollectionState.preparing,
+        'ResolvingMetadata': CollectionState.resolvingMetadata,
+        'WaitingForSender': CollectionState.waitingForSender,
+        'MetadataReady': CollectionState.metadataReady,
+        'DownloadRequested': CollectionState.downloadRequested,
+        'RetryingMetadata': CollectionState.retryingMetadata,
         'Downloading': CollectionState.downloading,
         'Updating': CollectionState.updating,
         'WaitingForOwner': CollectionState.waitingForOwner,
@@ -27,7 +31,7 @@ void main() {
 
       contract.forEach((word, state) {
         expect(CollectionState.parse(word), state, reason: word);
-        expect(state.wire, word, reason: 'round trip for $word');
+        expect(state.wire!, word, reason: 'round trip for $word');
       });
     });
 
