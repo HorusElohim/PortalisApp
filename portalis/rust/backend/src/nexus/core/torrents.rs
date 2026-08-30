@@ -128,7 +128,8 @@ pub(crate) async fn follow_torrent_imports(
             let key = work_key(&work);
             crate::nexus::log::clog!(
                 "nexus",
-                "torrent worker performing key={:?} {}",
+                "torrent worker performing correlation={} key={:?} {}",
+                correlation_id(&key),
                 key,
                 match &work {
                     Pending::Resolve { source, .. } => {
@@ -155,8 +156,8 @@ pub(crate) async fn follow_torrent_imports(
                 retry_deadlines.insert(key.clone(), Instant::now() + delay);
                 crate::nexus::log::clog!(
                     "nexus",
-                    "torrent retry key={:?} failure={} after={}s: {error:#}",
-                    key,
+                    "torrent retry correlation={} failure={} after={}s: {error:#}",
+                    correlation_id(&key),
                     *count,
                     delay.as_secs()
                 );
@@ -189,7 +190,11 @@ pub(crate) async fn follow_torrent_imports(
             }
             if failures.remove(&key).is_some() {
                 retry_deadlines.remove(&key);
-                crate::nexus::log::clog!("nexus", "torrent metadata recovered key={:?}", key);
+                crate::nexus::log::clog!(
+                    "nexus",
+                    "torrent metadata recovered correlation={}",
+                    correlation_id(&key)
+                );
             }
             let handle = collections
                 .lock()
@@ -212,6 +217,13 @@ fn work_key(work: &Pending) -> Vec<u8> {
         | Pending::Acquire { key, .. }
         | Pending::Reconcile { key, .. } => key.clone(),
     }
+}
+
+fn correlation_id(key: &[u8]) -> String {
+    key.iter()
+        .take(4)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 /// Everything with a transition available, oldest collection first.
@@ -463,6 +475,12 @@ mod tests {
         assert_eq!(retry_delay(3), std::time::Duration::from_secs(30));
         assert_eq!(retry_delay(4), std::time::Duration::from_secs(60));
         assert_eq!(retry_delay(99), std::time::Duration::from_secs(60));
+    }
+
+    #[test]
+    fn correlation_ids_are_short_and_stable() {
+        assert_eq!(correlation_id(&[0x01, 0xab, 0x20, 0xff, 0x99]), "01ab20ff");
+        assert_eq!(correlation_id(&[0x01]), "01");
     }
 
     fn store() -> (Store, std::path::PathBuf) {
