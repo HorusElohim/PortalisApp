@@ -100,7 +100,11 @@ class _CollectionDetailState extends State<CollectionDetail> {
   bool? _editing;
   final _name = TextEditingController();
 
-  bool get _isEditing => _editing ?? _collection.isDraft;
+  bool get _isEditing =>
+      _editing ?? (_collection.isDraft || _selectionMode(_collection));
+
+  bool _selectionMode(Collection collection) =>
+      collection.isTorrent && (collection.isDraft || collection.hasMetadata);
 
   @override
   void initState() {
@@ -368,7 +372,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
   /// arrived — it simply is not a field. Re-open it later and it is theirs to
   /// rename like anything else.
   bool _namesInHeader(Collection collection) =>
-      _isEditing && !(collection.isTorrent && collection.isDraft);
+      _isEditing && !_selectionMode(collection);
 
   Widget _detail(Collection collection) {
     return Column(
@@ -434,7 +438,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
             CollectionContents(
               collection: collection,
               onOpenMedia: (media) => _openMedia(collection, media),
-              stagedSelection: collection.isTorrent && collection.isDraft
+              stagedSelection: _selectionMode(collection)
                   ? _wantedEntries(collection)
                   : null,
               // Only while editing: a tap that changes what downloads is
@@ -450,7 +454,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
           const SizedBox(height: 20),
           _EditFooter(
             busy: _busy,
-            isDraft: collection.isDraft,
+            isDraft: collection.isDraft || _selectionMode(collection),
             isTorrent: collection.isTorrent,
             onShare: () => unawaited(_share()),
             onDownload: () => unawaited(_downloadSelected()),
@@ -477,7 +481,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
       _toast('Keep at least one file, or delete the collection');
       return;
     }
-    if (collection.isTorrent && collection.isDraft) {
+    if (_selectionMode(collection)) {
       setState(() => _stagedDownloadEntries = wanted);
       return;
     }
@@ -486,7 +490,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
 
   Set<int> _wantedEntries(Collection collection) {
     final staged = _stagedDownloadEntries;
-    if (collection.isTorrent && collection.isDraft && staged != null) {
+    if (_selectionMode(collection) && staged != null) {
       return {...staged};
     }
     return {
