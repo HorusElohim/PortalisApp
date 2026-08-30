@@ -56,7 +56,6 @@ class CollectionLinkReceiver {
           builder: (_) => CollectionRoute(
             collection: collection,
             controller: AppControllers.engine,
-            autoDownload: true,
           ),
         ));
       });

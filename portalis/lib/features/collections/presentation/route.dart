@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
@@ -37,12 +35,10 @@ class CollectionRoute extends StatefulWidget {
     super.key,
     required this.collection,
     required this.controller,
-    this.autoDownload = false,
   });
 
   final int collection;
   final AppController controller;
-  final bool autoDownload;
 
   @override
   State<CollectionRoute> createState() => _CollectionRouteState();
@@ -54,8 +50,6 @@ class _CollectionRouteState extends State<CollectionRoute> {
   // a source owns it. Built in `initState` rather than lazily so that
   // disposing never has to first create the thing it is disposing.
   late final EngineCollectionSource _source;
-  bool _autoDownloadInFlight = false;
-  bool _autoDownloadStarted = false;
 
   @override
   void initState() {
@@ -64,34 +58,12 @@ class _CollectionRouteState extends State<CollectionRoute> {
       controller: widget.controller,
       collectionId: widget.collection,
     );
-    if (widget.autoDownload) {
-      _source.addListener(_maybeStartAutoDownload);
-      _maybeStartAutoDownload();
-    }
   }
 
   @override
   void dispose() {
-    _source.removeListener(_maybeStartAutoDownload);
     _source.dispose();
     super.dispose();
-  }
-
-  void _maybeStartAutoDownload() {
-    if (_autoDownloadStarted || _autoDownloadInFlight) return;
-    _autoDownloadInFlight = true;
-    unawaited(_startAutoDownload());
-  }
-
-  Future<void> _startAutoDownload() async {
-    try {
-      final selected = await _source.fetchMedia('qr-import');
-      if (selected > 0) _autoDownloadStarted = true;
-    } catch (error) {
-      debugPrint('Portalis collection download did not start: $error');
-    } finally {
-      _autoDownloadInFlight = false;
-    }
   }
 
   @override

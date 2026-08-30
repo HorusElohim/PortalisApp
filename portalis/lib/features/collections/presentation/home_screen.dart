@@ -4,7 +4,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/app_controllers.dart';
-import '../../../app/collection_link.dart';
+
 import '../../../design/collection_deletion_dialog.dart';
 import '../../../design/design.dart';
 import '../domain/picked_file.dart';
@@ -66,10 +66,7 @@ class _HomeState extends State<Home> {
           await _importScannedCollection(magnet),
       };
       if (collection == null || !mounted) return;
-      _openCollectionById(
-        collection,
-        autoDownload: chosen is ScannedCollectionSource,
-      );
+      _openCollectionById(collection);
     } catch (error) {
       if (mounted) {
         showToast(context, '$error', severity: ToastSeverity.error);
@@ -98,26 +95,14 @@ class _HomeState extends State<Home> {
   void _openCollection(AppCollection collection) =>
       _openCollectionById(collection.id);
 
-  void _openCollectionById(int collection, {bool autoDownload = false}) {
+  void _openCollectionById(int collection) {
     if (widget.onOpen != null) {
       widget.onOpen!(collection);
-      if (autoDownload) {
-        unawaited(
-          startCollectionLinkDownload(
-            collection,
-            send: AppControllers.engine.send,
-            watchDetail: AppControllers.engine.watchDetail,
-          ).catchError((error) {
-            debugPrint('Scanned collection download did not start: $error');
-          }),
-        );
-      }
       return;
     }
     _push(CollectionRoute(
       collection: collection,
       controller: AppControllers.engine,
-      autoDownload: autoDownload,
     ));
   }
 

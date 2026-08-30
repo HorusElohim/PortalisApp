@@ -1048,6 +1048,13 @@ pub mod native {
                     ..Default::default()
                 };
                 let make_opts = |port: u16| librqbit::SessionOptions {
+                    // The extended handshake is user-visible in peer lists;
+                    // expose the application that is actually transferring,
+                    // not its embedded BitTorrent engine.
+                    client_name_and_version: Some(format!(
+                        "Portalis {}",
+                        env!("CARGO_PKG_VERSION")
+                    )),
                     // A range is mandatory, not optional: librqbit only binds
                     // a TCP listener when `listen` is `Some(..)`.
                     listen: Some(librqbit::ListenerOptions {
