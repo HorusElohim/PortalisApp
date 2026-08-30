@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.48+50
+
+- Fixed excessive peer-history writes: `snapshot_peers` (added in the
+  previous release to fix mid-transfer peer retention) persisted every
+  connected peer on every 500ms poll tick regardless of whether it moved
+  any bytes. It now skips the write when nothing changed since the last
+  tick — the same "write only what changed" discipline the transfer
+  sample ring already applies — while still writing once for a brand new
+  peer, so a peer that connects and disconnects within a single tick is
+  still remembered.
+
 ## 1.0.48+49
 
 - Removed Settings' extra scrollable wrapper (a custom scrollbar + card

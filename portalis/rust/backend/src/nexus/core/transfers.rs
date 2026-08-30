@@ -443,6 +443,19 @@ fn snapshot_peers(
                 last_down_bytes_per_second: 0,
                 last_up_bytes_per_second: 0,
             });
+        // Whether this tick moves the durable ledger at all, judged before
+        // any field is mutated — the same "write only what changed"
+        // discipline `record` applies to the sample ring, and for the same
+        // reason: an idle connection re-reports identical totals every
+        // poll, and persisting each of those ticks would turn one redb
+        // write per moving peer into one per *known* peer regardless of
+        // whether it moved.
+        let before = (
+            peer.total_down_bytes,
+            peer.total_up_bytes,
+            peer.last_down_bytes_per_second,
+            peer.last_up_bytes_per_second,
+        );
         peer.total_down_bytes = peer.total_down_bytes.saturating_add(unsaved(
             raw.fetched_bytes,
             peer.checkpoint_down_bytes,
@@ -461,6 +474,19 @@ fn snapshot_peers(
         peer.last_seen_at = now;
         peer.last_down_bytes_per_second = rates.map_or(0, |peer| peer.down_bytes_per_second);
         peer.last_up_bytes_per_second = rates.map_or(0, |peer| peer.up_bytes_per_second);
+        let after = (
+            peer.total_down_bytes,
+            peer.total_up_bytes,
+            peer.last_down_bytes_per_second,
+            peer.last_up_bytes_per_second,
+        );
+        // A brand new peer (first_seen_at == now, this tick's `now`) always
+        // writes once even if `before == after` at exactly zero bytes, so
+        // a connection that disconnects on its very first tick is still
+        // remembered rather than silently skipped.
+        if before == after && peer.first_seen_at != now {
+            continue;
+        }
         if let Err(error) = store.put_peer_history(collection, peer) {
             crate::nexus::log::clog!("nexus", "could not snapshot peer history: {error}");
         }
@@ -1335,6 +1361,81 @@ mod tests {
         assert_eq!(effective.len(), 1);
         assert_eq!(effective[0].down_bytes, 115);
         assert_eq!(effective[0].up_bytes, 62);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// An idle peer — connected, but not moving bytes or its rate — must
+    /// not re-write its durable row every poll tick. `snapshot_peers` used
+    /// to persist unconditionally, turning a peer that had gone quiet into
+    /// one redb write per 500ms tick for as long as it stayed connected;
+    /// `record` already applies this "write only what changed" discipline
+    /// to the sample ring, and `snapshot_peers` now does the same.
+    #[test]
+    fn an_idle_peer_is_not_rewritten_every_tick() {
+        let dir = std::env::temp_dir().join(format!(
+            "portalis-idle-peer-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let store = Store::open(dir.join("portalis.redb")).expect("opens");
+
+        let mut reading = info(0, 100, false);
+        reading.live_peer_addrs = vec![crate::nexus::torrent::PeerLink {
+            address: "10.0.0.7:6881".to_owned(),
+            fetched_bytes: 40,
+            uploaded_bytes: 20,
+            client: Some("qBittorrent 4.6".to_owned()),
+        }];
+        let peers = measured_peers(&reading, None, 0);
+        let mut ledgers = HashMap::new();
+
+        // First tick: a brand new peer, so it writes once even though its
+        // counters read as zero-delta against nothing.
+        snapshot_peers(&store, b"collection", &reading, &peers, &mut ledgers, 1);
+        let first = store
+            .peer_history(b"collection")
+            .expect("reads history")
+            .into_iter()
+            .find(|peer| peer.address == "10.0.0.7:6881")
+            .expect("the peer was written");
+        let written_at = first.last_seen_at;
+
+        // Ten idle ticks, all within the same poller run (one fixed epoch
+        // for the whole run — it only changes across restarts, see
+        // `follow_transfers`): the same peer, the exact same counters,
+        // nothing moving. None of them should touch the durable row.
+        for _ in 2..12 {
+            snapshot_peers(&store, b"collection", &reading, &peers, &mut ledgers, 1);
+        }
+        let still = store
+            .peer_history(b"collection")
+            .expect("reads history")
+            .into_iter()
+            .find(|peer| peer.address == "10.0.0.7:6881")
+            .expect("the peer is still there");
+        assert_eq!(
+            still.last_seen_at, written_at,
+            "an idle peer's durable row must not be rewritten every tick"
+        );
+
+        // A byte actually arriving is still written, proving the skip is
+        // about idleness and not a stuck ledger.
+        reading.live_peer_addrs[0].fetched_bytes = 41;
+        let moving = measured_peers(&reading, None, 0);
+        snapshot_peers(&store, b"collection", &reading, &moving, &mut ledgers, 1);
+        let moved = store
+            .peer_history(b"collection")
+            .expect("reads history")
+            .into_iter()
+            .find(|peer| peer.address == "10.0.0.7:6881")
+            .expect("the peer is still there");
+        assert!(
+            moved.last_seen_at > written_at,
+            "a real change is still persisted"
+        );
 
         let _ = std::fs::remove_dir_all(dir);
     }
