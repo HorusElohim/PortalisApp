@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.49+52
+
+- Fixed Diagnostics → Share failing with
+  `PathNotFoundException: Cannot open file … No such file or directory`
+  on macOS. The share flow wrote straight into whatever path
+  `getTemporaryDirectory()` named, but that sandboxed `Library/Caches/…`
+  directory is not guaranteed to already exist on disk — it now creates
+  the directory first (idempotent, so a no-op on every platform where it
+  already existed).
+
 ## 1.0.49+51
 
 - Refactored the app's four independent "poll every 2s + cancel on

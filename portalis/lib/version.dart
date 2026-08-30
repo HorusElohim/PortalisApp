@@ -1,5 +1,5 @@
 /// Portalis release version shown by the frontend and native bundle.
-const portalisVersion = '1.0.49+51';
+const portalisVersion = '1.0.49+52';
 
 /// Backend version used for the startup compatibility check.
 ///

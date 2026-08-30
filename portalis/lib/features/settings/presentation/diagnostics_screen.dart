@@ -75,13 +75,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
       return;
     }
     try {
-      // Written to a real temp file rather than shared as raw text: some
-      // share targets (Mail, most chat apps) only offer to attach a file,
-      // not paste a block of text, and a file also carries a sensible name
-      // rather than becoming an unnamed pasted blob.
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/portalis-diagnostics.log');
-      await file.writeAsString(log);
+      final file = await writeShareFile(log);
       if (!mounted) return;
       await SharePlus.instance.share(
         ShareParams(
@@ -255,4 +249,25 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
       ],
     );
   }
+}
+
+/// Writes the diagnostics log to a real file for [SharePlus] to attach —
+/// some share targets (Mail, most chat apps) only offer to attach a file,
+/// not paste a block of text, and a file also carries a sensible name
+/// rather than becoming an unnamed pasted blob.
+///
+/// [getTemporaryDirectory] names a path, but does not guarantee it already
+/// exists on disk: on macOS the sandboxed
+/// `Library/Caches/<bundle id>/` directory can be reported before anything
+/// has created it, and writing straight into it failed with
+/// `PathNotFoundException: Cannot open file … No such file or directory`.
+/// `create(recursive: true)` is idempotent — a no-op when the directory is
+/// already there — so this is safe to call on every share, not just the
+/// first one after install.
+@visibleForTesting
+Future<File> writeShareFile(String log) async {
+  final dir = await getTemporaryDirectory();
+  await dir.create(recursive: true);
+  final file = File('${dir.path}/portalis-diagnostics.log');
+  return file.writeAsString(log);
 }
