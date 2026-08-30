@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.49+54
+
+- Refactored Settings: the four gutter-padded `DestinationRow` entries
+  in the basic section (Network & engine, Diagnostics, File formats,
+  Clear activity history, How Portalis works) repeated the same
+  `Padding(EdgeInsets.fromLTRB(...))` wrapper verbatim. Extracted into
+  one `_destination()` helper — same rendered output, less to keep in
+  sync when one of these rows changes.
+
 ## 1.0.49+53
 
 - Actually fixed Diagnostics → Share this time: the previous release's

@@ -381,6 +381,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   List<Widget> _sections(EngineSettings s) =>
       _advanced ? _advancedSections(s) : _basicSections(s);
 
+  /// A [DestinationRow] with the gutter padding every basic-section entry
+  /// below it repeated verbatim — extracted so the top gap is the only
+  /// thing a call site has to state.
+  Widget _destination({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    double top = 10,
+  }) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(kScreenGutter, top, kScreenGutter, 0),
+      child: DestinationRow(
+        icon: icon,
+        title: title,
+        subtitle: subtitle,
+        onTap: onTap,
+      ),
+    );
+  }
+
   /// What most people ever need: how fast, and whether to keep sharing.
   List<Widget> _basicSections(EngineSettings s) {
     return [
@@ -445,14 +466,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(kScreenGutter, 18, kScreenGutter, 0),
-        child: DestinationRow(
-          icon: Icons.tune,
-          title: 'Network & engine',
-          subtitle: 'Ports, DHT, proxy, trackers, disk',
-          onTap: _openAdvanced,
-        ),
+      _destination(
+        icon: Icons.tune,
+        title: 'Network & engine',
+        subtitle: 'Ports, DHT, proxy, trackers, disk',
+        onTap: _openAdvanced,
+        top: 18,
       ),
       SettingsSection(
         label: 'STORAGE · DOWNLOAD FOLDER NEEDS RESTART',
@@ -480,46 +499,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(kScreenGutter, 18, kScreenGutter, 0),
-        child: DestinationRow(
-          icon: Icons.bug_report_outlined,
-          title: 'Diagnostics',
-          subtitle: 'A local log for reporting a problem — stays on this '
-              'device unless you choose to share it',
-          onTap: _openDiagnostics,
-        ),
+      _destination(
+        icon: Icons.bug_report_outlined,
+        title: 'Diagnostics',
+        subtitle: 'A local log for reporting a problem — stays on this '
+            'device unless you choose to share it',
+        onTap: _openDiagnostics,
+        top: 18,
       ),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(kScreenGutter, 10, kScreenGutter, 0),
-        child: DestinationRow(
-          icon: Icons.category_outlined,
-          title: 'File formats',
-          subtitle: 'What Portalis can view, and what it converts',
-          onTap: _openFormats,
-        ),
+      _destination(
+        icon: Icons.category_outlined,
+        title: 'File formats',
+        subtitle: 'What Portalis can view, and what it converts',
+        onTap: _openFormats,
       ),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(kScreenGutter, 10, kScreenGutter, 0),
-        child: DestinationRow(
-          icon: Icons.history_toggle_off,
-          title: 'Clear activity history',
-          subtitle: 'Resets session and lifetime totals on this device. '
-              'Never touches your identity or collections.',
-          onTap: _clearActivity,
-        ),
+      _destination(
+        icon: Icons.history_toggle_off,
+        title: 'Clear activity history',
+        subtitle: 'Resets session and lifetime totals on this device. '
+            'Never touches your identity or collections.',
+        onTap: _clearActivity,
       ),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(kScreenGutter, 10, kScreenGutter, 0),
-        child: DestinationRow(
-          icon: Icons.info_outline,
-          title: 'How Portalis works',
-          subtitle: 'Show the introduction again',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => OnboardingScreen(
-                onDone: () => Navigator.of(context).pop(),
-              ),
+      _destination(
+        icon: Icons.info_outline,
+        title: 'How Portalis works',
+        subtitle: 'Show the introduction again',
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => OnboardingScreen(
+              onDone: () => Navigator.of(context).pop(),
             ),
           ),
         ),
