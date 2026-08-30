@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.49+51
+
+- Refactored the app's four independent "poll every 2s + cancel on
+  dispose" implementations (Storage, Diagnostics, User, People) into one
+  `PollingState` mixin (`lib/design/polling.dart`), each hand-rolling the
+  same `Timer? _poll` field and `dispose()` cancellation before. Net -13
+  lines across the four screens, identical refresh cadence and behavior,
+  independently unit-tested (`test/polling_test.dart`: fires immediately,
+  fires on every tick, stops and leaks nothing once disposed).
+
 ## 1.0.48+50
 
 - Fixed excessive peer-history writes: `snapshot_peers` (added in the

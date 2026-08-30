@@ -33,26 +33,21 @@ class StorageScreen extends StatefulWidget {
   State<StorageScreen> createState() => _StorageScreenState();
 }
 
-class _StorageScreenState extends State<StorageScreen> {
+class _StorageScreenState extends State<StorageScreen> with PollingState {
   List<StorageEntry>? _entries;
   String? _error;
-  Timer? _poll;
 
   @override
   void initState() {
     super.initState();
-    _load();
     // Downloads finish and collections get deleted while this is open —
-    // same cadence as Settings' own storage poll, and just as cheap: the
-    // backend caches the walk for 5s regardless of who's asking.
-    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _load());
+    // the backend caches the walk for 5s regardless of who's asking, so
+    // polling is cheap.
+    startPolling();
   }
 
   @override
-  void dispose() {
-    _poll?.cancel();
-    super.dispose();
-  }
+  void onPoll() => _load();
 
   Future<void> _load() async {
     try {

@@ -10,6 +10,7 @@ export 'dialogs.dart';
 export 'formatters.dart';
 export 'identity.dart';
 export 'indicators.dart';
+export 'polling.dart';
 export 'primitives.dart';
 export 'rows.dart';
 export 'screen.dart';

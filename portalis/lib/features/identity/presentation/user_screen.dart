@@ -31,7 +31,7 @@ class UserScreen extends StatefulWidget {
   State<UserScreen> createState() => _UserScreenState();
 }
 
-class _UserScreenState extends State<UserScreen> {
+class _UserScreenState extends State<UserScreen> with PollingState {
   AppUserSummary? _summary;
   String? _summaryError;
 
@@ -40,20 +40,14 @@ class _UserScreenState extends State<UserScreen> {
   /// contact-only count reads as "0 people" for anybody who has only ever
   /// exchanged with anonymous swarm peers, which is the common case.
   int _peopleCount = 0;
-  Timer? _poll;
 
   @override
   void initState() {
     super.initState();
-    _loadSummary();
-    _loadPeopleCount();
     // The current run's counters, and who's connected, both move while
     // this screen is open — same cadence Storage already polls its own
     // backend-computed figures at.
-    _poll = Timer.periodic(const Duration(seconds: 2), (_) {
-      _loadSummary();
-      _loadPeopleCount();
-    });
+    startPolling();
     // The engine can start, or a test can seed it, after this widget has
     // already mounted (it lives in an IndexedStack alongside every other
     // tab, so its initState runs before a caller has a chance to seed
@@ -63,6 +57,12 @@ class _UserScreenState extends State<UserScreen> {
     AppControllers.engine.addListener(_onEngineChanged);
   }
 
+  @override
+  void onPoll() {
+    _loadSummary();
+    _loadPeopleCount();
+  }
+
   void _onEngineChanged() {
     if (_summary == null) _loadSummary();
     _loadPeopleCount();
@@ -70,7 +70,6 @@ class _UserScreenState extends State<UserScreen> {
 
   @override
   void dispose() {
-    _poll?.cancel();
     AppControllers.engine.removeListener(_onEngineChanged);
     super.dispose();
   }
