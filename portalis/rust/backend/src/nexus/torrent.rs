@@ -2312,6 +2312,41 @@ pub mod native {
             .context("applying the file selection")
     }
 
+    /// Pauses `handle` on `session`, treating "already paused" as success.
+    ///
+    /// librqbit's own [`Session::pause`] treats an already-paused torrent as
+    /// a bug to report rather than a no-op, which conflicts with the
+    /// contract this is called under (`Substrate::set_paused`: "asking for a
+    /// state the engine is already in is not an error"). The reconciler
+    /// asserts the stored intent on every worker pass regardless of whether
+    /// the last pass already applied it, so without this every already-paused
+    /// torrent logged a fresh "torrent is already paused" failure on every
+    /// tick, forever — noise a person reading Diagnostics for an actual
+    /// problem had to read past.
+    async fn pause_handle(
+        session: &Session,
+        handle: &Arc<librqbit::ManagedTorrent>,
+    ) -> anyhow::Result<()> {
+        if handle.is_paused() {
+            return Ok(());
+        }
+        session.pause(handle).await.context("pausing torrent")
+    }
+
+    /// The [`pause_handle`] counterpart: librqbit's [`Session::unpause`]
+    /// treats an already-live torrent as an error ("torrent is already
+    /// live"), but a running collection is reconciled every worker tick
+    /// regardless of whether it was already running.
+    async fn restart_handle(
+        session: &Arc<Session>,
+        handle: &Arc<librqbit::ManagedTorrent>,
+    ) -> anyhow::Result<()> {
+        if !handle.is_paused() {
+            return Ok(());
+        }
+        session.unpause(handle).await.context("restarting torrent")
+    }
+
     pub(super) async fn pause_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
         let session = session().await?;
         let id = TorrentIdOrHash::try_from(info_hash_hex)
@@ -2319,7 +2354,7 @@ pub mod native {
         let Some(handle) = session.get(id) else {
             return Ok(());
         };
-        session.pause(&handle).await.context("pausing torrent")
+        pause_handle(&session, &handle).await
     }
 
     pub(super) async fn restart_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
@@ -2327,7 +2362,7 @@ pub mod native {
         let id = TorrentIdOrHash::try_from(info_hash_hex)
             .map_err(|e| anyhow::anyhow!("{info_hash_hex} isn't a valid info hash: {e}"))?;
         if let Some(handle) = session.get(id) {
-            return session.unpause(&handle).await.context("restarting torrent");
+            return restart_handle(&session, &handle).await;
         }
 
         // Gone from the session but known to the vault: this device owns the
@@ -2420,7 +2455,7 @@ pub mod native {
         use super::{
             PublishProgress, ReferencedStorage, ReferencedStorageFactory, SourceFile, api,
             create_referenced_collection, create_referenced_metainfo, install_rustls_ring_provider,
-            rehydrate_linked_torrents, to_info,
+            pause_handle, rehydrate_linked_torrents, restart_handle, to_info,
         };
 
         #[test]
@@ -2568,6 +2603,93 @@ pub mod native {
             .expect("admits the subsequent zero-copy collection");
 
             assert_ne!(first.info_hash, second.info_hash);
+            std::fs::remove_dir_all(root).unwrap();
+        }
+
+        /// Reconciliation asserts the stored paused/running intent on every
+        /// worker pass, whether or not the last pass already applied it —
+        /// pausing an already-paused torrent, or restarting an already-live
+        /// one, must both succeed quietly rather than fail every single
+        /// tick forever.
+        #[tokio::test]
+        async fn pausing_or_restarting_an_already_settled_torrent_is_a_quiet_no_op() {
+            let _state = crate::nexus::paths::redirect_to_temp();
+            install_rustls_ring_provider();
+            let root = std::env::temp_dir().join(format!(
+                "portalis-pause-idempotent-{}",
+                uuid::Uuid::new_v4()
+            ));
+            std::fs::create_dir_all(&root).unwrap();
+            let session = librqbit::Session::new_with_opts(
+                root.join("session"),
+                librqbit::SessionOptions {
+                    dht: None,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("starts a session");
+
+            let source_path = root.join("clip.mov");
+            std::fs::write(&source_path, b"movie").unwrap();
+            let file = SourceFile {
+                name: "clip.mov".into(),
+                path: source_path.to_string_lossy().into_owned(),
+                length_bytes: Some(5),
+            };
+            let collection = create_referenced_collection(
+                session.clone(),
+                "Clip".into(),
+                vec![file],
+                vec![crate::nexus::content_location::ContentLocation::Filesystem(
+                    source_path,
+                )],
+                PublishProgress::new(5),
+            )
+            .await
+            .expect("admits the zero-copy collection");
+            let id = librqbit::api::TorrentIdOrHash::try_from(collection.info_hash.as_str())
+                .expect("valid info hash");
+            let handle = session.get(id).expect("session carries the torrent");
+            // Zero-copy sources need to finish their initial checking pass
+            // before librqbit's internal state actually reaches Live —
+            // pausing mid-check exercises a different code path (Initializing)
+            // than the one this bug hit, so wait for it first.
+            for _ in 0..200 {
+                if matches!(handle.stats().state, librqbit::TorrentStatsState::Live) {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+
+            // A freshly-admitted torrent starts live: restarting it must be
+            // a no-op, and pausing it must actually pause.
+            restart_handle(&session, &handle)
+                .await
+                .expect("restarting an already-live torrent is a quiet no-op");
+            assert!(!handle.is_paused());
+            pause_handle(&session, &handle)
+                .await
+                .expect("pausing a live torrent pauses it");
+            assert!(handle.is_paused());
+
+            // Pausing again must not fail with "torrent is already paused".
+            pause_handle(&session, &handle)
+                .await
+                .expect("pausing an already-paused torrent is a quiet no-op");
+            assert!(handle.is_paused());
+
+            // Restarting must actually resume, and a second restart must
+            // not fail with "torrent is already live".
+            restart_handle(&session, &handle)
+                .await
+                .expect("restarting a paused torrent resumes it");
+            assert!(!handle.is_paused());
+            restart_handle(&session, &handle)
+                .await
+                .expect("restarting an already-live torrent is a quiet no-op");
+            assert!(!handle.is_paused());
+
             std::fs::remove_dir_all(root).unwrap();
         }
 
