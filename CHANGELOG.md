@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.49+57
+
+- Fixed iOS HEIC thumbnails for media selected from Photos. These sources use
+  stable `phasset://` identifiers rather than filesystem paths, so the grid
+  now asks PhotoKit for a bounded in-memory JPEG preview instead of sending
+  the identifier to the filesystem HEIC decoder and falling back to the grey
+  placeholder. No source media is copied or written to disk.
+
 ## 1.0.49+56
 
 - Audited where diagnostics logging is and isn't wired up. Found a real
