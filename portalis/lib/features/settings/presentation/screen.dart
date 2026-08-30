@@ -40,6 +40,23 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
+/// One of Settings' drill-down destinations that replace it in place when
+/// embedded — see [_SettingsScreenState._open].
+enum _Nested {
+  storage,
+  diagnostics,
+  formats;
+
+  Widget build({required bool embedded, VoidCallback? onBack}) =>
+      switch (this) {
+        _Nested.storage =>
+          StorageScreen(embedded: embedded, onBack: onBack),
+        _Nested.diagnostics =>
+          DiagnosticsScreen(embedded: embedded, onBack: onBack),
+        _Nested.formats => FormatsScreen(embedded: embedded, onBack: onBack),
+      };
+}
+
 class _SettingsScreenState extends State<SettingsScreen> {
   final _settings = AppControllers.settings;
   final _scrollController = ScrollController();
@@ -54,17 +71,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// instance — see [_openAdvanced].
   late bool _advanced = widget.advanced;
 
-  /// Embedded only: shows [StorageScreen] in place of Settings instead of
-  /// pushing it over the shell's sidebar and list — see [_openStorage].
-  bool _showStorage = false;
-
-  /// Embedded only: same pattern as [_showStorage], for
-  /// [DiagnosticsScreen] — see [_openDiagnostics].
-  bool _showDiagnostics = false;
-
-  /// Embedded only: same pattern as [_showStorage], for [FormatsScreen] —
-  /// see [_openFormats].
-  bool _showFormats = false;
+  /// Embedded only: which drill-down screen (if any) replaces Settings in
+  /// place, instead of being pushed over the shell's sidebar and list —
+  /// see [_open].
+  _Nested? _nested;
 
   @override
   void initState() {
@@ -126,25 +136,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         push: (_) => const SettingsScreen(advanced: true),
       );
 
-  void _openStorage() => openNestedScreen(
-        context,
-        embedded: widget.embedded,
-        showInPlace: () => setState(() => _showStorage = true),
-        push: (_) => StorageScreen(embedded: widget.embedded),
-      );
+  void _openStorage() => _open(_Nested.storage);
 
-  void _openDiagnostics() => openNestedScreen(
-        context,
-        embedded: widget.embedded,
-        showInPlace: () => setState(() => _showDiagnostics = true),
-        push: (_) => DiagnosticsScreen(embedded: widget.embedded),
-      );
+  void _openDiagnostics() => _open(_Nested.diagnostics);
 
-  void _openFormats() => openNestedScreen(
+  void _openFormats() => _open(_Nested.formats);
+
+  void _open(_Nested nested) => openNestedScreen(
         context,
         embedded: widget.embedded,
-        showInPlace: () => setState(() => _showFormats = true),
-        push: (_) => const FormatsScreen(),
+        showInPlace: () => setState(() => _nested = nested),
+        push: (_) => nested.build(embedded: widget.embedded),
       );
 
   Future<void> _clearActivity() async {
@@ -306,22 +308,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_showStorage) {
-      return StorageScreen(
+    final nested = _nested;
+    if (nested != null) {
+      return nested.build(
         embedded: widget.embedded,
-        onBack: () => setState(() => _showStorage = false),
-      );
-    }
-    if (_showDiagnostics) {
-      return DiagnosticsScreen(
-        embedded: widget.embedded,
-        onBack: () => setState(() => _showDiagnostics = false),
-      );
-    }
-    if (_showFormats) {
-      return FormatsScreen(
-        embedded: widget.embedded,
-        onBack: () => setState(() => _showFormats = false),
+        onBack: () => setState(() => _nested = null),
       );
     }
     return AppScreen(
@@ -336,7 +327,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Diagnostics read at the same width as Settings itself rather than
       // narrowing back down to the app's default reading measure.
       wideMaxWidth: PageBody.settingsWideMaxWidth,
-      body: _SettingsScrollSurface(
+      body: SingleChildScrollView(
         controller: _scrollController,
         child: ListenableBuilder(
           // The engine too: this screen now shows what it can reach, and a
@@ -803,65 +794,5 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static int? _parseInt(String raw) {
     final v = int.tryParse(raw.trim());
     return (v == null || v <= 0) ? null : v;
-  }
-}
-
-class _SettingsScrollSurface extends StatelessWidget {
-  const _SettingsScrollSurface({
-    required this.controller,
-    required this.child,
-  });
-
-  final ScrollController controller;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return WindowBuilder(
-      builder: (context, window) {
-        final scrollable = RawScrollbar(
-          controller: controller,
-          thumbVisibility: window.isSpacious,
-          interactive: window.isSpacious,
-          trackVisibility: false,
-          thickness: window.isSpacious ? 5 : 3,
-          radius: const Radius.circular(AppRadius.pill),
-          minThumbLength: 48,
-          thumbColor: AppColors.textGhost.withValues(alpha: 0.62),
-          child: SingleChildScrollView(
-            controller: controller,
-            physics: window.isSpacious
-                ? const ClampingScrollPhysics()
-                : const BouncingScrollPhysics(),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            child: child,
-          ),
-        );
-
-        if (!window.isSpacious) return scrollable;
-
-        final radius = BorderRadius.circular(AppRadius.card);
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(10, 0, 10, 18),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.52),
-              borderRadius: radius,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.18),
-                  blurRadius: 28,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: radius,
-              child: scrollable,
-            ),
-          ),
-        );
-      },
-    );
   }
 }

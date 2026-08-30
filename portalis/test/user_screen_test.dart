@@ -54,5 +54,30 @@ void main() {
       expect(find.text('File formats'), findsNothing);
       expect(find.text('Clear activity history'), findsNothing);
     });
+
+    testWidgets('PEOPLE counts swarm connections, not only contacts',
+        (tester) async {
+      // Most people never add a signed contact — they only ever exchange
+      // with anonymous swarm peers, which the People screen counts as a
+      // second tier (see its own doc). A contacts-only count read as "0
+      // people" for exactly that common case.
+      await pumpApp(
+        tester,
+        userSummary: buildUserSummary(),
+        engineCollections: [buildNexusCollection(id: 1, name: 'Iceland')],
+        peers: [
+          AppCollectionPeer(collection: 1, peer: buildPeer()),
+          AppCollectionPeer(
+            collection: 1,
+            peer: buildPeer(address: '198.51.100.9:6881'),
+          ),
+        ],
+      );
+
+      await tester.tap(find.byKey(const Key('navTab1')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('2'), findsOneWidget); // PEOPLE
+    });
   });
 }

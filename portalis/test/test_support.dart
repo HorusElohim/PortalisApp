@@ -260,6 +260,7 @@ Future<void> pumpApp(
   List<AppCollection> engineCollections = const [],
   String? error,
   AppUserSummary? userSummary,
+  List<AppCollectionPeer>? peers,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -273,6 +274,7 @@ Future<void> pumpApp(
     details: const Stream<AppDetail?>.empty(),
     error: error,
     userSummary: userSummary,
+    peers: peers,
   );
   await tester.pump();
 }
