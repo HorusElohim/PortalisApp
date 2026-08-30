@@ -2203,6 +2203,51 @@ mod tests {
         nexus.close().await;
     }
 
+    /// A metadata source whose sender cannot be reached remains durable work,
+    /// but the receiver must say why rather than appearing to resolve forever.
+    /// This also exercises the worker's retry scheduling path: a later wake
+    /// must respect its deadline, while closing the app must still stop it.
+    #[tokio::test]
+    async fn an_unreachable_metadata_sender_is_visible_and_the_worker_stops() {
+        let scratch = Scratch::new("metadata-sender-unreachable");
+        let nexus = open(&scratch);
+
+        let accepted = nexus
+            .command(&Command::ImportTorrent {
+                source: "magnet:?xt=urn:btih:abc123".to_owned(),
+            })
+            .expect("records the source");
+        let collection = accepted.collection.expect("names its collection");
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while nexus
+                .state()
+                .collections
+                .iter()
+                .find(|item| item.id == collection)
+                .is_some_and(|item| item.status != Status::WaitingForSender)
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("the failed resolution reaches the projection");
+        assert_eq!(
+            nexus
+                .state()
+                .collections
+                .iter()
+                .find(|item| item.id == collection)
+                .expect("collection remains durable")
+                .status,
+            Status::WaitingForSender
+        );
+
+        tokio::time::timeout(Duration::from_secs(2), nexus.close())
+            .await
+            .expect("a waiting retry never delays shutdown");
+    }
+
     /// Pausing has to reach the engine, not just the store.
     ///
     /// The reconciler is what applies stored intent, and it runs when woken.
