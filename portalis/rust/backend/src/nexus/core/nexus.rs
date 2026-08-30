@@ -3328,6 +3328,11 @@ mod tests {
     /// claims. Driven here with a scripted double rather than a swarm, so each
     /// of those decisions is exercised on real store rows instead of being
     /// trusted.
+    ///
+    /// A peer that connects, moves bytes, and disconnects before the
+    /// collection either finishes or the app shuts down must still be
+    /// durably remembered — see `a_peer_that_disconnects_mid_transfer_is_not_lost`
+    /// just below, which is the regression this comment used to lack.
     #[tokio::test]
     async fn the_transfer_poller_turns_each_reading_into_state_and_history() {
         let scratch = Scratch::new("transfer-poller");
@@ -3490,5 +3495,144 @@ mod tests {
             !released.iter().any(|handle| handle == "a1b2"),
             "a claimed collection is never released"
         );
+    }
+
+    /// A peer that connects, sends bytes, and disconnects before the
+    /// collection finishes or the app shuts down must still show up in
+    /// durable peer history. Snapshotting only at completion or shutdown
+    /// (the previous behaviour) meant a peer that left mid-transfer was
+    /// simply never written — Store::peer_history would come back empty
+    /// for it, and it would vanish from the People screen the moment its
+    /// live connection dropped, with no way to ever re-derive it.
+    #[tokio::test]
+    async fn a_peer_that_disconnects_mid_transfer_is_not_lost() {
+        let scratch = Scratch::new("peer-mid-transfer");
+        let store = Arc::new(Store::open(scratch.0.join("portalis.redb")).expect("opens store"));
+        store
+            .put_collection(
+                b"key",
+                &StoredCollection {
+                    name: "Iceland".to_owned(),
+                    role: StoredRole::Owner,
+                    content_key: [0; 32],
+                    media_path: scratch.0.join("media").to_string_lossy().into_owned(),
+                    sources: Vec::new(),
+                    lifecycle: StoredLifecycle::TorrentRequested {
+                        activity: StoredActivity::Running,
+                    },
+                    on_disk_bytes: 0,
+                    substrate_handle: Some("a1b2".to_owned()),
+                    started_at: None,
+                    completed_at: None,
+                },
+            )
+            .expect("writes the collection");
+
+        let local = Arc::new(Mutex::new(LocalCollections::test_with_collection(b"key")));
+        let handle = local
+            .lock()
+            .expect("local collections")
+            .handle(b"key")
+            .expect("the one collection");
+
+        let mut initial = state(vec![collection("Iceland")]);
+        initial.collections[0].id = handle;
+        let (states, _watcher) = watch::channel(initial);
+
+        fn reading(progress: u64, peer_present: bool) -> crate::nexus::torrent::TorrentInfo {
+            crate::nexus::torrent::TorrentInfo {
+                id: 1,
+                info_hash: "a1b2".to_owned(),
+                name: "Iceland".to_owned(),
+                state: "live".to_owned(),
+                progress_bytes: progress,
+                source_check_bytes: None,
+                fetched_bytes: progress,
+                total_bytes: 100,
+                uploaded_bytes: 0,
+                finished: false,
+                error: None,
+                files: Vec::new(),
+                live_peers: u32::from(peer_present),
+                live_peer_addrs: if peer_present {
+                    vec![crate::nexus::torrent::PeerLink {
+                        address: "10.0.0.9:6881".to_owned(),
+                        fetched_bytes: 40,
+                        uploaded_bytes: 5,
+                        client: Some("qBittorrent 4.6".to_owned()),
+                    }]
+                } else {
+                    Vec::new()
+                },
+            }
+        }
+        // The peer is present on the first reading, then gone on the
+        // second — disconnected, with the collection still in progress
+        // (never finished, and the poller is stopped without a graceful
+        // shutdown snapshot).
+        let connected = reading(10, true);
+        let disconnected = reading(40, false);
+        let substrate = Arc::new(crate::nexus::substrate::Recorded::reading(vec![
+            vec![connected],
+            vec![disconnected],
+        ]));
+
+        let holdings = Holdings::default();
+        let activity = crate::nexus::activity::DeviceActivityTracker::start(
+            Arc::clone(&store),
+            unix_time_ns(),
+        )
+        .expect("starts activity ledger");
+        let sources = super::DetailSources {
+            store: Arc::clone(&store),
+            collections: Arc::clone(&local),
+            holdings: holdings.clone(),
+            senders: Arc::new(Mutex::new(HashMap::new())),
+        };
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let shutdown = Shutdown::from_signal(shutdown_rx);
+
+        let poller = tokio::spawn({
+            let substrate = Arc::clone(&substrate);
+            let states = states.clone();
+            let local = Arc::clone(&local);
+            let sources = sources.clone();
+            let store = Arc::clone(&store);
+            let holdings = holdings.clone();
+            let activity = activity.clone();
+            async move {
+                transfers::follow_transfers(
+                    store, states, local, substrate, holdings, shutdown, sources, activity,
+                )
+                .await
+            }
+        });
+
+        // Bounded, condition-driven wait: the peer must be durable the
+        // moment the second reading (with it gone) has been processed —
+        // not merely by the time the poller is asked to stop.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let durable = store.peer_history(b"key").expect("reads peer history");
+            if durable.iter().any(|peer| peer.address == "10.0.0.9:6881") {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "a peer that disconnected mid-transfer was never written to durable history"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        let durable = store.peer_history(b"key").expect("reads peer history");
+        let remembered = durable
+            .iter()
+            .find(|peer| peer.address == "10.0.0.9:6881")
+            .expect("the disconnected peer is remembered");
+        assert_eq!(remembered.total_down_bytes, 40);
+        assert_eq!(remembered.total_up_bytes, 5);
+
+        shutdown_tx.send(true).expect("asks the poller to stop");
+        poller.await.expect("the poller winds up");
     }
 }

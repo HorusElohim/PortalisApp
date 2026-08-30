@@ -190,9 +190,13 @@ pub(crate) async fn follow_transfers(
                 info.knows_progress() && (!local_source || rates.down > 0 || rates.up > 0);
             let completed_download =
                 records_payload && !local_source && mark_moments(&store, &key, info);
-            if completed_download {
-                snapshot_peers(&store, &key, info, &peers, &mut peer_ledgers, epoch);
-            }
+            // Snapshotted every tick, not only on completion or shutdown: a
+            // peer that connects, moves bytes, and disconnects before either
+            // of those moments must still be durably remembered. The write
+            // is cheap — one upsert per currently-known peer, keyed on its
+            // exact endpoint/client — and it means the durable ledger is
+            // never more than one poll interval behind the live one.
+            snapshot_peers(&store, &key, info, &peers, &mut peer_ledgers, epoch);
             let sample = if records_payload {
                 record(&store, &key, info, rates, previous_sample.as_ref())
             } else {

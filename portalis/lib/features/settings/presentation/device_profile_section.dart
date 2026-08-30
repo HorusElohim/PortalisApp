@@ -13,6 +13,11 @@ import '../../../nexus/domain/app_state.dart';
 /// runtime is not started; the section renders a loading state rather than
 /// zeros. Identity is read from the live [AppDevice] snapshot rather than a
 /// separate identity path — see ADR-0011 decision #11.
+///
+/// Stat cards size themselves to the window rather than a fixed two-column
+/// grid: [WindowBuilder.columns] gives more columns as the pane widens, so a
+/// desktop-width User page shows compact cards in a row instead of the same
+/// phone-sized two-up grid stretched wide with mostly empty space.
 class DeviceProfileSection extends StatelessWidget {
   const DeviceProfileSection({
     super.key,
@@ -24,8 +29,6 @@ class DeviceProfileSection extends StatelessWidget {
     required this.collections,
     required this.onRename,
     required this.onOpenPeople,
-    required this.onOpenFormats,
-    required this.onClearActivity,
   });
 
   final AppDevice? device;
@@ -39,8 +42,6 @@ class DeviceProfileSection extends StatelessWidget {
   final int collections;
   final VoidCallback? onRename;
   final VoidCallback onOpenPeople;
-  final VoidCallback onOpenFormats;
-  final VoidCallback onClearActivity;
 
   @override
   Widget build(BuildContext context) {
@@ -60,10 +61,10 @@ class DeviceProfileSection extends StatelessWidget {
           Center(
             child: Column(
               children: [
-                Avatar(initials: initials, size: 76, primary: true),
-                const SizedBox(height: 16),
-                CanvasTitle(nickname, size: 30),
-                const SizedBox(height: 6),
+                Avatar(initials: initials, size: 64, primary: true),
+                const SizedBox(height: 14),
+                CanvasTitle(nickname, size: 26),
+                const SizedBox(height: 5),
                 Text(
                   device == null
                       ? (identityError == null
@@ -80,7 +81,7 @@ class DeviceProfileSection extends StatelessWidget {
                     style: monoLabel(size: 9.5, color: AppColors.textFaint),
                   ),
                 ],
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 PillButton(
                   label: 'Change name',
                   dim: true,
@@ -104,162 +105,85 @@ class DeviceProfileSection extends StatelessWidget {
             ),
           _Section(
             title: 'CURRENT SESSION',
-            child: GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 2.0,
-              children: [
-                _ProfileStat(
-                  label: 'RUNNING',
-                  value: summary == null
-                      ? '…'
-                      : formatNanosDuration(
-                          summary!.currentRun.engineRunningNs.toInt()),
-                ),
-                _ProfileStat(
-                  label: 'RECEIVED',
-                  value: summary == null
-                      ? '…'
-                      : formatBytes(
-                          summary!.currentRun.networkDownBytes.toInt()),
-                ),
-                _ProfileStat(
-                  label: 'SENT',
-                  value: summary == null
-                      ? '…'
-                      : formatBytes(
-                          summary!.currentRun.networkUpBytes.toInt()),
-                ),
-                _ProfileStat(
-                  label: 'COMPLETED',
-                  value: summary == null
-                      ? '…'
-                      : plural(
-                          summary!.currentRun.completedDownloads.toInt(),
-                          'download'),
-                ),
-              ],
-            ),
+            stats: [
+              _Stat(
+                label: 'RUNNING',
+                value: summary == null
+                    ? '…'
+                    : formatNanosDuration(
+                        summary!.currentRun.engineRunningNs.toInt()),
+              ),
+              _Stat(
+                label: 'RECEIVED',
+                value: summary == null
+                    ? '…'
+                    : formatBytes(
+                        summary!.currentRun.networkDownBytes.toInt()),
+              ),
+              _Stat(
+                label: 'SENT',
+                value: summary == null
+                    ? '…'
+                    : formatBytes(summary!.currentRun.networkUpBytes.toInt()),
+              ),
+              _Stat(
+                label: 'COMPLETED',
+                value: summary == null
+                    ? '…'
+                    : plural(
+                        summary!.currentRun.completedDownloads.toInt(),
+                        'download'),
+              ),
+            ],
           ),
           _Section(
             title: 'LIFETIME',
-            child: GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 2.0,
-              children: [
-                _ProfileStat(
-                  label: 'TOTAL RECEIVED',
-                  value: summary == null
-                      ? '…'
-                      : formatBytes(
-                          summary!.lifetimeNetworkDownBytes.toInt()),
-                  highlight: summary != null &&
-                      summary!.lifetimeNetworkDownBytes > BigInt.zero,
-                ),
-                _ProfileStat(
-                  label: 'TOTAL SENT',
-                  value: summary == null
-                      ? '…'
-                      : formatBytes(summary!.lifetimeNetworkUpBytes.toInt()),
-                ),
-                _ProfileStat(
-                  label: 'SESSIONS',
-                  value: summary == null ? '…' : '${summary!.runsStarted}',
-                ),
-                _ProfileStat(
-                  label: 'ACTIVE TIME',
-                  value: summary == null
-                      ? '…'
-                      : formatNanosDuration(
-                          summary!.lifetimeForegroundNs.toInt()),
-                ),
-              ],
-            ),
+            stats: [
+              _Stat(
+                label: 'TOTAL RECEIVED',
+                value: summary == null
+                    ? '…'
+                    : formatBytes(summary!.lifetimeNetworkDownBytes.toInt()),
+                highlight: summary != null &&
+                    summary!.lifetimeNetworkDownBytes > BigInt.zero,
+              ),
+              _Stat(
+                label: 'TOTAL SENT',
+                value: summary == null
+                    ? '…'
+                    : formatBytes(summary!.lifetimeNetworkUpBytes.toInt()),
+              ),
+              _Stat(
+                label: 'SESSIONS',
+                value: summary == null ? '…' : '${summary!.runsStarted}',
+              ),
+              _Stat(
+                label: 'ACTIVE TIME',
+                value: summary == null
+                    ? '…'
+                    : formatNanosDuration(
+                        summary!.lifetimeForegroundNs.toInt()),
+              ),
+            ],
           ),
           _Section(
             title: 'LIBRARY',
-            child: GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 2.0,
-              children: [
-                _ProfileStat(
-                  label: 'COLLECTIONS',
-                  value: '$collections',
-                ),
-                _ProfileStat(
-                  label: 'PEOPLE',
-                  value: '$people',
-                  onTap: onOpenPeople,
-                ),
-                _ProfileStat(
-                  label: 'HELD LOCALLY',
-                  value: summary == null
-                      ? '…'
-                      : formatBytes(summary!.heldBytes.toInt()),
-                ),
-                _ProfileStat(
-                  label: 'CATALOG SIZE',
-                  value: summary == null
-                      ? '…'
-                      : formatBytes(summary!.catalogBytes.toInt()),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              kScreenGutter,
-              12,
-              kScreenGutter,
-              0,
-            ),
-            child: DestinationRow(
-              icon: Icons.shield_outlined,
-              iconColor: AppColors.signal,
-              title: 'Identity lives on this device',
-              subtitle: 'A key pair, no account, no server. Lose the device '
-                  'and the identity goes with it.',
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              kScreenGutter,
-              12,
-              kScreenGutter,
-              0,
-            ),
-            child: DestinationRow(
-              icon: Icons.category_outlined,
-              title: 'File formats',
-              subtitle: 'What Portalis can view, and what it converts',
-              onTap: onOpenFormats,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              kScreenGutter,
-              12,
-              kScreenGutter,
-              0,
-            ),
-            child: DestinationRow(
-              icon: Icons.history_toggle_off,
-              title: 'Clear activity history',
-              subtitle: 'Resets session and lifetime totals on this device. '
-                  'Never touches your identity or collections.',
-              onTap: onClearActivity,
-            ),
+            stats: [
+              _Stat(label: 'COLLECTIONS', value: '$collections'),
+              _Stat(label: 'PEOPLE', value: '$people', onTap: onOpenPeople),
+              _Stat(
+                label: 'HELD LOCALLY',
+                value: summary == null
+                    ? '…'
+                    : formatBytes(summary!.heldBytes.toInt()),
+              ),
+              _Stat(
+                label: 'CATALOG SIZE',
+                value: summary == null
+                    ? '…'
+                    : formatBytes(summary!.catalogBytes.toInt()),
+              ),
+            ],
           ),
         ],
       ),
@@ -268,28 +192,41 @@ class DeviceProfileSection extends StatelessWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.child});
+  const _Section({required this.title, required this.stats});
 
   final String title;
-  final Widget child;
+  final List<_Stat> stats;
 
   @override
   Widget build(BuildContext context) => Padding(
         padding:
-            const EdgeInsets.fromLTRB(kScreenGutter, 22, kScreenGutter, 0),
+            const EdgeInsets.fromLTRB(kScreenGutter, 20, kScreenGutter, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SectionLabel(title),
-            const SizedBox(height: 10),
-            child,
+            const SizedBox(height: 8),
+            // More columns as the pane widens, instead of a fixed two-up
+            // grid stretched to fill a desktop-width pane — see the class
+            // doc on [DeviceProfileSection].
+            WindowBuilder(
+              builder: (context, window) => GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: window.columns(190),
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 1.7,
+                children: stats,
+              ),
+            ),
           ],
         ),
       );
 }
 
-class _ProfileStat extends StatelessWidget {
-  const _ProfileStat({
+class _Stat extends StatelessWidget {
+  const _Stat({
     required this.label,
     required this.value,
     this.highlight = false,
@@ -303,7 +240,7 @@ class _ProfileStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SurfaceCard(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         onTap: onTap,
         child: FittedBox(
           fit: BoxFit.scaleDown,
@@ -315,22 +252,22 @@ class _ProfileStat extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(label, style: monoLabel(size: 9.5)),
+                  Text(label, style: monoLabel(size: 9)),
                   if (onTap != null) ...[
                     const SizedBox(width: 4),
                     Icon(
                       Icons.chevron_right,
-                      size: 13,
+                      size: 12,
                       color: AppColors.textGhost,
                     ),
                   ],
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 value,
                 style: displayText(
-                  size: 24,
+                  size: 19,
                   color: highlight ? AppColors.signal : AppColors.text,
                 ),
               ),

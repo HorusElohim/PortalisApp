@@ -43,25 +43,16 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('offers clearing activity history and confirms first',
+    testWidgets('File formats and Clear activity history are not on User',
         (tester) async {
+      // Both moved to Settings — User is identity and activity totals only.
+      // See test/settings_screen_test.dart for their coverage there.
       await pumpApp(tester, userSummary: buildUserSummary());
       await tester.tap(find.byKey(const Key('navTab1')));
       await tester.pumpAndSettle();
 
-      final destination = find.text('Clear activity history');
-      await tester.dragUntilVisible(
-        destination,
-        find.byType(SingleChildScrollView),
-        const Offset(0, -200),
-      );
-      expect(destination, findsOneWidget);
-      await tester.tap(destination);
-      await tester.pumpAndSettle();
-
-      // A confirmation dialog stands between the tap and the actual clear —
-      // clearing durable history is not a one-tap accident.
-      expect(find.text('Clear activity history?'), findsOneWidget);
+      expect(find.text('File formats'), findsNothing);
+      expect(find.text('Clear activity history'), findsNothing);
     });
   });
 }

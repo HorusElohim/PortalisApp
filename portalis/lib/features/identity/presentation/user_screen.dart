@@ -7,7 +7,6 @@ import '../../../nexus/domain/app_state.dart';
 import '../../../design/design.dart';
 import '../../settings/presentation/device_profile_section.dart';
 import '../../../shell/navigation.dart';
-import '../../settings/presentation/formats_screen.dart';
 
 /// The local device identity, backend-owned activity, and the people who
 /// receive from it.
@@ -20,6 +19,9 @@ import '../../settings/presentation/formats_screen.dart';
 /// this snapshot together (ADR-0011 decision #11). Every activity figure
 /// here is a direct render of [AppUserSummary] — the backend's own durable
 /// ledger — never a Flutter-side sum of the current snapshot.
+///
+/// File formats and clearing activity history live in Settings now, not
+/// here — they are engine/device configuration, not identity.
 class UserScreen extends StatefulWidget {
   const UserScreen({super.key, this.embedded = false});
 
@@ -30,7 +32,6 @@ class UserScreen extends StatefulWidget {
 }
 
 class _UserScreenState extends State<UserScreen> {
-  bool _showFormats = false;
   AppUserSummary? _summary;
   String? _summaryError;
   Timer? _poll;
@@ -91,41 +92,8 @@ class _UserScreenState extends State<UserScreen> {
     }
   }
 
-  Future<void> _clearActivity() async {
-    final confirmed = await confirmAction(
-      context,
-      title: 'Clear activity history?',
-      message: 'Resets session and lifetime totals on this device. Your '
-          'identity, collections, and settings are never touched.',
-      confirmLabel: 'Clear',
-      destructive: true,
-    );
-    if (!confirmed || !mounted) return;
-    try {
-      await AppControllers.engine.clearUserActivity();
-      await _loadSummary();
-      if (mounted) showToast(context, 'Activity history cleared');
-    } catch (error) {
-      if (mounted) showToast(context, 'Couldn\'t clear activity: $error');
-    }
-  }
-
-  void _openFormats() => openNestedScreen(
-        context,
-        embedded: widget.embedded,
-        showInPlace: () => setState(() => _showFormats = true),
-        push: (_) => const FormatsScreen(),
-      );
-
   @override
   Widget build(BuildContext context) {
-    if (_showFormats) {
-      return FormatsScreen(
-        embedded: widget.embedded,
-        onBack: () => setState(() => _showFormats = false),
-      );
-    }
-
     return AppScreen(
       title: 'User',
       embedded: widget.embedded,
@@ -148,8 +116,6 @@ class _UserScreenState extends State<UserScreen> {
                 onRename: snapshot?.device == null ? null : _rename,
                 onOpenPeople: () =>
                     AppNavigation.tab.value = AppNavigation.peopleTab,
-                onOpenFormats: _openFormats,
-                onClearActivity: _clearActivity,
               ),
             ),
           );
