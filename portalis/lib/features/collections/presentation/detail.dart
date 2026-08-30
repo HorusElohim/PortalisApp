@@ -218,7 +218,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
     }
     if (!mounted) return;
     if (uri == null) {
-      _toast('This collection is still preparing its share link');
+      _toast('Not ready to share — reopen/retry');
       return;
     }
     await showCollectionShareQrDialog(

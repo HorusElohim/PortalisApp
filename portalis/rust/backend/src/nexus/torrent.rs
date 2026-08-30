@@ -122,6 +122,14 @@ pub struct SourceFile {
     pub length_bytes: Option<u64>,
 }
 
+fn has_live_share_prerequisites(
+    listener_bound: bool,
+    loaded_info_hash: Option<&str>,
+    requested_info_hash: &str,
+) -> bool {
+    listener_bound && loaded_info_hash == Some(requested_info_hash)
+}
+
 /// The media formats Portalis may automatically hand to a native gallery.
 /// This explicit allow-list is shared with the future Android MediaStore path.
 #[cfg(any(target_os = "ios", test))]
@@ -539,6 +547,19 @@ pub(crate) fn local_peer_hints() -> crate::nexus::substrate::PeerHints {
     native::local_peer_hints()
 }
 
+/// True only when the active session has both a bound listener and the exact
+/// torrent identified by the persisted handle. A stored handle alone is not a
+/// usable seeder after a failed or incomplete rehydration.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn share_ready(info_hash: &str) -> bool {
+    native::share_ready(info_hash)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn share_ready(_info_hash: &str) -> bool {
+    false
+}
+
 /// Snapshot of every torrent currently managed by the session. Internal:
 /// `substrate::holdings` uses it; the app reads torrent state from the
 /// `portalis_api` `watch_*` streams instead (ADR-0001).
@@ -887,6 +908,24 @@ pub mod native {
             peers.as_slice()
         );
         peers
+    }
+
+    pub(super) fn share_ready(info_hash: &str) -> bool {
+        let Some(session) = SESSION.get() else {
+            return false;
+        };
+        if session.announce_port().is_none() {
+            return false;
+        }
+        let loaded = session.with_torrents(|torrents| {
+            for (_, torrent) in torrents {
+                if torrent.info_hash().as_string() == info_hash {
+                    return Some(torrent.info_hash().as_string());
+                }
+            }
+            None
+        });
+        super::has_live_share_prerequisites(true, loaded.as_deref(), info_hash)
     }
 
     fn peer_hints_for_interfaces(
@@ -2843,8 +2882,17 @@ pub mod native {
 
     #[cfg(test)]
     mod live_network_tests {
+        use super::super::has_live_share_prerequisites;
         use super::inspect_source;
         use crate::nexus::substrate::PeerHints;
+
+        #[test]
+        fn share_requires_listener_and_exact_loaded_info_hash() {
+            assert!(!has_live_share_prerequisites(false, Some("aa"), "aa"));
+            assert!(!has_live_share_prerequisites(true, None, "aa"));
+            assert!(!has_live_share_prerequisites(true, Some("bb"), "aa"));
+            assert!(has_live_share_prerequisites(true, Some("aa"), "aa"));
+        }
 
         /// Reproduces the exact end-user report: importing the Cosmos
         /// Laundromat magnet should resolve a file list through its `xs`
