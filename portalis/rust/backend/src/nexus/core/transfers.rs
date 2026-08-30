@@ -1165,7 +1165,7 @@ mod tests {
         );
         assert_eq!(
             status_of_for(&info(0, 100, false), false, false),
-            Status::Preparing
+            Status::DownloadRequested
         );
         assert_eq!(
             status_of_for(&info(100, 100, true), false, false),

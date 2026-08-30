@@ -126,7 +126,7 @@ fn status_of(facts: &CollectionFacts) -> Status {
     match facts.progress {
         None if facts.revision == 0 => Status::WaitingForOwner,
         None => Status::Available,
-        Some(progress) if progress.done == 0 => Status::Preparing,
+        Some(progress) if progress.done == 0 => Status::DownloadRequested,
         Some(progress) if progress.done >= progress.total => Status::Available,
         Some(_) => Status::Downloading,
     }
@@ -304,7 +304,7 @@ mod tests {
         let cases = [
             (None, 3, Status::Available),
             (None, 0, Status::WaitingForOwner),
-            (Some(progress(0, 100)), 3, Status::Preparing),
+            (Some(progress(0, 100)), 3, Status::DownloadRequested),
             (Some(progress(500, 100)), 3, Status::Downloading),
             (Some(progress(1_000, 100)), 3, Status::Available),
         ];
