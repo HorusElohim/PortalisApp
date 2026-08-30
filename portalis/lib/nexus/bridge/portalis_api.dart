@@ -31,6 +31,16 @@ Future<void> stop() => RustLib.instance.api.cratePortalisApiStop();
 Future<void> setActive({required bool active}) =>
     RustLib.instance.api.cratePortalisApiSetActive(active: active);
 
+/// Renames this device. Updates the persisted identity and the live
+/// `AppSnapshot.device` in one call — see [`AppUserSummary`] and
+/// `Nexus::rename_device` for why a separate identity path used to drift.
+///
+/// # Errors
+/// Returns a displayable reason when the runtime is not started or the
+/// persisted identity cannot be updated.
+Future<void> renameDevice({required String nickname}) =>
+    RustLib.instance.api.cratePortalisApiRenameDevice(nickname: nickname);
+
 /// The complete local diagnostics log, oldest line first — the same lines
 /// every [`crate::nexus::log::clog!`] call already writes to stderr,
 /// additionally kept in a bounded file so they survive after the console is

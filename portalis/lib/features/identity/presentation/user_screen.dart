@@ -13,10 +13,13 @@ import '../../settings/presentation/formats_screen.dart';
 /// receive from it.
 ///
 /// User is deliberately separate from Settings: identity answers "who am
-/// I?" while Settings answers "how does the engine behave?". Every activity
-/// figure here is a direct render of [AppUserSummary] — the backend's own
-/// durable ledger — never a Flutter-side sum of the current snapshot; see
-/// ADR-0011.
+/// I?" while Settings answers "how does the engine behave?". Identity is
+/// read from [AppSnapshot.device] — the same live projection every other
+/// screen reads — rather than a second identity path; renaming goes through
+/// [AppController.renameDevice], which updates the persisted identity and
+/// this snapshot together (ADR-0011 decision #11). Every activity figure
+/// here is a direct render of [AppUserSummary] — the backend's own durable
+/// ledger — never a Flutter-side sum of the current snapshot.
 class UserScreen extends StatefulWidget {
   const UserScreen({super.key, this.embedded = false});
 
@@ -35,7 +38,6 @@ class _UserScreenState extends State<UserScreen> {
   @override
   void initState() {
     super.initState();
-    AppControllers.identity.load();
     _loadSummary();
     // The current run's counters move while this screen is open — same
     // cadence Storage already polls its own backend-computed figures at.
@@ -74,16 +76,16 @@ class _UserScreenState extends State<UserScreen> {
   }
 
   Future<void> _rename() async {
-    final profile = AppControllers.identity.info;
+    final device = AppControllers.engine.state?.device;
     final result = await promptForText(
       context,
       title: 'Your name',
-      initialValue: profile?.nickname,
+      initialValue: device?.name,
       helper: 'This is how you appear to collaborators.',
     );
     if (result == null || result.isEmpty || !mounted) return;
     try {
-      await AppControllers.identity.rename(result);
+      await AppControllers.engine.renameDevice(result);
     } catch (error) {
       if (mounted) showToast(context, 'Couldn\'t rename: $error');
     }
@@ -129,25 +131,21 @@ class _UserScreenState extends State<UserScreen> {
       embedded: widget.embedded,
       width: ScreenWidth.full,
       body: ListenableBuilder(
-        listenable: Listenable.merge([
-          AppControllers.identity,
-          AppControllers.engine,
-        ]),
+        listenable: AppControllers.engine,
         builder: (context, _) {
-          final identity = AppControllers.identity;
+          final snapshot = AppControllers.engine.state;
           return RefreshIndicator(
             onRefresh: _loadSummary,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               child: DeviceProfileSection(
-                profile: identity.info,
-                identityError: identity.lastError,
+                device: snapshot?.device,
+                identityError: AppControllers.engine.lastError,
                 summary: _summary,
                 summaryError: _summaryError,
-                people: AppControllers.engine.state?.contacts.length ?? 0,
-                collections:
-                    AppControllers.engine.state?.collections.length ?? 0,
-                onRename: identity.info == null ? null : _rename,
+                people: snapshot?.contacts.length ?? 0,
+                collections: snapshot?.collections.length ?? 0,
+                onRename: snapshot?.device == null ? null : _rename,
                 onOpenPeople: () =>
                     AppNavigation.tab.value = AppNavigation.peopleTab,
                 onOpenFormats: _openFormats,

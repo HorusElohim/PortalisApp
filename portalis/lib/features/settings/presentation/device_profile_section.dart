@@ -2,20 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
-import '../../identity/domain/device_profile.dart';
 import '../../../nexus/domain/app_state.dart';
 
 /// Device identity, backend-owned activity, and identity-related
 /// destinations.
 ///
-/// Every figure here comes from [AppUserSummary] — the backend's own durable
-/// ledger — rather than being summed from the current collection snapshot.
-/// `null` means the summary has not loaded yet or the runtime is not
-/// started; the section renders a loading state rather than zeros.
+/// Every activity figure here comes from [AppUserSummary] — the backend's
+/// own durable ledger — rather than being summed from the current
+/// collection snapshot. `null` means the summary has not loaded yet or the
+/// runtime is not started; the section renders a loading state rather than
+/// zeros. Identity is read from the live [AppDevice] snapshot rather than a
+/// separate identity path — see ADR-0011 decision #11.
 class DeviceProfileSection extends StatelessWidget {
   const DeviceProfileSection({
     super.key,
-    required this.profile,
+    required this.device,
     required this.identityError,
     required this.summary,
     required this.summaryError,
@@ -27,7 +28,7 @@ class DeviceProfileSection extends StatelessWidget {
     required this.onClearActivity,
   });
 
-  final DeviceProfile? profile;
+  final AppDevice? device;
   final String? identityError;
 
   /// The backend's own activity ledger. `null` while loading or unavailable.
@@ -43,8 +44,8 @@ class DeviceProfileSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final nickname = profile?.nickname ?? '…';
-    final initials = profile != null && nickname.isNotEmpty
+    final nickname = device?.name ?? '…';
+    final initials = device != null && nickname.isNotEmpty
         ? nickname[0].toUpperCase()
         : '·';
     final trackedSince = summary == null
@@ -64,12 +65,12 @@ class DeviceProfileSection extends StatelessWidget {
                 CanvasTitle(nickname, size: 30),
                 const SizedBox(height: 6),
                 Text(
-                  profile == null
+                  device == null
                       ? (identityError == null
                           ? 'LOADING…'
                           : 'IDENTITY UNAVAILABLE')
                       : 'THIS DEVICE · '
-                          '${profile!.deviceId.substring(0, profile!.deviceId.length.clamp(0, 8)).toUpperCase()}',
+                          '${device!.fingerprint.substring(0, device!.fingerprint.length.clamp(0, 8)).toUpperCase()}',
                   style: monoLabel(size: 10.5, letterSpacing: 0.6),
                 ),
                 if (trackedSince != null) ...[

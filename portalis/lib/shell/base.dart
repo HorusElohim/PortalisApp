@@ -36,7 +36,6 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     // above a list drawn from another. Nexus owns the engine; a second one
     // running quietly is how the interface ends up lying.
     AppControllers.settings.load();
-    AppControllers.identity.load();
   }
 
   @override

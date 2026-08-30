@@ -191,6 +191,9 @@ class _Repository implements AppRepository {
   Future<void> clearUserActivity() async {}
 
   @override
+  Future<void> renameDevice(String nickname) async {}
+
+  @override
   Future<AppAccepted> send(EngineCommand command) async {
     commands.add(command);
     return AppAccepted(id: BigInt.one, collection: null, queued: true);

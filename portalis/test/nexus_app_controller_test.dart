@@ -34,6 +34,16 @@ void main() {
     expect(repository.stops, 1);
   });
 
+  test('renameDevice delegates to the repository without a second path',
+      () async {
+    final repository = _Repository();
+    final controller = AppController(repository: repository);
+
+    await controller.renameDevice('Ada');
+
+    expect(repository.renamedTo, ['Ada']);
+  });
+
   test('forwards the selected detail stream without caching it', () async {
     final repository = _Repository();
     final controller = AppController(repository: repository);
@@ -626,6 +636,7 @@ class _Repository implements AppRepository {
   final active = <bool>[];
   final detailCollections = <int?>[];
   final commands = <EngineCommand>[];
+  final renamedTo = <String>[];
   var starts = 0;
   var stops = 0;
 
@@ -655,6 +666,11 @@ class _Repository implements AppRepository {
 
   @override
   Future<void> clearUserActivity() async {}
+
+  @override
+  Future<void> renameDevice(String nickname) async {
+    renamedTo.add(nickname);
+  }
 
   @override
   Future<AppAccepted> send(EngineCommand command) async {

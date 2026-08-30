@@ -181,6 +181,14 @@ class AppController extends ChangeNotifier {
   /// collections, and settings are never touched.
   Future<void> clearUserActivity() => _repository.clearUserActivity();
 
+  /// Renames this device through the one canonical path: the backend updates
+  /// the persisted identity and the live [state] together, so there is
+  /// nothing left here to separately reload or drift out of sync with — see
+  /// ADR-0011 decision #11. The next [watchStates] emission (or the debug
+  /// seed in a test) carries the new name.
+  Future<void> renameDevice(String nickname) =>
+      _repository.renameDevice(nickname);
+
   /// Seeds the projection for widgets that exercise app composition without a
   /// native runtime. Production state always arrives through [watchStates].
   @visibleForTesting

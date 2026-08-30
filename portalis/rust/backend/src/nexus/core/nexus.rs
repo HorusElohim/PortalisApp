@@ -544,6 +544,27 @@ impl Nexus {
         // in the foreground.
     }
 
+    /// Renames this device and updates the live snapshot in the same call.
+    ///
+    /// ADR-0011 (decision #11): the persisted identity and the running
+    /// projection are two copies of one fact, and a caller that only updates
+    /// one of them (the previous separate `IdentityController`/`AppController`
+    /// paths) can drift — a rename is durable but the still-running Nexus
+    /// keeps showing the old name until the next full snapshot rebuild.
+    /// Canonicalizing rename through Nexus makes that impossible: either both
+    /// update together or the whole call fails and neither does.
+    ///
+    /// # Errors
+    /// Returns a displayable reason when the persisted identity cannot be
+    /// updated.
+    pub fn rename_device(&mut self, nickname: String) -> anyhow::Result<()> {
+        crate::nexus::device::set_nickname(nickname.clone())?;
+        self.states.send_modify(|state| {
+            state.device.name = nickname;
+        });
+        Ok(())
+    }
+
     /// The state stream. Always holds a complete snapshot.
     ///
     /// A `watch` receiver rather than a channel of deltas, for two reasons: a
@@ -2990,6 +3011,25 @@ mod tests {
             }),
             Err(CommandError::Unavailable)
         );
+        nexus.close().await;
+    }
+
+    /// ADR-0011 decision #11: rename is canonicalized through Nexus so the
+    /// live snapshot updates atomically with the persisted identity, rather
+    /// than requiring a second frontend controller to separately reload.
+    #[tokio::test]
+    async fn renaming_through_nexus_updates_the_live_snapshot_immediately() {
+        let scratch = Scratch::new("rename-live-snapshot");
+        let mut nexus = open(&scratch);
+
+        let before = nexus.state().device.name;
+        assert_ne!(before, "Ada's New Name");
+
+        nexus
+            .rename_device("Ada's New Name".to_owned())
+            .expect("renames");
+
+        assert_eq!(nexus.state().device.name, "Ada's New Name");
         nexus.close().await;
     }
 

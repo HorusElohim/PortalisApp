@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0.46+47
+
+- Accepted ADR-0011 with verified acceptance criteria: every ledger
+  consequence (idempotent checkpoints, interrupted-run recovery, restart
+  durability, honest schema-11→12 migration) now has a passing regression
+  test cited directly in the ADR.
+- Added a schema-11-to-12 migration honesty test proving a pre-ledger store
+  opens with genuinely absent activity rows rather than a fabricated
+  lifetime total or "member since" date.
+- Canonicalized device rename through Nexus (`rename_device`): the persisted
+  identity and the live `AppSnapshot.device` now update together in one
+  call, removing the drift where a renamed device kept showing its old name
+  until the next full snapshot rebuild.
+- Removed the now-redundant separate identity path
+  (`features/identity/{application,data,domain}`, `IdentityController`,
+  `DeviceProfile`). The User page and desktop identity chip read device
+  identity from the one live `AppSnapshot.device` projection.
+
 ## 1.0.45+46
 
 - Added a backend-owned durable local device activity ledger (ADR-0011,
