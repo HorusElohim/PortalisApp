@@ -34,25 +34,38 @@ class UserScreen extends StatefulWidget {
 class _UserScreenState extends State<UserScreen> {
   AppUserSummary? _summary;
   String? _summaryError;
+
+  /// Contacts *and* swarm connections — the same two tiers the People
+  /// screen counts (see its own doc, and [_loadPeopleCount] here). A
+  /// contact-only count reads as "0 people" for anybody who has only ever
+  /// exchanged with anonymous swarm peers, which is the common case.
+  int _peopleCount = 0;
   Timer? _poll;
 
   @override
   void initState() {
     super.initState();
     _loadSummary();
-    // The current run's counters move while this screen is open — same
-    // cadence Storage already polls its own backend-computed figures at.
-    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _loadSummary());
+    _loadPeopleCount();
+    // The current run's counters, and who's connected, both move while
+    // this screen is open — same cadence Storage already polls its own
+    // backend-computed figures at.
+    _poll = Timer.periodic(const Duration(seconds: 2), (_) {
+      _loadSummary();
+      _loadPeopleCount();
+    });
     // The engine can start, or a test can seed it, after this widget has
     // already mounted (it lives in an IndexedStack alongside every other
     // tab, so its initState runs before a caller has a chance to seed
-    // anything). Retrying once the engine actually has something to say
-    // covers that ordering without polling harder than the timer above.
+    // anything). Retried on every change rather than guarded, matching
+    // PeopleScreen's own listener — a connection appearing or leaving is
+    // exactly the kind of engine change this should react to promptly.
     AppControllers.engine.addListener(_onEngineChanged);
   }
 
   void _onEngineChanged() {
     if (_summary == null) _loadSummary();
+    _loadPeopleCount();
   }
 
   @override
@@ -74,6 +87,13 @@ class _UserScreenState extends State<UserScreen> {
       if (!mounted) return;
       setState(() => _summaryError = '$error');
     }
+  }
+
+  Future<void> _loadPeopleCount() async {
+    final contacts = AppControllers.engine.state?.contacts.length ?? 0;
+    final peers = await AppControllers.engine.peoplePeers();
+    if (!mounted) return;
+    setState(() => _peopleCount = contacts + peers.length);
   }
 
   Future<void> _rename() async {
@@ -111,7 +131,7 @@ class _UserScreenState extends State<UserScreen> {
                 identityError: AppControllers.engine.lastError,
                 summary: _summary,
                 summaryError: _summaryError,
-                people: snapshot?.contacts.length ?? 0,
+                people: _peopleCount,
                 collections: snapshot?.collections.length ?? 0,
                 onRename: snapshot?.device == null ? null : _rename,
                 onOpenPeople: () =>

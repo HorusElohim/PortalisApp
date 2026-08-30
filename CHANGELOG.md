@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.48+49
+
+- Removed Settings' extra scrollable wrapper (a custom scrollbar + card
+  surface no other screen had) — it now scrolls the same plain way as
+  Storage, People, and User.
+- Fixed the User page's PEOPLE count showing 0: it counted only signed
+  contacts, not swarm connections — the same two tiers the People screen
+  itself counts. Most people never add a contact and only ever exchange
+  with anonymous peers, so the count read as 0 for the common case.
+- Refactored Settings' three near-identical drill-down toggles (Storage,
+  Diagnostics, File formats — three booleans, three near-copies of the same
+  open/build logic) into one `_Nested` enum with a single `_open` method,
+  net -69 lines with identical behavior.
+
 ## 1.0.47+48
 
 - Fixed peer retention: a peer that connects, moves bytes, and disconnects
