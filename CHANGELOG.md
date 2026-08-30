@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.49+56
+
+- Audited where diagnostics logging is and isn't wired up. Found a real
+  gap: `FlutterError.onError`/`PlatformDispatcher.onError` already
+  routed uncaught crashes into the shareable diagnostics log, but every
+  *caught* error the app shows via an error-severity toast (~15 sites
+  across Settings, media, and collections) was shown for a few seconds
+  and then gone — never recorded anywhere. A tester who dismissed a
+  "Couldn't share: ..." toast and opened Diagnostics to report it found
+  nothing about it in the log they were about to share.
+- Fixed centrally rather than at each call site: `showToast()` now
+  routes every error-severity message through the same diagnostics
+  pipeline uncaught errors already use, via a single `onErrorToast`
+  hook wired once in `bootstrap.dart`. No caller of `showToast()`
+  changed.
+
 ## 1.0.49+55
 
 - Refactored Settings further: the seven numeric engine-setting rows

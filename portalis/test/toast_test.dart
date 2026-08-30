@@ -184,4 +184,44 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  group('diagnostics routing', () {
+    tearDown(() => onErrorToast = null);
+
+    testWidgets('an error-severity toast reaches onErrorToast', (tester) async {
+      final ctx = await _host(tester);
+      final recorded = <String>[];
+      onErrorToast = recorded.add;
+
+      showToast(ctx, 'could not save the collection',
+          severity: ToastSeverity.error);
+      await tester.pump();
+
+      expect(recorded, ['could not save the collection']);
+    });
+
+    testWidgets('an info-severity toast does not reach onErrorToast',
+        (tester) async {
+      final ctx = await _host(tester);
+      final recorded = <String>[];
+      onErrorToast = recorded.add;
+
+      showToast(ctx, 'Invite code copied');
+      await tester.pump();
+
+      expect(recorded, isEmpty);
+    });
+
+    testWidgets('onErrorToast unset is a no-op, not a crash', (tester) async {
+      final ctx = await _host(tester);
+
+      showToast(ctx, 'still shows even with nobody listening',
+          severity: ToastSeverity.error);
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(
+          find.text('still shows even with nobody listening'), findsOneWidget);
+    });
+  });
 }
