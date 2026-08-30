@@ -130,6 +130,10 @@ fn has_live_share_prerequisites(
     listener_bound && loaded_info_hash == Some(requested_info_hash)
 }
 
+fn client_name_and_version() -> String {
+    format!("Portalis {}", env!("CARGO_PKG_VERSION"))
+}
+
 /// The media formats Portalis may automatically hand to a native gallery.
 /// This explicit allow-list is shared with the future Android MediaStore path.
 #[cfg(any(target_os = "ios", test))]
@@ -1090,10 +1094,7 @@ pub mod native {
                     // The extended handshake is user-visible in peer lists;
                     // expose the application that is actually transferring,
                     // not its embedded BitTorrent engine.
-                    client_name_and_version: Some(format!(
-                        "Portalis {}",
-                        env!("CARGO_PKG_VERSION")
-                    )),
+                    client_name_and_version: Some(super::client_name_and_version()),
                     // A range is mandatory, not optional: librqbit only binds
                     // a TCP listener when `listen` is `Some(..)`.
                     listen: Some(librqbit::ListenerOptions {
@@ -2892,6 +2893,11 @@ pub mod native {
             assert!(!has_live_share_prerequisites(true, None, "aa"));
             assert!(!has_live_share_prerequisites(true, Some("bb"), "aa"));
             assert!(has_live_share_prerequisites(true, Some("aa"), "aa"));
+        }
+
+        #[test]
+        fn extended_handshake_identifies_portalis_exactly() {
+            assert_eq!(super::super::client_name_and_version(), "Portalis 0.1.49");
         }
 
         /// Reproduces the exact end-user report: importing the Cosmos
