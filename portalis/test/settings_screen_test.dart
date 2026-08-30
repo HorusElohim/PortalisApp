@@ -63,5 +63,27 @@ void main() {
 
       expect(find.text('Clear activity history?'), findsOneWidget);
     });
+
+    testWidgets(
+        'editing Upload limit saves through the shared numeric-row helper',
+        (tester) async {
+      await openSettings(tester);
+
+      final uploadLimit = find.text('Upload limit');
+      await tester.dragUntilVisible(
+        uploadLimit,
+        find.byType(SingleChildScrollView),
+        const Offset(0, -300),
+      );
+      await tester.tap(uploadLimit);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), '500000');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(AppControllers.settings.settings?.uploadLimitBps, 500000);
+      expect(find.text('Upload limit?'), findsNothing);
+    });
   });
 }
