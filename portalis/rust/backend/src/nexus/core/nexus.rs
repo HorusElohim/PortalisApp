@@ -1853,13 +1853,16 @@ fn torrent_name(source: &str) -> String {
     // A URL's tail is not a name: a magnet ends in whatever its last query
     // parameter happens to be, which is frequently somebody else's filename.
     if crate::nexus::torrent::is_remote_source(source) {
-        return "Torrent import".to_owned();
+        return "Portalis collection import".to_owned();
     }
     std::path::Path::new(source)
         .file_stem()
         .and_then(std::ffi::OsStr::to_str)
         .filter(|name| !name.is_empty())
-        .map_or_else(|| "Torrent import".to_owned(), ToOwned::to_owned)
+        .map_or_else(
+            || "Portalis collection import".to_owned(),
+            ToOwned::to_owned,
+        )
 }
 
 #[cfg(test)]
@@ -3127,7 +3130,7 @@ mod tests {
             })
             .expect("records the import");
         let imported = nexus.state().collections[0].clone();
-        assert_eq!(imported.name, "Torrent import");
+        assert_eq!(imported.name, "Portalis collection import");
         // Resolution is active metadata work, not download authorization. The
         // collection becomes Draft only after a file list exists and awaits
         // the person's explicit Download decision.

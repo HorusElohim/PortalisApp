@@ -66,7 +66,10 @@ class _HomeState extends State<Home> {
           await _importScannedCollection(magnet),
       };
       if (collection == null || !mounted) return;
-      _openCollectionById(collection);
+      _openCollectionById(
+        collection,
+        autoDownload: chosen is ScannedCollectionSource,
+      );
     } catch (error) {
       if (mounted) {
         showToast(context, '$error', severity: ToastSeverity.error);
@@ -95,14 +98,26 @@ class _HomeState extends State<Home> {
   void _openCollection(AppCollection collection) =>
       _openCollectionById(collection.id);
 
-  void _openCollectionById(int collection) {
+  void _openCollectionById(int collection, {bool autoDownload = false}) {
     if (widget.onOpen != null) {
       widget.onOpen!(collection);
+      if (autoDownload) {
+        unawaited(
+          startCollectionLinkDownload(
+            collection,
+            send: AppControllers.engine.send,
+            watchDetail: AppControllers.engine.watchDetail,
+          ).catchError((error) {
+            debugPrint('Scanned collection download did not start: $error');
+          }),
+        );
+      }
       return;
     }
     _push(CollectionRoute(
       collection: collection,
       controller: AppControllers.engine,
+      autoDownload: autoDownload,
     ));
   }
 
@@ -224,15 +239,6 @@ class _HomeState extends State<Home> {
         '[home] scanned collection import start source_len=${magnet.length}');
     final collection = await _importTorrent(magnet);
     if (collection == null) return null;
-    unawaited(
-      startCollectionLinkDownload(
-        collection,
-        send: AppControllers.engine.send,
-        watchDetail: AppControllers.engine.watchDetail,
-      ).catchError((error) {
-        debugPrint('Scanned collection download did not start: $error');
-      }),
-    );
     return collection;
   }
 
