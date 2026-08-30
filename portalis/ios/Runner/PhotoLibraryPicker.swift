@@ -275,6 +275,29 @@ final class HeicPreview {
         return
       }
       let maxPixelSize = arguments["maxPixelSize"] as? Int ?? 1024
+      // A Photos-library asset (see PhotoLibraryPicker) has no filesystem
+      // path CGImageSource can open — that's the whole point of picking it
+      // by stable identifier rather than a cache path. Grid thumbnails for
+      // those assets fell back to the grey placeholder unconditionally
+      // until this branch, even though PHImageManager can decode a bounded
+      // preview from the same identifier just as CGImageSource does for a
+      // real file.
+      if let identifier = Self.photoAssetIdentifier(from: path) {
+        Self.decodePhotoAsset(identifier: identifier, maxPixelSize: maxPixelSize) { data in
+          DispatchQueue.main.async {
+            guard let data else {
+              result(FlutterError(
+                code: "decode_failed",
+                message: "The platform could not decode this Photos asset.",
+                details: nil
+              ))
+              return
+            }
+            result(FlutterStandardTypedData(bytes: data))
+          }
+        }
+        return
+      }
       DispatchQueue.global(qos: .userInitiated).async {
         let data = Self.decode(path: path, maxPixelSize: maxPixelSize)
         DispatchQueue.main.async {
@@ -289,6 +312,39 @@ final class HeicPreview {
           result(FlutterStandardTypedData(bytes: data))
         }
       }
+    }
+  }
+
+  private static func photoAssetIdentifier(from path: String) -> String? {
+    guard path.hasPrefix("phasset://") else { return nil }
+    let identifier = String(path.dropFirst("phasset://".count))
+    return identifier.isEmpty ? nil : identifier
+  }
+
+  /// Same contract as [decode]: a bounded JPEG preview in memory, nothing
+  /// written back to the Photos library or anywhere else on disk.
+  private static func decodePhotoAsset(
+    identifier: String,
+    maxPixelSize: Int,
+    completion: @escaping (Data?) -> Void
+  ) {
+    let assets = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
+    guard let asset = assets.firstObject else {
+      completion(nil)
+      return
+    }
+    let options = PHImageRequestOptions()
+    options.isNetworkAccessAllowed = true
+    options.deliveryMode = .fastFormat
+    options.resizeMode = .fast
+    let side = CGFloat(max(64, min(maxPixelSize, 2048)))
+    PHImageManager.default().requestImage(
+      for: asset,
+      targetSize: CGSize(width: side, height: side),
+      contentMode: .aspectFit,
+      options: options
+    ) { image, _ in
+      completion(image?.jpegData(compressionQuality: 0.9))
     }
   }
 
