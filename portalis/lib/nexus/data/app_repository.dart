@@ -52,6 +52,10 @@ abstract interface class AppRepository {
   /// Clears only durable device activity and bounded run history. Identity,
   /// collections, and settings are never touched.
   Future<void> clearUserActivity();
+
+  /// Renames this device. Updates the persisted identity and the live
+  /// [AppSnapshot.device] together — see ADR-0011 decision #11.
+  Future<void> renameDevice(String nickname);
 }
 
 class FrbAppRepository implements AppRepository {
@@ -113,4 +117,8 @@ class FrbAppRepository implements AppRepository {
 
   @override
   Future<void> clearUserActivity() => bridge.clearUserActivity();
+
+  @override
+  Future<void> renameDevice(String nickname) =>
+      bridge.renameDevice(nickname: nickname);
 }

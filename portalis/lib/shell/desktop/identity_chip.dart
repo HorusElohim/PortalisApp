@@ -21,19 +21,10 @@ class DesktopIdentityChip extends StatefulWidget {
 
 class _DesktopIdentityChipState extends State<DesktopIdentityChip> {
   @override
-  void initState() {
-    super.initState();
-    AppControllers.identity.load();
-  }
-
-  @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: Listenable.merge([
-          AppControllers.identity,
-          AppControllers.engine,
-        ]),
+        listenable: AppControllers.engine,
         builder: (context, _) {
-          final name = AppControllers.identity.info?.nickname;
+          final name = AppControllers.engine.state?.device.name;
           final peers = AppControllers.engine.activity.peers;
           final initials =
               name == null || name.isEmpty ? '-' : name[0].toUpperCase();

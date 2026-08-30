@@ -22,7 +22,7 @@ instead of a living SPEC.
 | [0003.5](0003.5-single-bittorrent-substrate-discovery-strategies.md) | One BitTorrent substrate, pluggable peer discovery | proposed | — |
 | [0009](0009-qr-peer-bootstrap.md) | QR-first peer bootstrap for offline sharing | proposed | — |
 | [0010](0010-frb-generated-glue-single-app-contract.md) | Generated FRB glue behind one app-facing contract | proposed | — |
-| [0011](0011-local-device-activity-ledger.md) | Local device activity and app-run ledger | proposed | — |
+| [0011](0011-local-device-activity-ledger.md) | Local device activity and app-run ledger | accepted | — |
 
 > **Note:** ADRs record decisions agreed during design sessions and remain
 > `proposed` pending owner validation at PR merge. ADR-0002 and the one-engine

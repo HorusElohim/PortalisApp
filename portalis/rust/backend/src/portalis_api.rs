@@ -259,6 +259,23 @@ pub fn set_active(active: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// Renames this device. Updates the persisted identity and the live
+/// `AppSnapshot.device` in one call — see [`AppUserSummary`] and
+/// `Nexus::rename_device` for why a separate identity path used to drift.
+///
+/// # Errors
+/// Returns a displayable reason when the runtime is not started or the
+/// persisted identity cannot be updated.
+pub fn rename_device(nickname: String) -> Result<(), String> {
+    let mut runtime = locked_runtime()?;
+    let nexus = runtime
+        .as_mut()
+        .ok_or_else(|| "start Nexus before renaming this device".to_owned())?;
+    nexus
+        .rename_device(nickname)
+        .map_err(|error| error.to_string())
+}
+
 /// The complete local diagnostics log, oldest line first — the same lines
 /// every [`crate::nexus::log::clog!`] call already writes to stderr,
 /// additionally kept in a bounded file so they survive after the console is

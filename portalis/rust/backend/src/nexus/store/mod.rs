@@ -1142,6 +1142,51 @@ mod tests {
     /// must preserve "waiting for Download" rather than reinterpret those
     /// defaults as permission to fetch.
     #[test]
+    fn a_store_written_before_schema_12_opens_with_honest_empty_activity() {
+        // A store that predates the device-activity ledger has no
+        // device_activity/app_runs rows at all — not zeroed rows, absent
+        // ones. Opening it must not fabricate a lifetime total or a "member
+        // since" date from data that was never tracked; it starts honest
+        // empty tracking (ADR-0011).
+        let scratch = Scratch::new("schema-11-predates-activity");
+        {
+            let store = Store::open(scratch.file()).expect("opens");
+            store
+                .put_collection(&COLLECTION, &collection("kept"))
+                .expect("writes a collection");
+            let write = store.database.begin_write().expect("marks schema 11");
+            {
+                write
+                    .open_table(META)
+                    .expect("meta")
+                    .insert(SCHEMA_VERSION_KEY, 11_u64)
+                    .expect("marks schema eleven");
+            }
+            write.commit().expect("commits schema-11 marker");
+        }
+
+        let migrated = Store::open(scratch.file()).expect("migrates to schema 12");
+        assert_eq!(
+            migrated.version().expect("reads version"),
+            u64::from(SCHEMA_VERSION)
+        );
+        assert_eq!(
+            migrated.device_activity().expect("reads activity"),
+            None,
+            "a schema-11 store must not appear to have tracked activity"
+        );
+        assert!(migrated.app_runs().expect("reads runs").is_empty());
+        assert_eq!(
+            migrated
+                .collection(&COLLECTION)
+                .expect("reads collection")
+                .map(|row| row.name),
+            Some("kept".to_owned()),
+            "the schema-12 migration must not touch unrelated collection rows"
+        );
+    }
+
+    #[test]
     fn schema_nine_resolved_draft_migrates_to_awaiting_selection() {
         let scratch = Scratch::new("schema-nine-awaiting");
         {
