@@ -73,7 +73,7 @@ void main() {
   /// Before receiving starts, checkboxes are a local editing decision. The
   /// only action that may cross the command boundary is the explicit Download
   /// button, which sends the final whole selection.
-  testWidgets('a torrent draft stages deselection until Download is clicked',
+  testWidgets('a resolved torrent stages deselection until Download is clicked',
       (tester) async {
     final repository = _Repository();
     final controller = AppController(repository: repository);
@@ -85,7 +85,7 @@ void main() {
         home: CollectionRoute(collection: 9, controller: controller),
       ),
     );
-    repository.states.add(_torrentState(status: 'Draft'));
+    repository.states.add(_torrentState(status: 'MetadataReady'));
     await tester.pump();
     repository.details.add(
       AppDetail(
