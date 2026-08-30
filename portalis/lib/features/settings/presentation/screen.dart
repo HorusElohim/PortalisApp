@@ -402,6 +402,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /// A [ValueRow] editing one optional integer field, wired through
+  /// [_edit] and [_parseInt] — the pattern every numeric engine setting
+  /// below (limits, timeouts, buffering) repeated with only the label,
+  /// current value, and which field to write differing between them.
+  Widget _numericRow({
+    required String label,
+    required String value,
+    String? subtitle,
+    required String title,
+    required int? current,
+    required String hint,
+    required String helper,
+    required ValueChanged<int?> onChanged,
+  }) {
+    return ValueRow(
+      label: label,
+      value: value,
+      subtitle: subtitle,
+      onTap: () async {
+        final raw = await _edit(
+          title: title,
+          current: current?.toString(),
+          hint: hint,
+          helper: helper,
+          keyboard: TextInputType.number,
+        );
+        if (raw == null) return;
+        onChanged(raw.isEmpty ? null : _parseInt(raw));
+      },
+    );
+  }
+
   /// What most people ever need: how fast, and whether to keep sharing.
   List<Widget> _basicSections(EngineSettings s) {
     return [
@@ -413,43 +445,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsSection(
         label: 'SPEED · APPLIES IMMEDIATELY',
         children: [
-          ValueRow(
+          _numericRow(
             label: 'Upload limit',
             value: formatLimit(s.uploadLimitBps),
             subtitle: 'Across all torrents, not per torrent.',
-            onTap: () async {
-              final raw = await _edit(
-                title: 'Upload limit',
-                current: s.uploadLimitBps?.toString(),
-                hint: 'bytes per second',
-                helper: 'Leave empty for unlimited.',
-                keyboard: TextInputType.number,
-              );
-              if (raw == null) return;
-              await _apply(
-                s.copyWith(uploadLimitBps: raw.isEmpty ? null : _parseInt(raw)),
-              );
-            },
+            title: 'Upload limit',
+            current: s.uploadLimitBps,
+            hint: 'bytes per second',
+            helper: 'Leave empty for unlimited.',
+            onChanged: (v) => _apply(s.copyWith(uploadLimitBps: v)),
           ),
-          ValueRow(
+          _numericRow(
             label: 'Download limit',
             value: formatLimit(s.downloadLimitBps),
             subtitle: 'Across all torrents, not per torrent.',
-            onTap: () async {
-              final raw = await _edit(
-                title: 'Download limit',
-                current: s.downloadLimitBps?.toString(),
-                hint: 'bytes per second',
-                helper: 'Leave empty for unlimited.',
-                keyboard: TextInputType.number,
-              );
-              if (raw == null) return;
-              await _apply(
-                s.copyWith(
-                  downloadLimitBps: raw.isEmpty ? null : _parseInt(raw),
-                ),
-              );
-            },
+            title: 'Download limit',
+            current: s.downloadLimitBps,
+            hint: 'bytes per second',
+            helper: 'Leave empty for unlimited.',
+            onChanged: (v) => _apply(s.copyWith(downloadLimitBps: v)),
           ),
         ],
       ),
@@ -678,111 +692,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsSection(
         label: 'PERFORMANCE · NEEDS RESTART',
         children: [
-          ValueRow(
+          _numericRow(
             label: 'Deferred writes',
             value: s.deferWritesUpToMb == null
                 ? 'Write through'
                 : '${s.deferWritesUpToMb} MB',
             subtitle: 'Buffer writes in memory instead of writing straight to '
                 'disk.',
-            onTap: () async {
-              final raw = await _edit(
-                title: 'Deferred writes',
-                current: s.deferWritesUpToMb?.toString(),
-                hint: 'megabytes',
-                helper: 'Leave empty to write straight through.',
-                keyboard: TextInputType.number,
-              );
-              if (raw == null) return;
-              await _apply(
-                s.copyWith(
-                  deferWritesUpToMb: raw.isEmpty ? null : _parseInt(raw),
-                ),
-              );
-            },
+            title: 'Deferred writes',
+            current: s.deferWritesUpToMb,
+            hint: 'megabytes',
+            helper: 'Leave empty to write straight through.',
+            onChanged: (v) => _apply(s.copyWith(deferWritesUpToMb: v)),
           ),
-          ValueRow(
+          _numericRow(
             label: 'Concurrent inits',
             value: s.concurrentInitLimit?.toString() ?? 'Engine default',
             subtitle: 'How many torrents may start up at once.',
-            onTap: () async {
-              final raw = await _edit(
-                title: 'Concurrent initialisations',
-                current: s.concurrentInitLimit?.toString(),
-                hint: 'count',
-                helper: 'Leave empty for the engine default.',
-                keyboard: TextInputType.number,
-              );
-              if (raw == null) return;
-              await _apply(
-                s.copyWith(
-                  concurrentInitLimit: raw.isEmpty ? null : _parseInt(raw),
-                ),
-              );
-            },
+            title: 'Concurrent initialisations',
+            current: s.concurrentInitLimit,
+            hint: 'count',
+            helper: 'Leave empty for the engine default.',
+            onChanged: (v) => _apply(s.copyWith(concurrentInitLimit: v)),
           ),
         ],
       ),
       SettingsSection(
         label: 'PEER TIMEOUTS · NEEDS RESTART',
         children: [
-          ValueRow(
+          _numericRow(
             label: 'Connect',
             value: _secs(s.peerConnectTimeoutSecs),
-            onTap: () async {
-              final raw = await _edit(
-                title: 'Peer connect timeout',
-                current: s.peerConnectTimeoutSecs?.toString(),
-                hint: 'seconds',
-                helper: 'Leave empty for the engine default.',
-                keyboard: TextInputType.number,
-              );
-              if (raw == null) return;
-              await _apply(
-                s.copyWith(
-                  peerConnectTimeoutSecs: raw.isEmpty ? null : _parseInt(raw),
-                ),
-              );
-            },
+            title: 'Peer connect timeout',
+            current: s.peerConnectTimeoutSecs,
+            hint: 'seconds',
+            helper: 'Leave empty for the engine default.',
+            onChanged: (v) => _apply(s.copyWith(peerConnectTimeoutSecs: v)),
           ),
-          ValueRow(
+          _numericRow(
             label: 'Read / write',
             value: _secs(s.peerReadWriteTimeoutSecs),
-            onTap: () async {
-              final raw = await _edit(
-                title: 'Peer read/write timeout',
-                current: s.peerReadWriteTimeoutSecs?.toString(),
-                hint: 'seconds',
-                helper: 'Leave empty for the engine default.',
-                keyboard: TextInputType.number,
-              );
-              if (raw == null) return;
-              await _apply(
-                s.copyWith(
-                  peerReadWriteTimeoutSecs: raw.isEmpty ? null : _parseInt(raw),
-                ),
-              );
-            },
+            title: 'Peer read/write timeout',
+            current: s.peerReadWriteTimeoutSecs,
+            hint: 'seconds',
+            helper: 'Leave empty for the engine default.',
+            onChanged: (v) => _apply(s.copyWith(peerReadWriteTimeoutSecs: v)),
           ),
-          ValueRow(
+          _numericRow(
             label: 'Keep-alive',
             value: _secs(s.peerKeepAliveIntervalSecs),
-            onTap: () async {
-              final raw = await _edit(
-                title: 'Peer keep-alive interval',
-                current: s.peerKeepAliveIntervalSecs?.toString(),
-                hint: 'seconds',
-                helper: 'Leave empty for the engine default.',
-                keyboard: TextInputType.number,
-              );
-              if (raw == null) return;
-              await _apply(
-                s.copyWith(
-                  peerKeepAliveIntervalSecs:
-                      raw.isEmpty ? null : _parseInt(raw),
-                ),
-              );
-            },
+            title: 'Peer keep-alive interval',
+            current: s.peerKeepAliveIntervalSecs,
+            hint: 'seconds',
+            helper: 'Leave empty for the engine default.',
+            onChanged: (v) => _apply(s.copyWith(peerKeepAliveIntervalSecs: v)),
           ),
         ],
       ),

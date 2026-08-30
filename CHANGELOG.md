@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.49+55
+
+- Refactored Settings further: the seven numeric engine-setting rows
+  (Upload/Download limit, Deferred writes, Concurrent inits, and the
+  three peer timeouts) each repeated the same `ValueRow` + edit-dialog
+  + parse + save pattern. Extracted into one `_numericRow()` helper.
+  Same behavior — added a regression test exercising the full
+  tap → edit → save flow through it.
+
 ## 1.0.49+54
 
 - Refactored Settings: the four gutter-padded `DestinationRow` entries
