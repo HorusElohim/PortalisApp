@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.49+53
+
+- Actually fixed Diagnostics → Share this time: the previous release's
+  `dir.create()` fix still didn't work because path_provider's macOS
+  temp directory was unreliable in practice. Share now attaches the
+  diagnostics log file directly from where the backend already writes
+  it (the same path shown under the log itself), rather than copying
+  it into a second temp file first.
+- Fixed the actual source of the log pollution reported alongside it:
+  the reconciler asserts the stored paused/running intent on every
+  poll tick regardless of whether it was already applied, but
+  librqbit's `pause()`/`unpause()` treat "already in that state" as an
+  error rather than a no-op — so every settled torrent logged a fresh
+  "torrent is already paused" or "torrent is already live" failure,
+  forever, on every tick. Pausing/restarting now checks the current
+  state first and skips the call when nothing would change.
+
 ## 1.0.49+52
 
 - Fixed Diagnostics → Share failing with

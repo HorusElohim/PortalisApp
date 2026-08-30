@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../app/app_controllers.dart';
@@ -70,16 +68,21 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
 
   Future<void> _share() async {
     final log = _log;
-    if (log == null || log.isEmpty) {
+    final path = _path;
+    if (log == null || log.isEmpty || path == null) {
       showToast(context, 'Nothing to share yet.');
       return;
     }
     try {
-      final file = await writeShareFile(log);
-      if (!mounted) return;
+      // Shared directly from where the backend already writes it, rather
+      // than copied into a second file first: getTemporaryDirectory()'s
+      // path is not guaranteed to exist on every platform (it failed with
+      // PathNotFoundException on macOS), and a copy is one more thing that
+      // can go stale or go missing for no reason the log file itself
+      // doesn't already have.
       await SharePlus.instance.share(
         ShareParams(
-          files: [XFile(file.path)],
+          files: [XFile(path)],
           subject: 'Portalis diagnostics',
           text: 'Portalis diagnostics log — shared from the device, not '
               'uploaded anywhere automatically.',
@@ -249,25 +252,4 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
       ],
     );
   }
-}
-
-/// Writes the diagnostics log to a real file for [SharePlus] to attach —
-/// some share targets (Mail, most chat apps) only offer to attach a file,
-/// not paste a block of text, and a file also carries a sensible name
-/// rather than becoming an unnamed pasted blob.
-///
-/// [getTemporaryDirectory] names a path, but does not guarantee it already
-/// exists on disk: on macOS the sandboxed
-/// `Library/Caches/<bundle id>/` directory can be reported before anything
-/// has created it, and writing straight into it failed with
-/// `PathNotFoundException: Cannot open file … No such file or directory`.
-/// `create(recursive: true)` is idempotent — a no-op when the directory is
-/// already there — so this is safe to call on every share, not just the
-/// first one after install.
-@visibleForTesting
-Future<File> writeShareFile(String log) async {
-  final dir = await getTemporaryDirectory();
-  await dir.create(recursive: true);
-  final file = File('${dir.path}/portalis-diagnostics.log');
-  return file.writeAsString(log);
 }
