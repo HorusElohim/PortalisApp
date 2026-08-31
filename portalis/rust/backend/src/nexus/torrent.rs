@@ -126,8 +126,13 @@ fn has_live_share_prerequisites(
     listener_bound: bool,
     loaded_info_hash: Option<&str>,
     requested_info_hash: &str,
+    torrent_live: bool,
+    direct_peer_count: usize,
 ) -> bool {
-    listener_bound && loaded_info_hash == Some(requested_info_hash)
+    listener_bound
+        && loaded_info_hash == Some(requested_info_hash)
+        && torrent_live
+        && direct_peer_count > 0
 }
 
 fn client_name_and_version() -> String {
@@ -545,23 +550,18 @@ pub(crate) fn magnet_for_share(
     magnet
 }
 
-/// Directly reachable LAN endpoints for this device's live BitTorrent
-/// listener. Empty is honest before the session has bound its listener.
-pub(crate) fn local_peer_hints() -> crate::nexus::substrate::PeerHints {
-    native::local_peer_hints()
-}
-
-/// True only when the active session has both a bound listener and the exact
-/// torrent identified by the persisted handle. A stored handle alone is not a
-/// usable seeder after a failed or incomplete rehydration.
+/// Direct peers for a QR only when the active session is actually serving the
+/// exact torrent. A loaded-but-paused/initializing torrent or an empty address
+/// list would produce a valid-looking QR that no receiver can use.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn share_ready(info_hash: &str) -> bool {
-    native::share_ready(info_hash)
+pub(crate) fn share_peer_hints(info_hash: &str) -> Option<crate::nexus::substrate::PeerHints> {
+    let peers = native::local_peer_hints();
+    native::share_ready(info_hash, peers.as_slice().len()).then_some(peers)
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) fn share_ready(_info_hash: &str) -> bool {
-    false
+pub(crate) fn share_peer_hints(_info_hash: &str) -> Option<crate::nexus::substrate::PeerHints> {
+    None
 }
 
 /// Snapshot of every torrent currently managed by the session. Internal:
@@ -710,16 +710,18 @@ pub(crate) async fn inspect_source(
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) async fn acquire_selection(
     source: &str,
+    descriptor: Option<&[u8]>,
     files: &[usize],
     destination: &std::path::Path,
     peer_hints: &crate::nexus::substrate::PeerHints,
 ) -> anyhow::Result<TorrentInfo> {
-    native::acquire_selection(source, files, destination, peer_hints).await
+    native::acquire_selection(source, descriptor, files, destination, peer_hints).await
 }
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) async fn acquire_selection(
     _source: &str,
+    _descriptor: Option<&[u8]>,
     _files: &[usize],
     _destination: &std::path::Path,
     _peer_hints: &crate::nexus::substrate::PeerHints,
@@ -914,7 +916,7 @@ pub mod native {
         peers
     }
 
-    pub(super) fn share_ready(info_hash: &str) -> bool {
+    pub(super) fn share_ready(info_hash: &str, direct_peer_count: usize) -> bool {
         let Some(session) = SESSION.get() else {
             return false;
         };
@@ -924,12 +926,21 @@ pub mod native {
         let loaded = session.with_torrents(|torrents| {
             for (_, torrent) in torrents {
                 if torrent.info_hash().as_string() == info_hash {
-                    return Some(torrent.info_hash().as_string());
+                    return Some((
+                        torrent.info_hash().as_string(),
+                        torrent.stats().live.is_some(),
+                    ));
                 }
             }
             None
         });
-        super::has_live_share_prerequisites(true, loaded.as_deref(), info_hash)
+        super::has_live_share_prerequisites(
+            true,
+            loaded.as_ref().map(|(hash, _)| hash.as_str()),
+            info_hash,
+            loaded.as_ref().is_some_and(|(_, live)| *live),
+            direct_peer_count,
+        )
     }
 
     fn peer_hints_for_interfaces(
@@ -943,6 +954,18 @@ pub mod native {
             .filter_map(|address| match address {
                 Addr::V4(address) if address.ip.is_private() => {
                     Some(SocketAddr::new(IpAddr::V4(address.ip), port))
+                }
+                Addr::V6(address)
+                    if !address.ip.is_unspecified()
+                        && !address.ip.is_loopback()
+                        && !address.ip.is_multicast()
+                        // Link-local IPv6 needs an interface scope identifier,
+                        // which `network-interface` does not retain in `Addr`.
+                        // Advertising it without that scope creates an endpoint
+                        // no receiver can route. ULA/global IPv6 needs no scope.
+                        && !address.ip.is_unicast_link_local() =>
+                {
+                    Some(SocketAddr::new(IpAddr::V6(address.ip), port))
                 }
                 Addr::V4(_) | Addr::V6(_) => None,
             })
@@ -2104,6 +2127,7 @@ pub mod native {
 
     pub(super) async fn acquire_selection(
         source: &str,
+        descriptor: Option<&[u8]>,
         files: &[usize],
         destination: &std::path::Path,
         peer_hints: &crate::nexus::substrate::PeerHints,
@@ -2116,20 +2140,41 @@ pub mod native {
         std::fs::create_dir_all(destination)
             .with_context(|| format!("creating the download directory {destination:?}"))?;
         let source_peers = peer_hints_from_source(source)?;
-        let peers = peer_hints
-            .as_slice()
-            .iter()
-            .copied()
-            .chain(source_peers.as_slice().iter().copied())
-            .collect::<Vec<_>>();
-        let mut options = add_opts_with_peers(
-            crate::nexus::substrate::PeerHints::new(peers)?
+        let peers = crate::nexus::substrate::PeerHints::new(
+            peer_hints
                 .as_slice()
-                .to_vec(),
-        );
+                .iter()
+                .copied()
+                .chain(source_peers.as_slice().iter().copied())
+                .collect::<Vec<_>>(),
+        )?;
+        let mut options = add_opts_with_peers(peers.as_slice().to_vec());
         options.only_files = Some(files.to_vec());
         options.output_folder = Some(destination.to_string_lossy().into_owned());
-        let response = add_managed_torrent(&session, add_torrent_for(source).await?, options)
+        let add = if let Some(descriptor) = descriptor {
+            let parsed = librqbit::torrent_from_bytes(descriptor)
+                .context("validating the persisted torrent descriptor before acquisition")?;
+            if super::is_magnet(source) {
+                let expected = librqbit::Magnet::parse(source)
+                    .context("parsing the resolved magnet before acquisition")?
+                    .as_id20()
+                    .context("resolved magnet has no BTv1 info hash")?;
+                anyhow::ensure!(
+                    parsed.info_hash == expected,
+                    "persisted descriptor does not match the resolved magnet's BTv1 info hash"
+                );
+            }
+            crate::nexus::log::clog!(
+                "torrent",
+                "starting acquisition from persisted metadata: info_hash={} peer_hints={:?}",
+                parsed.info_hash.as_string(),
+                peers.as_slice()
+            );
+            AddTorrent::from_bytes(descriptor.to_vec())
+        } else {
+            add_torrent_for(source).await?
+        };
+        let response = add_managed_torrent(&session, add, options)
             .await
             .with_context(|| format!("starting the download of {source:?}"))?;
         // An `AlreadyManaged` answer means the engine still carries this info
@@ -2888,11 +2933,43 @@ pub mod native {
         use crate::nexus::substrate::PeerHints;
 
         #[test]
-        fn share_requires_listener_and_exact_loaded_info_hash() {
-            assert!(!has_live_share_prerequisites(false, Some("aa"), "aa"));
-            assert!(!has_live_share_prerequisites(true, None, "aa"));
-            assert!(!has_live_share_prerequisites(true, Some("bb"), "aa"));
-            assert!(has_live_share_prerequisites(true, Some("aa"), "aa"));
+        fn share_requires_a_live_torrent_and_a_direct_peer() {
+            assert!(!has_live_share_prerequisites(
+                false,
+                Some("aa"),
+                "aa",
+                true,
+                1
+            ));
+            assert!(!has_live_share_prerequisites(true, None, "aa", true, 1));
+            assert!(!has_live_share_prerequisites(
+                true,
+                Some("bb"),
+                "aa",
+                true,
+                1
+            ));
+            assert!(!has_live_share_prerequisites(
+                true,
+                Some("aa"),
+                "aa",
+                false,
+                1
+            ));
+            assert!(!has_live_share_prerequisites(
+                true,
+                Some("aa"),
+                "aa",
+                true,
+                0
+            ));
+            assert!(has_live_share_prerequisites(
+                true,
+                Some("aa"),
+                "aa",
+                true,
+                1
+            ));
         }
 
         #[test]
@@ -2941,7 +3018,7 @@ pub mod native {
         use super::peer_hints_for_interfaces;
 
         #[test]
-        fn peer_hints_use_private_external_interfaces_and_the_bound_port() {
+        fn peer_hints_use_routable_external_interfaces_and_the_bound_port() {
             let peers = peer_hints_for_interfaces(
                 61234,
                 [
@@ -2962,12 +3039,23 @@ pub mod native {
                         3,
                         false,
                     ),
+                    NetworkInterface::new_afinet6(
+                        "en0",
+                        "fd00::42".parse().expect("a LAN IPv6 address"),
+                        None,
+                        None,
+                        2,
+                        false,
+                    ),
                 ],
             );
 
             assert_eq!(
                 peers.as_slice(),
-                ["192.168.1.42:61234".parse().expect("the bound LAN peer")]
+                [
+                    "192.168.1.42:61234".parse().expect("the IPv4 LAN peer"),
+                    "[fd00::42]:61234".parse().expect("the IPv6 LAN peer"),
+                ]
             );
         }
     }

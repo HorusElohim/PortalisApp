@@ -391,8 +391,11 @@ async fn acquire(
 ) -> anyhow::Result<()> {
     let destination = crate::nexus::torrent::download_dir();
     let peer_hints = crate::nexus::torrent::peer_hints_from_source(source)?;
+    let descriptor = store
+        .torrent_import_descriptor(key)?
+        .ok_or_else(|| anyhow::anyhow!("resolved torrent has no persisted descriptor"))?;
     let info = substrate
-        .acquire_selection(source, files, &destination, &peer_hints)
+        .acquire_selection(source, Some(&descriptor), files, &destination, &peer_hints)
         .await?;
 
     // Recorded last, and only once the download is genuinely started: the

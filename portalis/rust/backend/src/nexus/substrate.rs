@@ -60,7 +60,8 @@ pub trait Substrate: Send + Sync {
     async fn inspect(&self, source: &str, peer_hints: &PeerHints) -> anyhow::Result<Inspected>;
 
     /// Start fetching exactly `files` (indices into [`Inspected::files`])
-    /// into `destination`.
+    /// into `destination`. `descriptor` is the immutable metadata already
+    /// returned by [`Self::inspect`], when that phase has completed.
     ///
     /// An empty selection is a caller error, not an instruction to fetch
     /// everything: "download nothing" and "download all of it" must never be
@@ -68,6 +69,7 @@ pub trait Substrate: Send + Sync {
     async fn acquire_selection(
         &self,
         source: &str,
+        descriptor: Option<&[u8]>,
         files: &[usize],
         destination: &std::path::Path,
         peer_hints: &PeerHints,
@@ -297,11 +299,13 @@ impl Substrate for Torrents {
     async fn acquire_selection(
         &self,
         source: &str,
+        descriptor: Option<&[u8]>,
         files: &[usize],
         destination: &std::path::Path,
         peer_hints: &PeerHints,
     ) -> anyhow::Result<TorrentInfo> {
-        crate::nexus::torrent::acquire_selection(source, files, destination, peer_hints).await
+        crate::nexus::torrent::acquire_selection(source, descriptor, files, destination, peer_hints)
+            .await
     }
 
     async fn set_paused(&self, handle: &str, paused: bool) -> anyhow::Result<()> {
@@ -352,6 +356,8 @@ pub(crate) struct Recorded {
     pub(crate) published: Mutex<Vec<String>>,
     /// Every `(source, files, destination)` a selection was started for.
     pub(crate) selections: Mutex<Vec<(String, Vec<usize>, std::path::PathBuf)>>,
+    /// The already-resolved descriptor supplied to each acquisition.
+    pub(crate) acquisition_descriptors: Mutex<Vec<Option<Vec<u8>>>>,
     /// Every source `inspect` was asked about, in order.
     pub(crate) inspected: Mutex<Vec<String>>,
     /// Every `(handle, paused)` the engine was told to apply.
@@ -423,10 +429,15 @@ impl Substrate for Recorded {
     async fn acquire_selection(
         &self,
         source: &str,
+        descriptor: Option<&[u8]>,
         files: &[usize],
         destination: &std::path::Path,
         _peer_hints: &PeerHints,
     ) -> anyhow::Result<TorrentInfo> {
+        self.acquisition_descriptors
+            .lock()
+            .unwrap()
+            .push(descriptor.map(<[u8]>::to_vec));
         self.selections.lock().unwrap().push((
             source.to_string(),
             files.to_vec(),
