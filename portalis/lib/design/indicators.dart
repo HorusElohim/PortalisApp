@@ -6,6 +6,43 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'formatters.dart';
 
+/// A consistent, explicit wait state for work whose duration is unknown.
+///
+/// Progress bars belong to measured transfer progress; this spinner says the
+/// app is still waiting for an answer without pretending to know a percentage.
+class WaitingIndicator extends StatelessWidget {
+  const WaitingIndicator(
+      {super.key, required this.message, this.compact = false});
+
+  final String message;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: message,
+        liveRegion: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: compact ? 22 : 30,
+              height: compact ? 22 : 30,
+              child: CircularProgressIndicator(
+                strokeWidth: compact ? 2 : 3,
+                color: AppColors.signal,
+              ),
+            ),
+            SizedBox(height: compact ? 8 : 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: AppText.secondary(color: AppColors.textDim),
+            ),
+          ],
+        ),
+      );
+}
+
 /// Pulsing "live copies" indicator dot, used next to a copies label.
 class LiveDot extends StatefulWidget {
   const LiveDot({super.key, required this.color, this.size = 8});

@@ -441,6 +441,7 @@ fn republish(store: &Store, states: &watch::Sender<PortalisState>, handle: Handl
         // only has to be right about what the store knows.
         let status = crate::nexus::projection::state::status_for(
             crate::nexus::projection::state::StatusFacts {
+                completed: stored.completed_at.is_some(),
                 carried,
                 publishing: false,
                 importing: true,

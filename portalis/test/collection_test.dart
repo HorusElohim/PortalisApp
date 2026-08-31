@@ -43,12 +43,6 @@ class _FixedSource extends CollectionSource with ChangeNotifier {
       commands.add('addMedia');
 
   @override
-  Future<int> fetchMedia(String id) async {
-    commands.add('fetch');
-    return 0;
-  }
-
-  @override
   Future<void> restart(String id) async => commands.add('restart');
 
   @override
@@ -88,7 +82,6 @@ void main() {
               busy: false,
               onCommand: (_) {},
               onAddMedia: () {},
-              onFetch: () {},
               showCommands: false,
             ),
           ),

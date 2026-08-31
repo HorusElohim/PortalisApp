@@ -179,12 +179,14 @@ pub fn status_for(facts: StatusFacts<'_>) -> Status {
             Status::Downloading
         };
     }
-    // An owner with its original referenced sources and a durable torrent
-    // handle already has every byte. During startup the engine has not yet
-    // reported its first live reading, so treating that temporary absence as a
-    // receiver download makes a reopened share look like it is downloading
-    // its own media.
-
+    // The engine has not reported since this process started, but it already
+    // recorded that this collection completed in a previous one. A substrate
+    // handle is process-local liveness, not durable evidence of an active
+    // transfer, so it must not turn a verified receiver import back into a
+    // download request during hydration.
+    if facts.completed {
+        return Status::Available;
+    }
     // Carried, but nothing has reported on it yet — the first poll is at most
     // a second away and says which of the three above it really is. Claiming
     // Preparing here is what made a completed torrent look unfinished for as
@@ -212,6 +214,9 @@ pub struct StatusFacts<'a> {
     /// Durable user intent. It is one enum specifically so impossible pairs
     /// such as "paused draft" cannot enter the projection.
     pub lifecycle: crate::nexus::core::lifecycle::Lifecycle,
+    /// The engine declared this collection complete in an earlier process.
+    /// A current live reading remains more authoritative when it exists.
+    pub completed: bool,
     /// Something is carrying this under a substrate handle.
     pub carried: bool,
     /// Has native sources and no revision yet.
@@ -233,6 +238,7 @@ impl StatusFacts<'_> {
     pub const fn from_lifecycle(lifecycle: crate::nexus::core::lifecycle::Lifecycle) -> Self {
         Self {
             lifecycle,
+            completed: false,
             carried: false,
             publishing: false,
             importing: false,
@@ -566,6 +572,7 @@ mod status_tests {
             lifecycle: crate::nexus::core::lifecycle::Lifecycle::TorrentRequested {
                 activity: crate::nexus::core::lifecycle::Activity::Running,
             },
+            completed: false,
             carried: false,
             publishing: false,
             importing: false,

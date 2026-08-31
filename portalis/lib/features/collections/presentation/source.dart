@@ -28,7 +28,6 @@ abstract class CollectionSource {
   List<PeerObservation> peerHistoryFor(String id);
 
   Future<void> addMedia(String id, String label, List<PickedFile> files);
-  Future<int> fetchMedia(String id);
   Future<void> restart(String id);
   Future<void> pause(String id);
   Future<void> delete(String id);

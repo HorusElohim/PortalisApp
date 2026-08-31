@@ -681,6 +681,7 @@ fn status_of_for(info: &TorrentInfo, paused: bool, local_source: bool) -> Status
         lifecycle: crate::nexus::store::records::StoredLifecycle::TorrentRequested {
             activity: crate::nexus::store::records::StoredActivity::Running,
         },
+        completed: false,
         carried: true,
         publishing: false,
         importing: false,

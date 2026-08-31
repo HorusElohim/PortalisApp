@@ -272,6 +272,7 @@ impl LocalCollections {
             // within a second.
             let status = crate::nexus::projection::state::status_for(
                 crate::nexus::projection::state::StatusFacts {
+                    completed: stored.completed_at.is_some(),
                     carried: stored.substrate_handle.is_some(),
                     publishing: !local_sources.is_empty() && revision == 0,
                     importing: torrent_import,
@@ -873,6 +874,7 @@ impl Nexus {
         let held = self.holdings.get(key);
         let status = crate::nexus::projection::state::status_for(
             crate::nexus::projection::state::StatusFacts {
+                completed: stored.completed_at.is_some(),
                 carried: stored.substrate_handle.is_some(),
                 publishing: !stored.sources.is_empty() && revision == 0,
                 importing,
@@ -1545,6 +1547,7 @@ async fn publish_pending_collections(
                         let lifecycle = stored.lifecycle;
                         crate::nexus::projection::state::status_for(
                             crate::nexus::projection::state::StatusFacts {
+                                completed: stored.completed_at.is_some(),
                                 carried: stored.substrate_handle.is_some(),
                                 publishing: false,
                                 importing: false,
@@ -1876,6 +1879,7 @@ mod tests {
     use crate::nexus::core::supervisor::Shutdown;
     use crate::nexus::core::transfers::{self as transfers, Holdings};
     use crate::nexus::projection::state::{CollectionState, Role, Status};
+    use crate::nexus::store::records::StoredImportEntry;
 
     /// A directory that removes itself.
     struct Scratch(std::path::PathBuf);
@@ -3373,6 +3377,61 @@ mod tests {
             refused.to_string().contains("upgrade"),
             "the person is told what to do: {refused}"
         );
+    }
+
+    /// A receiver can finish while the app is open, then restart before the
+    /// substrate has published its first reading. The durable completion is
+    /// already authoritative at hydration time; presenting the stale process
+    /// handle as an active download turns a completed QR import back into a
+    /// download request until that reading arrives (or forever if it does
+    /// not).
+    #[tokio::test]
+    async fn a_completed_receiver_import_is_available_when_the_app_reopens() {
+        let scratch = Scratch::new("completed-receiver-restart");
+        let store = Store::open(scratch.0.join("portalis.redb")).expect("opens store");
+        store
+            .put_collection(
+                b"received",
+                &StoredCollection {
+                    name: "Jam Jar".to_owned(),
+                    role: StoredRole::Member,
+                    content_key: [0; 32],
+                    media_path: scratch.0.join("downloads").to_string_lossy().into_owned(),
+                    sources: Vec::new(),
+                    lifecycle: StoredLifecycle::TorrentRequested {
+                        activity: StoredActivity::Running,
+                    },
+                    on_disk_bytes: 41 * 1024 * 1024,
+                    substrate_handle: Some("a1b2".to_owned()),
+                    started_at: Some(1),
+                    completed_at: Some(2),
+                },
+            )
+            .expect("records the completed import");
+        store
+            .put_torrent_import(b"received", "magnet:?xt=urn:btih:a1b2")
+            .expect("records its source");
+        store
+            .put_torrent_import_entries(
+                b"received",
+                &[StoredImportEntry {
+                    label: "IMG_8416.HEIC".to_owned(),
+                    bytes: 41 * 1024 * 1024,
+                    selected: true,
+                    native_location: None,
+                }],
+            )
+            .expect("records its selected entry");
+        drop(store);
+
+        let reopened = open(&scratch);
+
+        assert_eq!(
+            reopened.state().collections[0].status,
+            Status::Available,
+            "a completed receiver import must not return as an active download"
+        );
+        reopened.close().await;
     }
 
     /// The transfer poller is the one worker that turns a substrate reading
