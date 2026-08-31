@@ -113,15 +113,13 @@ class TransferGraph extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: CustomPaint(
-                      painter: _TransferGraphPainter(
-                        history: graph.points,
-                        startedAt: graph.start,
-                        endedAt: graph.end,
-                        maxRate: graph.maxRate,
-                        minPositiveRate: graph.minPositiveRate,
-                        color: color,
-                      ),
+                    child: _InteractiveTransferChart(
+                      points: graph.points,
+                      startedAt: graph.start,
+                      endedAt: graph.end,
+                      maxRate: graph.maxRate,
+                      minPositiveRate: graph.minPositiveRate,
+                      color: color,
                     ),
                   ),
                 ],
@@ -544,6 +542,137 @@ class _RateAxis extends StatelessWidget {
             style: monoLabel(size: 8, color: AppColors.textGhost),
           ),
         ],
+      );
+}
+
+/// Wraps the chart with a press-and-drag detail tooltip: the nearest sample's
+/// exact rate and timestamp, so a person is not left estimating a value from
+/// where a line sits on a logarithmic axis. The chart itself is unchanged
+/// while nothing is pressed.
+class _InteractiveTransferChart extends StatefulWidget {
+  const _InteractiveTransferChart({
+    required this.points,
+    required this.startedAt,
+    required this.endedAt,
+    required this.maxRate,
+    required this.minPositiveRate,
+    required this.color,
+  });
+
+  final List<TransferPoint> points;
+  final DateTime startedAt;
+  final DateTime endedAt;
+  final int maxRate;
+  final int minPositiveRate;
+  final Color color;
+
+  @override
+  State<_InteractiveTransferChart> createState() =>
+      _InteractiveTransferChartState();
+}
+
+class _InteractiveTransferChartState extends State<_InteractiveTransferChart> {
+  TransferPoint? _selected;
+
+  void _selectAt(double dx, double width) {
+    final points = widget.points;
+    if (points.isEmpty || width <= 0) return;
+    final span = widget.endedAt.difference(widget.startedAt).inMicroseconds;
+    final fraction = (dx / width).clamp(0.0, 1.0);
+    final target = span <= 0
+        ? widget.startedAt
+        : widget.startedAt
+            .add(Duration(microseconds: (span * fraction).round()));
+    var nearest = points.first;
+    var nearestGap = (nearest.at.difference(target)).abs();
+    for (final point in points.skip(1)) {
+      final gap = (point.at.difference(target)).abs();
+      if (gap < nearestGap) {
+        nearest = point;
+        nearestGap = gap;
+      }
+    }
+    setState(() => _selected = nearest);
+  }
+
+  void _clear() => setState(() => _selected = null);
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          return GestureDetector(
+            key: const Key('transferGraphChart'),
+            behavior: HitTestBehavior.opaque,
+            onPanDown: (details) => _selectAt(details.localPosition.dx, width),
+            onPanUpdate: (details) =>
+                _selectAt(details.localPosition.dx, width),
+            onPanEnd: (_) => _clear(),
+            onPanCancel: _clear,
+            onTapDown: (details) => _selectAt(details.localPosition.dx, width),
+            onTapUp: (_) => _clear(),
+            onTapCancel: _clear,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _TransferGraphPainter(
+                      history: widget.points,
+                      startedAt: widget.startedAt,
+                      endedAt: widget.endedAt,
+                      maxRate: widget.maxRate,
+                      minPositiveRate: widget.minPositiveRate,
+                      color: widget.color,
+                    ),
+                  ),
+                ),
+                if (_selected != null)
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    child: _TransferGraphTooltip(
+                      key: const Key('transferGraphTooltip'),
+                      point: _selected!,
+                      color: widget.color,
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      );
+}
+
+class _TransferGraphTooltip extends StatelessWidget {
+  const _TransferGraphTooltip(
+      {super.key, required this.point, required this.color});
+
+  final TransferPoint point;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceRaised,
+          borderRadius: BorderRadius.circular(AppRadius.tight),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${formatRate(point.downBytesPerSecond)} down'
+              '${point.upBytesPerSecond > 0 ? ' · ${formatRate(point.upBytesPerSecond)} up' : ''}',
+              style: monoLabel(size: 10, color: color, letterSpacing: 0),
+            ),
+            Text(
+              _formatTransferDateTime(point.at),
+              style: monoLabel(size: 8, color: AppColors.textGhost),
+            ),
+          ],
+        ),
       );
 }
 

@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import '../../../design/theme.dart';
 import '../../../design/formatters.dart';
 import '../../media/presentation/thumbnail.dart';
+import '../../media/application/formats.dart';
 import '../domain/collection.dart';
+import '../domain/collection_state.dart';
 import 'commands.dart';
 import 'peer_color.dart';
 import '../../../design/indicators.dart';
@@ -90,7 +92,7 @@ class _CollectionRowState extends State<CollectionRow> {
           width: 52,
           height: 52,
           child: torrent
-              ? _TorrentCollectionTile(accent: accent)
+              ? _TorrentCollectionTile(accent: accent, collection: collection)
               : _SharedCollectionTile(
                   collection: collection,
                   accent: accent,
@@ -159,14 +161,41 @@ class _CollectionRowState extends State<CollectionRow> {
       // Mint here is earned: this device is genuinely serving the collection.
       return StatusBadge(label: 'SHARING', color: accent);
     }
+    if (collection.isPaused) {
+      return StatusBadge(
+        label: collection.lifecycle.label(collection.state),
+        icon: Icons.pause,
+      );
+    }
+    if (_needsAttention(collection.lifecycle)) {
+      return StatusBadge(
+        label: collection.lifecycle.label(collection.state),
+        color: AppColors.danger,
+        icon: Icons.error_outline,
+      );
+    }
     return StatusBadge(label: collection.lifecycle.label(collection.state));
   }
+
+  /// Lifecycles the backend reports only when something is genuinely wrong —
+  /// not merely waiting, resolving, or paused. These get the danger colour
+  /// and an icon so they cannot be mistaken for routine idle states.
+  bool _needsAttention(CollectionState lifecycle) => switch (lifecycle) {
+        CollectionState.accessRemoved ||
+        CollectionState.cannotVerify ||
+        CollectionState.conflictingHistory ||
+        CollectionState.needsNewerVersion =>
+          true,
+        _ => false,
+      };
 }
 
 class _TorrentCollectionTile extends StatelessWidget {
-  const _TorrentCollectionTile({required this.accent});
+  const _TorrentCollectionTile(
+      {required this.accent, required this.collection});
 
   final Color accent;
+  final Collection collection;
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
@@ -190,9 +219,26 @@ class _TorrentCollectionTile extends StatelessWidget {
           ],
         ),
         child: Center(
-          child: Icon(Icons.download_outlined, size: 22, color: accent),
+          child: Icon(_glyph, size: 22, color: accent),
         ),
       );
+
+  /// The dominant content type once metadata has named files, so a video
+  /// torrent reads as a film reel rather than the same generic arrow every
+  /// other torrent shows. Falls back to the plain download glyph before
+  /// metadata resolves or when the files present no single dominant kind.
+  IconData get _glyph {
+    final media = collection.media;
+    if (media.isEmpty) return Icons.download_outlined;
+    final counts = <MediaKind, int>{};
+    for (final item in media) {
+      final kind = kindOf(item.label);
+      counts[kind] = (counts[kind] ?? 0) + 1;
+    }
+    final dominant =
+        counts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+    return iconFor(dominant);
+  }
 }
 
 class _SharedCollectionTile extends StatelessWidget {

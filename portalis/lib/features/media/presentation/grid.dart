@@ -34,14 +34,22 @@ class MediaGrid extends StatelessWidget {
   final ValueChanged<MediaItem>? onToggleWanted;
 
   @override
-  Widget build(BuildContext context) => GridView.builder(
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) => _grid(constraints.maxWidth),
+      );
+
+  /// Tiles stay thumbnail-sized on a phone-width layout, but a card that has
+  /// the room to show them larger should use it rather than tiling the same
+  /// small squares across the extra width.
+  Widget _grid(double width) => GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         // A fixed column count still made previews enormous on a wide Home
         // card. Cap each tile instead, keeping the media and its piece frame
-        // deliberately thumbnail-sized at every window width.
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 84,
+        // deliberately thumbnail-sized at phone width, and modestly larger
+        // once there is width to spare.
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: width >= 640 ? 112 : 84,
           mainAxisSpacing: 7,
           crossAxisSpacing: 6,
           childAspectRatio: 0.78,
