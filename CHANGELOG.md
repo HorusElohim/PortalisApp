@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed the Android release build: `flutter_local_notifications` (added for
+  transfer completion feedback) requires Java 8+ core library desugaring,
+  which `:app` did not enable, failing `checkReleaseAarMetadata` in CI. Turned
+  on `coreLibraryDesugaringEnabled` and added the `desugar_jdk_libs` dependency
+  it needs.
 - Fixed the inconsistent "resolving metadata" / "waiting for sender" QR start
   on same-network transfers. Two real bugs, both in the QR itself:
   - The QR's direct-peer hint (`x.pe`) only ever advertised private IPv4
