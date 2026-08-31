@@ -2010,35 +2010,56 @@ pub mod native {
     /// Read here rather than handed over as a path because a sandboxed app
     /// may open a file the person chose and still not be able to hand that
     /// path to something that opens it again later.
+    const EXACT_SOURCE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
     async fn add_torrent_for(source: &str) -> anyhow::Result<AddTorrent<'static>> {
+        add_torrent_for_with_exact_source_timeout(source, EXACT_SOURCE_TIMEOUT).await
+    }
+
+    async fn add_torrent_for_with_exact_source_timeout(
+        source: &str,
+        exact_source_timeout: std::time::Duration,
+    ) -> anyhow::Result<AddTorrent<'static>> {
         if let Some(descriptor_url) = torrent_descriptor_url_from_magnet(source) {
-            let expected = librqbit::Magnet::parse(source)
-                .context("parsing magnet exact-source metadata")?
-                .as_id20()
-                .context("magnet exact-source metadata has no BTv1 info hash")?;
-            let response = reqwest::get(&descriptor_url)
-                .await
-                .with_context(|| format!("fetching magnet xs descriptor {descriptor_url:?}"))?;
-            anyhow::ensure!(
-                response.status().is_success(),
-                "magnet xs descriptor {descriptor_url:?} returned {}",
-                response.status()
-            );
-            let bytes = response
-                .bytes()
-                .await
-                .with_context(|| format!("reading magnet xs descriptor {descriptor_url:?}"))?;
-            let parsed =
-                librqbit::torrent_from_bytes(&bytes).context("decoding magnet xs descriptor")?;
-            anyhow::ensure!(
-                parsed.info_hash == expected,
-                "magnet xs descriptor does not match the magnet's BTv1 info hash"
-            );
-            crate::nexus::log::clog!(
-                "torrent",
-                "resolving magnet metadata through xs descriptor {descriptor_url:?}"
-            );
-            return Ok(AddTorrent::from_bytes(bytes.to_vec()));
+            let exact_source = async {
+                let expected = librqbit::Magnet::parse(source)
+                    .context("parsing magnet exact-source metadata")?
+                    .as_id20()
+                    .context("magnet exact-source metadata has no BTv1 info hash")?;
+                let response = reqwest::get(&descriptor_url)
+                    .await
+                    .context("fetching magnet exact-source descriptor")?;
+                anyhow::ensure!(
+                    response.status().is_success(),
+                    "exact-source descriptor returned {}",
+                    response.status()
+                );
+                let bytes = response
+                    .bytes()
+                    .await
+                    .context("reading magnet exact-source descriptor")?;
+                let parsed = librqbit::torrent_from_bytes(&bytes)
+                    .context("decoding magnet exact-source descriptor")?;
+                anyhow::ensure!(
+                    parsed.info_hash == expected,
+                    "exact-source descriptor does not match the magnet's BTv1 info hash"
+                );
+                anyhow::Ok(AddTorrent::from_bytes(bytes.to_vec()))
+            };
+            let exact_source = tokio::time::timeout(exact_source_timeout, exact_source).await;
+            match exact_source {
+                Ok(Ok(add)) => {
+                    crate::nexus::log::clog!(
+                        "torrent",
+                        "resolving magnet metadata through its exact-source descriptor"
+                    );
+                    return Ok(add);
+                }
+                Ok(Err(_)) | Err(_) => crate::nexus::log::clog!(
+                    "torrent",
+                    "exact-source descriptor unavailable; falling back to DHT, trackers, and direct peers"
+                ),
+            }
         }
         if super::is_torrent_path(source) {
             let bytes = std::fs::read(source)
@@ -2072,10 +2093,14 @@ pub mod native {
                 .to_vec(),
         );
         options.list_only = true;
-        let response = tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            session.add_torrent(add_torrent_for(source).await?, Some(options)),
-        )
+        // The exact-source HTTP hint is part of resolution too. Keeping its
+        // await inside this bound prevents a dead `xs` server from leaving the
+        // collection in ResolvingMetadata forever before the torrent engine
+        // (and its DHT/trackers/direct peers) even gets a chance to run.
+        let response = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            let add = add_torrent_for(source).await?;
+            session.add_torrent(add, Some(options)).await
+        })
         .await
         .context("timed out after 30 seconds while resolving torrent metadata")?
         .with_context(|| format!("resolving what {source:?} contains"))?;
@@ -2929,8 +2954,77 @@ pub mod native {
     #[cfg(test)]
     mod live_network_tests {
         use super::super::has_live_share_prerequisites;
-        use super::inspect_source;
+        use super::{
+            add_torrent_for, add_torrent_for_with_exact_source_timeout, inspect_source, session,
+        };
         use crate::nexus::substrate::PeerHints;
+        use librqbit::AddTorrent;
+
+        /// `xs` is an optional exact-source hint, never the magnet's only
+        /// discovery path. A stale descriptor host must not make an otherwise
+        /// healthy public magnet fail before DHT/trackers are even tried.
+        #[tokio::test]
+        async fn an_unavailable_exact_source_falls_back_to_the_magnet() {
+            let _state = crate::nexus::paths::redirect_to_temp();
+            let _session = session().await.expect("installs the TLS provider");
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("binds a local dead descriptor server");
+            let port = listener.local_addr().expect("local address").port();
+            let server = tokio::spawn(async move {
+                use tokio::io::AsyncWriteExt;
+                let (mut stream, _) = listener.accept().await.expect("accepts one request");
+                stream
+                    .write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n")
+                    .await
+                    .expect("writes the unavailable response");
+            });
+            let magnet = format!(
+                "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&xs=http%3A%2F%2F127.0.0.1%3A{port}%2Fdead.torrent"
+            );
+
+            let add = add_torrent_for(&magnet)
+                .await
+                .expect("falls back to ordinary magnet resolution");
+            match add {
+                AddTorrent::Url(source) => assert_eq!(source, magnet),
+                AddTorrent::TorrentFileBytes(_) => {
+                    panic!("an unavailable descriptor must not become torrent bytes")
+                }
+            }
+            server.await.expect("descriptor server exits");
+        }
+
+        #[tokio::test]
+        async fn a_hung_exact_source_does_not_hold_metadata_resolution_forever() {
+            let _state = crate::nexus::paths::redirect_to_temp();
+            let _session = session().await.expect("installs the TLS provider");
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("binds a local hanging descriptor server");
+            let port = listener.local_addr().expect("local address").port();
+            let server = tokio::spawn(async move {
+                let (_stream, _) = listener.accept().await.expect("accepts one request");
+                std::future::pending::<()>().await;
+            });
+            let magnet = format!(
+                "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&xs=http%3A%2F%2F127.0.0.1%3A{port}%2Fhung.torrent"
+            );
+
+            let add = add_torrent_for_with_exact_source_timeout(
+                &magnet,
+                std::time::Duration::from_millis(30),
+            )
+            .await
+            .expect("times out the hint and falls back to the magnet");
+            match add {
+                AddTorrent::Url(source) => assert_eq!(source, magnet),
+                AddTorrent::TorrentFileBytes(_) => {
+                    panic!("a hung descriptor must not become torrent bytes")
+                }
+            }
+            server.abort();
+        }
 
         #[test]
         fn share_requires_a_live_torrent_and_a_direct_peer() {
@@ -2977,17 +3071,18 @@ pub mod native {
             assert_eq!(super::super::client_name_and_version(), "Portalis 0.1.49");
         }
 
-        /// Reproduces the exact end-user report: importing the Cosmos
-        /// Laundromat magnet should resolve a file list through its `xs`
-        /// HTTPS descriptor fallback. `#[ignore]`d because it needs a real
-        /// network; run explicitly with `cargo test -- --ignored`.
+        /// The default exercises an HTTPS exact-source descriptor; setting
+        /// `PORTALIS_TEST_MAGNET` exercises any ordinary public magnet through
+        /// its real DHT/trackers. Ignored because either path needs a network.
         #[tokio::test]
         #[ignore]
-        async fn cosmos_laundromat_magnet_resolves_via_xs_descriptor() {
+        async fn a_real_magnet_resolves_metadata() {
             let _state = crate::nexus::paths::redirect_to_temp();
-            const MAGNET: &str = "magnet:?xt=urn:btih:c9e15763f722f23e98a29decdfae341b98d53056&dn=Cosmos+Laundromat&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2F&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fcosmos-laundromat.torrent";
+            const DEFAULT_MAGNET: &str = "magnet:?xt=urn:btih:c9e15763f722f23e98a29decdfae341b98d53056&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fcosmos-laundromat.torrent";
+            let magnet =
+                std::env::var("PORTALIS_TEST_MAGNET").unwrap_or_else(|_| DEFAULT_MAGNET.to_owned());
 
-            let result = inspect_source(MAGNET, &PeerHints::default()).await;
+            let result = inspect_source(&magnet, &PeerHints::default()).await;
             match &result {
                 Ok(inspected) => {
                     eprintln!(
@@ -3001,7 +3096,7 @@ pub mod native {
                     eprintln!("inspect_source FAILED: {error:#}");
                 }
             }
-            let inspected = result.expect("resolves via xs descriptor fallback");
+            let inspected = result.expect("resolves real magnet metadata");
             assert!(
                 !inspected.files.is_empty(),
                 "expected a non-empty file list"
