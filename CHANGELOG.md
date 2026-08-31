@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed ordinary public magnets remaining in **ResolvingMetadata** when an
+  optional `xs` exact-source descriptor URL was stale, returned an error, or
+  stopped responding. Exact-source lookup is now bounded to five seconds and
+  treated as a hint: on any failure Portalis continues through the magnet's
+  DHT, trackers, and direct peers. The complete metadata operation remains
+  bounded too, so an HTTP hint cannot block the retry state indefinitely.
 - Torrent collection rows now show a format-aware icon (film reel, image,
   archive, etc.) once metadata has resolved a dominant file type, instead of
   the same generic download arrow for every torrent.
