@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- Fixed the inconsistent "resolving metadata" / "waiting for sender" QR start
+  on same-network transfers. Two real bugs, both in the QR itself:
+  - The QR's direct-peer hint (`x.pe`) only ever advertised private IPv4
+    interfaces. On IPv6-only or dual-stack local networks the receiver had no
+    usable hint and had to fall back to DHT/trackers, which a private,
+    unlisted collection has neither — this is the "waiting for sender without
+    any reason" case. Routable IPv6 (ULA/global) LAN interfaces are now
+    included too; link-local IPv6 is still excluded because it needs an
+    interface scope Portalis cannot express in a peer hint.
+  - The QR could be shown while the sender's torrent existed in the session
+    but was not actually live (still initializing, or paused) or while the
+    device had no usable direct-peer address at all — a QR that looked valid
+    but named a sender nobody could reach, causing intermittent stalls in
+    metadata resolution. Sharing now requires a bound listener, the exact
+    torrent loaded and live, and at least one direct peer hint before a QR
+    is produced.
+  - Starting the receiver's download now reuses the exact `.torrent`
+    descriptor already obtained while resolving metadata, instead of
+    re-deriving it from the magnet a second time. This removes one avoidable
+    metadata round-trip from every QR-initiated download.
+
 ## 1.0.49+59
 
 - Fixed a source-seeding race: the transfer poller could forget a newly

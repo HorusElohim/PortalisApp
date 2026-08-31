@@ -1370,10 +1370,9 @@ impl Nexus {
         if handle.len() != 40 || !handle.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Ok(None);
         }
-        if !crate::nexus::torrent::share_ready(&handle) {
+        let Some(peer_hints) = crate::nexus::torrent::share_peer_hints(&handle) else {
             return Ok(None);
-        }
-        let peer_hints = crate::nexus::torrent::local_peer_hints();
+        };
         crate::nexus::log::clog!(
             "nexus",
             "share QR for {collection:?}: info_hash={handle}, direct_peer_hints={:?}",
@@ -3328,6 +3327,11 @@ mod tests {
         let (source, files, _) = selections.first().expect("one download started");
         assert_eq!(source, "magnet:?xt=urn:btih:abc123");
         assert_eq!(files, &[1], "only the confirmed file, by its index");
+        assert_eq!(
+            substrate.acquisition_descriptors.lock().unwrap().as_slice(),
+            [Some(b"descriptor".to_vec())],
+            "starting a resolved import must not ask the sender for metadata a second time"
+        );
         nexus.close().await;
     }
 
