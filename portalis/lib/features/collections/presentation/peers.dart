@@ -152,11 +152,16 @@ class PeerCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              ),
+              // A moving connection pulses so the live/idle split is legible
+              // at a glance, not just from the numbers beneath it.
+              peer.isMoving
+                  ? LiveDot(color: color, size: 8)
+                  : Container(
+                      width: 8,
+                      height: 8,
+                      decoration:
+                          BoxDecoration(color: color, shape: BoxShape.circle),
+                    ),
               const SizedBox(width: 9),
               Expanded(
                 child: Column(

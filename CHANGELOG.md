@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Torrent collection rows now show a format-aware icon (film reel, image,
+  archive, etc.) once metadata has resolved a dominant file type, instead of
+  the same generic download arrow for every torrent.
+- A moving peer connection's status dot now pulses, matching the live-copies
+  indicator elsewhere; an idle connection stays a plain static dot, so the
+  live/idle split reads at a glance instead of only from the numbers.
+- The transfer graph now supports press-and-drag: holding a finger or cursor
+  on the chart reveals the exact rate and timestamp of the nearest sample.
+- Paused and attention-needing collection statuses (access removed, cannot
+  verify, conflicting history, needs newer version) now show a distinct icon
+  and, for the attention-needing group, the danger colour, instead of being
+  visually identical to a routine idle badge.
+- The media grid's tile size now grows modestly on wide layouts (≥640px)
+  instead of tiling the same phone-sized thumbnails across the extra space.
 - Fixed the Android release build: `flutter_local_notifications` (added for
   transfer completion feedback) requires Java 8+ core library desugaring,
   which `:app` did not enable, failing `checkReleaseAarMetadata` in CI. Turned

@@ -186,6 +186,7 @@ class StatusBadge extends StatelessWidget {
     required this.label,
     this.color,
     this.filled = true,
+    this.icon,
   });
 
   final String label;
@@ -194,6 +195,10 @@ class StatusBadge extends StatelessWidget {
   /// true rather than active — "SHARING", "PENDING".
   final Color? color;
   final bool filled;
+
+  /// An optional leading glyph, for a state that needs more than colour to
+  /// read at a glance — a paused torrent or one that needs attention.
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -205,10 +210,19 @@ class StatusBadge extends StatelessWidget {
         border: c == null ? Border.all(color: AppColors.borderStrong) : null,
         borderRadius: BorderRadius.circular(AppRadius.tight),
       ),
-      child: Text(
-        label,
-        style: monoLabel(
-            size: 11, color: c ?? AppColors.textDim, letterSpacing: 0.2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: c ?? AppColors.textDim),
+            const SizedBox(width: 5),
+          ],
+          Text(
+            label,
+            style: monoLabel(
+                size: 11, color: c ?? AppColors.textDim, letterSpacing: 0.2),
+          ),
+        ],
       ),
     );
   }
