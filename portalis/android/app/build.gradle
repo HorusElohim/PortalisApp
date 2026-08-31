@@ -25,6 +25,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
+        // flutter_local_notifications (added for transfer completion
+        // feedback) ships Java 8+ APIs its AAR metadata requires desugaring
+        // for; without this, :app:checkReleaseAarMetadata refuses the build.
+        coreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -60,6 +64,11 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Required by coreLibraryDesugaringEnabled above.
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"
 }
 
 // Build Rust shared libraries and place them in jniLibs before Android build.
