@@ -95,7 +95,9 @@ class HomeLibrary extends StatelessWidget {
 
   Widget _wideBody() {
     if (state == null && error == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: WaitingIndicator(message: 'Starting your library…'),
+      );
     }
     if (error != null) return CollectionsErrorState(message: error!);
     if (_shown.isEmpty) return _emptyState();
@@ -143,7 +145,9 @@ class HomeLibrary extends StatelessWidget {
     if (state == null && error == null) {
       return const SliverFillRemaining(
         hasScrollBody: false,
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(
+          child: WaitingIndicator(message: 'Starting your library…'),
+        ),
       );
     }
     if (error != null) {
@@ -156,8 +160,7 @@ class HomeLibrary extends StatelessWidget {
       return SliverFillRemaining(hasScrollBody: false, child: _emptyState());
     }
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(
-          kScreenGutter, 0, kScreenGutter, 28),
+      padding: const EdgeInsets.fromLTRB(kScreenGutter, 0, kScreenGutter, 28),
       sliver: SliverList.separated(
         itemCount: _shown.length,
         separatorBuilder: (_, __) => const SizedBox(height: 14),
@@ -178,8 +181,7 @@ class HomeLibrary extends StatelessWidget {
     final name = device?.name ?? 'Portalis';
     final initials = name.isEmpty ? '·' : name[0].toUpperCase();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          kScreenGutter, 14, kScreenGutter, 0),
+      padding: const EdgeInsets.fromLTRB(kScreenGutter, 14, kScreenGutter, 0),
       child: Row(
         children: [
           Avatar(initials: initials, size: 34, primary: true),

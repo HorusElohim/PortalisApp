@@ -203,11 +203,6 @@ class _CollectionDetailState extends State<CollectionDetail> {
     });
   }
 
-  Future<void> _fetchPending() => _run(() async {
-        final started = await widget.source.fetchMedia(_collection.id);
-        _toast('Fetching $started item${started == 1 ? '' : 's'}');
-      });
-
   Future<void> _shareQr() async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -399,15 +394,14 @@ class _CollectionDetailState extends State<CollectionDetail> {
           // torrent that cannot be renamed still has to say what it is.
           showTitle: widget.showTitle && !_namesInHeader(collection),
           onAddMedia: _addMedia,
-          onFetch: _fetchPending,
           onShareQr: collection.canShareQr ? () => unawaited(_shareQr()) : null,
           editing: _isEditing,
           paused: collection.isPaused,
         ),
         if (_busy)
           const Padding(
-            padding: EdgeInsets.only(top: 10),
-            child: LinearProgressIndicator(minHeight: 2),
+            padding: EdgeInsets.only(top: 14),
+            child: WaitingIndicator(message: 'Working…', compact: true),
           ),
         // Files are the deepest layer — worth the extra tap they cost a
         // merely-mid row, the same trade the peers section makes.

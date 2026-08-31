@@ -5,16 +5,27 @@ import 'package:flutter/foundation.dart';
 
 import '../data/app_repository.dart';
 import '../domain/app_state.dart';
+import '../../notifications/transfer_completion_notifier.dart';
 
 /// Owns Portalis's one app-level Nexus state subscription.
 class AppController extends ChangeNotifier {
-  AppController({required AppRepository repository}) : _repository = repository;
+  AppController({
+    required AppRepository repository,
+    TransferCompletionNotifier? completionNotifier,
+  })  : _repository = repository,
+        _completionObserver = completionNotifier == null
+            ? null
+            : TransferCompletionObserver(completionNotifier);
 
-  factory AppController.production() => AppController(
+  factory AppController.production(
+          {TransferCompletionNotifier? completionNotifier}) =>
+      AppController(
         repository: const FrbAppRepository(),
+        completionNotifier: completionNotifier,
       );
 
   final AppRepository _repository;
+  final TransferCompletionObserver? _completionObserver;
   StreamSubscription<AppSnapshot>? _subscription;
   Future<void>? _starting;
 
@@ -66,6 +77,10 @@ class AppController extends ChangeNotifier {
         (state) {
           _state = state;
           lastError = null;
+          final observer = _completionObserver;
+          if (observer != null) {
+            unawaited(observer.observe(state).catchError((_) {}));
+          }
           notifyListeners();
         },
         onError: (Object error, StackTrace _) {

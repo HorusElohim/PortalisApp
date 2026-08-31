@@ -12,6 +12,12 @@
   download until the person presses Download.
 - Peer extended handshakes now identify the client as `Portalis 0.1.49`
   instead of `rqbit`.
+- Completed QR receiver imports now restore as **Available** immediately after
+  an app restart rather than returning as a pending download.
+- Added native completion notifications for newly completed received transfers,
+  plus labelled waiting indicators for startup and collection commands.
+- Removed the retired **Fetch** action; selection remains explicit through
+  **Download selected files**.
 
 ## 1.0.49+58
 
