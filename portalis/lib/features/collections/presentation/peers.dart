@@ -188,7 +188,12 @@ class PeerCard extends StatelessWidget {
                 ),
               ),
               if (peer.isMoving)
-                StatusBadge(label: 'LIVE', color: color, filled: true),
+                StatusBadge(label: 'LIVE', color: color, filled: true)
+              else if (!peer.live)
+                StatusBadge(
+                  label: 'SEEN ${formatLastSeen(peer.lastSeen)} AGO',
+                  filled: false,
+                ),
             ],
           ),
           const SizedBox(height: 10),
@@ -216,16 +221,20 @@ class PeerCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _PeerMetric(
-                  label: 'DOWN SPEED',
-                  value: formatRate(peer.downBytesPerSecond),
+                  label: peer.live ? 'DOWN SPEED' : 'PEAK DOWN',
+                  value: formatRate(peer.live
+                      ? peer.downBytesPerSecond
+                      : peer.peakDownBytesPerSecond),
                   color: color,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _PeerMetric(
-                  label: 'UP SPEED',
-                  value: formatRate(peer.upBytesPerSecond),
+                  label: peer.live ? 'UP SPEED' : 'PEAK UP',
+                  value: formatRate(peer.live
+                      ? peer.upBytesPerSecond
+                      : peer.peakUpBytesPerSecond),
                   color: color,
                 ),
               ),

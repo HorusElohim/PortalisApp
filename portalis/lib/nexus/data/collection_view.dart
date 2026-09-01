@@ -84,5 +84,8 @@ List<PeerObservation> storedPeerObservations({
           upBytes: peer.upBytes.toInt(),
           downBytesPerSecond: peer.lastDownBytesPerSecond,
           upBytesPerSecond: peer.lastUpBytesPerSecond,
+          live: false,
+          peakDownBytesPerSecond: peer.peakDownBytesPerSecond,
+          peakUpBytesPerSecond: peer.peakUpBytesPerSecond,
         ),
     ];

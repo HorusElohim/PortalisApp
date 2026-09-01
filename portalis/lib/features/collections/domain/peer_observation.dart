@@ -17,6 +17,9 @@ class PeerObservation {
     this.upBytes = 0,
     this.downBytesPerSecond = 0,
     this.upBytesPerSecond = 0,
+    this.live = true,
+    this.peakDownBytesPerSecond = 0,
+    this.peakUpBytesPerSecond = 0,
   });
 
   final String collectionId;
@@ -34,11 +37,14 @@ class PeerObservation {
   /// Current rates, measured by the core between polls.
   final int downBytesPerSecond;
   final int upBytesPerSecond;
+  final bool live;
+  final int peakDownBytesPerSecond;
+  final int peakUpBytesPerSecond;
 
   /// Whether anything is moving with this peer right now. A connected peer
   /// that has gone quiet is still connected, and saying so is more honest
   /// than showing it as active because bytes once passed.
-  bool get isMoving => downBytesPerSecond > 0 || upBytesPerSecond > 0;
+  bool get isMoving => live && (downBytesPerSecond > 0 || upBytesPerSecond > 0);
 
   /// Whether this connection has ever carried anything. A peer that connected
   /// and exchanged nothing is a real and common state worth distinguishing.

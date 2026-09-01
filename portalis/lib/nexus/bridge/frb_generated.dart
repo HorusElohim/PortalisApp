@@ -1150,8 +1150,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppPeerHistory dco_decode_app_peer_history(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return AppPeerHistory(
       address: dco_decode_String(arr[0]),
       client: dco_decode_opt_String(arr[1]),
@@ -1161,6 +1161,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       upBytes: dco_decode_u_64(arr[5]),
       lastDownBytesPerSecond: dco_decode_u_32(arr[6]),
       lastUpBytesPerSecond: dco_decode_u_32(arr[7]),
+      peakDownBytesPerSecond: dco_decode_u_32(arr[8]),
+      peakUpBytesPerSecond: dco_decode_u_32(arr[9]),
     );
   }
 
@@ -1180,11 +1182,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppPeoplePeer dco_decode_app_people_peer(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return AppPeoplePeer(
       peer: dco_decode_app_peer(arr[0]),
       collections: dco_decode_list_prim_u_32_strict(arr[1]),
+      live: dco_decode_bool(arr[2]),
+      peakDownBytesPerSecond: dco_decode_u_32(arr[3]),
+      peakUpBytesPerSecond: dco_decode_u_32(arr[4]),
+      lastSeenAt: dco_decode_u_64(arr[5]),
     );
   }
 
@@ -1780,6 +1786,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_upBytes = sse_decode_u_64(deserializer);
     var var_lastDownBytesPerSecond = sse_decode_u_32(deserializer);
     var var_lastUpBytesPerSecond = sse_decode_u_32(deserializer);
+    var var_peakDownBytesPerSecond = sse_decode_u_32(deserializer);
+    var var_peakUpBytesPerSecond = sse_decode_u_32(deserializer);
     return AppPeerHistory(
         address: var_address,
         client: var_client,
@@ -1788,7 +1796,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         downBytes: var_downBytes,
         upBytes: var_upBytes,
         lastDownBytesPerSecond: var_lastDownBytesPerSecond,
-        lastUpBytesPerSecond: var_lastUpBytesPerSecond);
+        lastUpBytesPerSecond: var_lastUpBytesPerSecond,
+        peakDownBytesPerSecond: var_peakDownBytesPerSecond,
+        peakUpBytesPerSecond: var_peakUpBytesPerSecond);
   }
 
   @protected
@@ -1804,7 +1814,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_peer = sse_decode_app_peer(deserializer);
     var var_collections = sse_decode_list_prim_u_32_strict(deserializer);
-    return AppPeoplePeer(peer: var_peer, collections: var_collections);
+    var var_live = sse_decode_bool(deserializer);
+    var var_peakDownBytesPerSecond = sse_decode_u_32(deserializer);
+    var var_peakUpBytesPerSecond = sse_decode_u_32(deserializer);
+    var var_lastSeenAt = sse_decode_u_64(deserializer);
+    return AppPeoplePeer(
+        peer: var_peer,
+        collections: var_collections,
+        live: var_live,
+        peakDownBytesPerSecond: var_peakDownBytesPerSecond,
+        peakUpBytesPerSecond: var_peakUpBytesPerSecond,
+        lastSeenAt: var_lastSeenAt);
   }
 
   @protected
@@ -2492,6 +2512,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_64(self.upBytes, serializer);
     sse_encode_u_32(self.lastDownBytesPerSecond, serializer);
     sse_encode_u_32(self.lastUpBytesPerSecond, serializer);
+    sse_encode_u_32(self.peakDownBytesPerSecond, serializer);
+    sse_encode_u_32(self.peakUpBytesPerSecond, serializer);
   }
 
   @protected
@@ -2507,6 +2529,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_app_peer(self.peer, serializer);
     sse_encode_list_prim_u_32_strict(self.collections, serializer);
+    sse_encode_bool(self.live, serializer);
+    sse_encode_u_32(self.peakDownBytesPerSecond, serializer);
+    sse_encode_u_32(self.peakUpBytesPerSecond, serializer);
+    sse_encode_u_64(self.lastSeenAt, serializer);
   }
 
   @protected

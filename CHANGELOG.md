@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Fixed the People screen showing a "LIVE" badge and current-speed labels for
+  swarm peers that were only remembered from history, not actually connected
+  right now. Historical rows now show "PEAK DOWN"/"PEAK UP" — the highest
+  interval rate this device ever measured for that exact connection — instead
+  of a stale last-known rate mislabelled as live. Live connections keep the
+  LIVE badge and current-speed labels, and are sorted ahead of historical
+  rows.
+- Peer-history ledger rows now persist a per-connection peak rate in addition
+  to the last measured rate (schema 13; upgrades in place from schema 12 by
+  seeding the peak from the last known rate).
+- Stopped logging the torrent worker's routine reconcile pass, which fired on
+  every wake — including with no state change — and printed the full raw
+  collection key and complete selected-file-index list every time. A 60+ file
+  torrent could produce dozens of near-identical multi-hundred-character log
+  lines per second, drowning out real diagnostics. Resolve/acquire lifecycle
+  transitions and retry/error events are still logged.
 - Fixed ordinary public magnets remaining in **ResolvingMetadata** when an
   optional `xs` exact-source descriptor URL was stale, returned an error, or
   stopped responding. Exact-source lookup is now bounded to five seconds and

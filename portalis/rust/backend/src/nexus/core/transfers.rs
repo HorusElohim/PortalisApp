@@ -463,6 +463,8 @@ fn snapshot_peers(
                 checkpoint_epoch: 0,
                 last_down_bytes_per_second: 0,
                 last_up_bytes_per_second: 0,
+                peak_down_bytes_per_second: 0,
+                peak_up_bytes_per_second: 0,
             });
         // Whether this tick moves the durable ledger at all, judged before
         // any field is mutated — the same "write only what changed"
@@ -476,6 +478,8 @@ fn snapshot_peers(
             peer.total_up_bytes,
             peer.last_down_bytes_per_second,
             peer.last_up_bytes_per_second,
+            peer.peak_down_bytes_per_second,
+            peer.peak_up_bytes_per_second,
         );
         peer.total_down_bytes = peer.total_down_bytes.saturating_add(unsaved(
             raw.fetched_bytes,
@@ -495,11 +499,19 @@ fn snapshot_peers(
         peer.last_seen_at = now;
         peer.last_down_bytes_per_second = rates.map_or(0, |peer| peer.down_bytes_per_second);
         peer.last_up_bytes_per_second = rates.map_or(0, |peer| peer.up_bytes_per_second);
+        peer.peak_down_bytes_per_second = peer
+            .peak_down_bytes_per_second
+            .max(peer.last_down_bytes_per_second);
+        peer.peak_up_bytes_per_second = peer
+            .peak_up_bytes_per_second
+            .max(peer.last_up_bytes_per_second);
         let after = (
             peer.total_down_bytes,
             peer.total_up_bytes,
             peer.last_down_bytes_per_second,
             peer.last_up_bytes_per_second,
+            peer.peak_down_bytes_per_second,
+            peer.peak_up_bytes_per_second,
         );
         // A brand new peer (first_seen_at == now, this tick's `now`) always
         // writes once even if `before == after` at exactly zero bytes, so
@@ -1371,6 +1383,8 @@ mod tests {
                     checkpoint_epoch: 7,
                     last_down_bytes_per_second: 0,
                     last_up_bytes_per_second: 0,
+                    peak_down_bytes_per_second: 700_000,
+                    peak_up_bytes_per_second: 80_000,
                 },
             )
             .expect("writes the checkpoint");

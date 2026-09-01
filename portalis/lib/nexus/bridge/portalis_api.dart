@@ -658,6 +658,8 @@ class AppPeerHistory {
   final BigInt upBytes;
   final int lastDownBytesPerSecond;
   final int lastUpBytesPerSecond;
+  final int peakDownBytesPerSecond;
+  final int peakUpBytesPerSecond;
 
   const AppPeerHistory({
     required this.address,
@@ -668,6 +670,8 @@ class AppPeerHistory {
     required this.upBytes,
     required this.lastDownBytesPerSecond,
     required this.lastUpBytesPerSecond,
+    required this.peakDownBytesPerSecond,
+    required this.peakUpBytesPerSecond,
   });
 
   @override
@@ -679,7 +683,9 @@ class AppPeerHistory {
       downBytes.hashCode ^
       upBytes.hashCode ^
       lastDownBytesPerSecond.hashCode ^
-      lastUpBytesPerSecond.hashCode;
+      lastUpBytesPerSecond.hashCode ^
+      peakDownBytesPerSecond.hashCode ^
+      peakUpBytesPerSecond.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -693,7 +699,9 @@ class AppPeerHistory {
           downBytes == other.downBytes &&
           upBytes == other.upBytes &&
           lastDownBytesPerSecond == other.lastDownBytesPerSecond &&
-          lastUpBytesPerSecond == other.lastUpBytesPerSecond;
+          lastUpBytesPerSecond == other.lastUpBytesPerSecond &&
+          peakDownBytesPerSecond == other.peakDownBytesPerSecond &&
+          peakUpBytesPerSecond == other.peakUpBytesPerSecond;
 }
 
 /// A locally accepted command that has not settled yet.
@@ -723,13 +731,30 @@ class AppPeoplePeer {
   final AppPeer peer;
   final Uint32List collections;
 
+  /// True only when this exact endpoint/client is in the current live peer
+  /// snapshot. Historical non-zero rates must never imply liveness.
+  final bool live;
+  final int peakDownBytesPerSecond;
+  final int peakUpBytesPerSecond;
+  final BigInt lastSeenAt;
+
   const AppPeoplePeer({
     required this.peer,
     required this.collections,
+    required this.live,
+    required this.peakDownBytesPerSecond,
+    required this.peakUpBytesPerSecond,
+    required this.lastSeenAt,
   });
 
   @override
-  int get hashCode => peer.hashCode ^ collections.hashCode;
+  int get hashCode =>
+      peer.hashCode ^
+      collections.hashCode ^
+      live.hashCode ^
+      peakDownBytesPerSecond.hashCode ^
+      peakUpBytesPerSecond.hashCode ^
+      lastSeenAt.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -737,7 +762,11 @@ class AppPeoplePeer {
       other is AppPeoplePeer &&
           runtimeType == other.runtimeType &&
           peer == other.peer &&
-          collections == other.collections;
+          collections == other.collections &&
+          live == other.live &&
+          peakDownBytesPerSecond == other.peakDownBytesPerSecond &&
+          peakUpBytesPerSecond == other.peakUpBytesPerSecond &&
+          lastSeenAt == other.lastSeenAt;
 }
 
 /// The complete, app-renderable Nexus projection.

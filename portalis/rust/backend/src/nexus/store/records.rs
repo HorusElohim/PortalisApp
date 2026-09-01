@@ -596,6 +596,9 @@ pub struct StoredPeerHistory {
     pub checkpoint_epoch: u64,
     pub last_down_bytes_per_second: u32,
     pub last_up_bytes_per_second: u32,
+    /// Highest locally measured interval rate for this exact connection.
+    pub peak_down_bytes_per_second: u32,
+    pub peak_up_bytes_per_second: u32,
 }
 
 impl StoredPeerHistory {
@@ -625,6 +628,8 @@ impl StoredPeerHistory {
         }
         bytes.extend_from_slice(&self.last_down_bytes_per_second.to_be_bytes());
         bytes.extend_from_slice(&self.last_up_bytes_per_second.to_be_bytes());
+        bytes.extend_from_slice(&self.peak_down_bytes_per_second.to_be_bytes());
+        bytes.extend_from_slice(&self.peak_up_bytes_per_second.to_be_bytes());
         bytes
     }
 
@@ -638,18 +643,37 @@ impl StoredPeerHistory {
             1 => Some(reader.string()?),
             _ => return Err(Malformed),
         };
+        let first_seen_at = reader.u64()?;
+        let last_seen_at = reader.u64()?;
+        let total_down_bytes = reader.u64()?;
+        let total_up_bytes = reader.u64()?;
+        let checkpoint_down_bytes = reader.u64()?;
+        let checkpoint_up_bytes = reader.u64()?;
+        let checkpoint_epoch = reader.u64()?;
+        let last_down_bytes_per_second = reader.u32()?;
+        let last_up_bytes_per_second = reader.u32()?;
+        // Schema 12 rows end after the last observed rates. Treat those rates
+        // as the initial peak so upgrading preserves useful historical truth;
+        // schema 13 appends explicit monotonic peaks.
+        let (peak_down_bytes_per_second, peak_up_bytes_per_second) = if reader.bytes.is_empty() {
+            (last_down_bytes_per_second, last_up_bytes_per_second)
+        } else {
+            (reader.u32()?, reader.u32()?)
+        };
         let peer = Self {
             address,
             client,
-            first_seen_at: reader.u64()?,
-            last_seen_at: reader.u64()?,
-            total_down_bytes: reader.u64()?,
-            total_up_bytes: reader.u64()?,
-            checkpoint_down_bytes: reader.u64()?,
-            checkpoint_up_bytes: reader.u64()?,
-            checkpoint_epoch: reader.u64()?,
-            last_down_bytes_per_second: reader.u32()?,
-            last_up_bytes_per_second: reader.u32()?,
+            first_seen_at,
+            last_seen_at,
+            total_down_bytes,
+            total_up_bytes,
+            checkpoint_down_bytes,
+            checkpoint_up_bytes,
+            checkpoint_epoch,
+            last_down_bytes_per_second,
+            last_up_bytes_per_second,
+            peak_down_bytes_per_second,
+            peak_up_bytes_per_second,
         };
         reader.finish()?;
         Ok(peer)
@@ -1281,10 +1305,22 @@ mod tests {
             checkpoint_epoch: 42,
             last_down_bytes_per_second: 500_000,
             last_up_bytes_per_second: 10_000,
+            peak_down_bytes_per_second: 900_000,
+            peak_up_bytes_per_second: 40_000,
         };
 
         let encoded = peer.encode();
         assert_eq!(StoredPeerHistory::decode(&encoded), Ok(peer));
+        let upgraded = StoredPeerHistory::decode(&encoded[..encoded.len() - 8])
+            .expect("schema 12 peer history upgrades in place");
+        assert_eq!(
+            upgraded.peak_down_bytes_per_second,
+            upgraded.last_down_bytes_per_second
+        );
+        assert_eq!(
+            upgraded.peak_up_bytes_per_second,
+            upgraded.last_up_bytes_per_second
+        );
         assert_eq!(
             StoredPeerHistory::decode(&encoded[..encoded.len() - 1]),
             Err(Malformed)

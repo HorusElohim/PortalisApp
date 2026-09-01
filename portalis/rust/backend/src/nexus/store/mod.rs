@@ -994,6 +994,8 @@ mod tests {
                         checkpoint_epoch: 1,
                         last_down_bytes_per_second: 3,
                         last_up_bytes_per_second: 1,
+                        peak_down_bytes_per_second: 6,
+                        peak_up_bytes_per_second: 2,
                     },
                 )
                 .expect("writes");
@@ -1012,6 +1014,8 @@ mod tests {
                         checkpoint_epoch: 1,
                         last_down_bytes_per_second: 4,
                         last_up_bytes_per_second: 2,
+                        peak_down_bytes_per_second: 8,
+                        peak_up_bytes_per_second: 3,
                     },
                 )
                 .expect("writes");
@@ -1165,7 +1169,7 @@ mod tests {
             write.commit().expect("commits schema-11 marker");
         }
 
-        let migrated = Store::open(scratch.file()).expect("migrates to schema 12");
+        let migrated = Store::open(scratch.file()).expect("migrates to schema 13");
         assert_eq!(
             migrated.version().expect("reads version"),
             u64::from(SCHEMA_VERSION)

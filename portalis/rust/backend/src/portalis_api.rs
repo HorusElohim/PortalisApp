@@ -138,6 +138,8 @@ pub struct AppPeerHistory {
     pub up_bytes: u64,
     pub last_down_bytes_per_second: u32,
     pub last_up_bytes_per_second: u32,
+    pub peak_down_bytes_per_second: u32,
+    pub peak_up_bytes_per_second: u32,
 }
 
 /// One exact endpoint/client observation accumulated across collections.
@@ -145,6 +147,12 @@ pub struct AppPeerHistory {
 pub struct AppPeoplePeer {
     pub peer: AppPeer,
     pub collections: Vec<u32>,
+    /// True only when this exact endpoint/client is in the current live peer
+    /// snapshot. Historical non-zero rates must never imply liveness.
+    pub live: bool,
+    pub peak_down_bytes_per_second: u32,
+    pub peak_up_bytes_per_second: u32,
+    pub last_seen_at: u64,
 }
 
 /// A selectable media entry in a collection detail projection.
@@ -564,6 +572,8 @@ pub fn peer_history(collection: u32) -> Result<Vec<AppPeerHistory>, String> {
             up_bytes: peer.total_up_bytes,
             last_down_bytes_per_second: peer.last_down_bytes_per_second,
             last_up_bytes_per_second: peer.last_up_bytes_per_second,
+            peak_down_bytes_per_second: peer.peak_down_bytes_per_second,
+            peak_up_bytes_per_second: peer.peak_up_bytes_per_second,
         })
         .collect())
 }
@@ -595,22 +605,40 @@ fn group_people_peers(
     use std::collections::BTreeMap;
 
     let mut rows = BTreeMap::new();
+    let mut facts = BTreeMap::new();
     for (collection, peer) in history {
+        let key = (collection, peer.address.clone(), peer.client.clone());
+        facts.insert(
+            key.clone(),
+            (
+                peer.peak_down_bytes_per_second,
+                peer.peak_up_bytes_per_second,
+                peer.last_seen_at,
+                false,
+            ),
+        );
         rows.insert(
-            (collection, peer.address.clone(), peer.client.clone()),
+            key,
             AppPeer {
                 address: peer.address,
                 client: peer.client,
                 down_bytes: peer.total_down_bytes,
                 up_bytes: peer.total_up_bytes,
-                down_bytes_per_second: peer.last_down_bytes_per_second,
-                up_bytes_per_second: peer.last_up_bytes_per_second,
+                // A saved rate is a historical sample, not what is happening
+                // now. Peak is carried separately for historical rendering.
+                down_bytes_per_second: 0,
+                up_bytes_per_second: 0,
             },
         );
     }
     for (collection, peer) in live {
+        let key = (collection, peer.address.clone(), peer.client.clone());
+        let fact = facts.entry(key.clone()).or_insert((0, 0, 0, false));
+        fact.0 = fact.0.max(peer.down_bytes_per_second);
+        fact.1 = fact.1.max(peer.up_bytes_per_second);
+        fact.3 = true;
         rows.insert(
-            (collection, peer.address.clone(), peer.client.clone()),
+            key,
             AppPeer {
                 address: peer.address,
                 client: peer.client,
@@ -623,6 +651,9 @@ fn group_people_peers(
     }
     let mut grouped = BTreeMap::<(String, Option<String>), AppPeoplePeer>::new();
     for ((collection, address, client), peer) in rows {
+        let (peak_down, peak_up, last_seen_at, live) = facts
+            .remove(&(collection, address.clone(), client.clone()))
+            .unwrap_or_default();
         let entry = grouped
             .entry((address, client))
             .or_insert_with(|| AppPeoplePeer {
@@ -635,11 +666,25 @@ fn group_people_peers(
                     up_bytes_per_second: 0,
                 },
                 collections: Vec::new(),
+                live: false,
+                peak_down_bytes_per_second: 0,
+                peak_up_bytes_per_second: 0,
+                last_seen_at: 0,
             });
         entry.peer.down_bytes += peer.down_bytes;
         entry.peer.up_bytes += peer.up_bytes;
         entry.peer.down_bytes_per_second += peer.down_bytes_per_second;
         entry.peer.up_bytes_per_second += peer.up_bytes_per_second;
+        entry.live |= live;
+        entry.peak_down_bytes_per_second = entry
+            .peak_down_bytes_per_second
+            .max(peak_down)
+            .max(entry.peer.down_bytes_per_second);
+        entry.peak_up_bytes_per_second = entry
+            .peak_up_bytes_per_second
+            .max(peak_up)
+            .max(entry.peer.up_bytes_per_second);
+        entry.last_seen_at = entry.last_seen_at.max(last_seen_at);
         entry.collections.push(collection.0);
     }
     grouped.into_values().collect()
@@ -1129,7 +1174,7 @@ mod tests {
     }
 
     #[test]
-    fn remembered_peer_rates_survive_the_people_projection() {
+    fn remembered_peer_rates_are_not_presented_as_live_people_rates() {
         let peers = group_people_peers(
             [(
                 Handle(7),
@@ -1145,6 +1190,8 @@ mod tests {
                     checkpoint_epoch: 9,
                     last_down_bytes_per_second: 512_000,
                     last_up_bytes_per_second: 64_000,
+                    peak_down_bytes_per_second: 900_000,
+                    peak_up_bytes_per_second: 100_000,
                 },
             )],
             std::iter::empty(),
@@ -1152,8 +1199,12 @@ mod tests {
 
         assert_eq!(peers.len(), 1);
         assert_eq!(peers[0].collections, vec![7]);
-        assert_eq!(peers[0].peer.down_bytes_per_second, 512_000);
-        assert_eq!(peers[0].peer.up_bytes_per_second, 64_000);
+        assert_eq!(peers[0].peer.down_bytes_per_second, 0);
+        assert_eq!(peers[0].peer.up_bytes_per_second, 0);
+        assert!(!peers[0].live);
+        assert_eq!(peers[0].peak_down_bytes_per_second, 900_000);
+        assert_eq!(peers[0].peak_up_bytes_per_second, 100_000);
+        assert_eq!(peers[0].last_seen_at, 2);
     }
 
     #[test]

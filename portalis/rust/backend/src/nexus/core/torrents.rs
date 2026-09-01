@@ -126,23 +126,13 @@ pub(crate) async fn follow_torrent_imports(
             .collect::<Vec<_>>();
         for work in due {
             let key = work_key(&work);
-            crate::nexus::log::clog!(
-                "nexus",
-                "torrent worker performing correlation={} key={:?} {}",
-                correlation_id(&key),
-                key,
-                match &work {
-                    Pending::Resolve { source, .. } => {
-                        format!("resolve source_len={}", source.len())
-                    }
-                    Pending::Acquire { source, files, .. } => {
-                        format!("acquire source_len={} files={files:?}", source.len())
-                    }
-                    Pending::Reconcile { handle, files, .. } => {
-                        format!("reconcile handle={handle} files={files:?}")
-                    }
-                }
-            );
+            if let Some(operation) = work_log_summary(&work) {
+                crate::nexus::log::clog!(
+                    "nexus",
+                    "torrent worker performing correlation={} {operation}",
+                    correlation_id(&key),
+                );
+            }
             let done = tokio::select! {
                 () = shutdown.requested() => return,
                 done = perform(&store, substrate.as_ref(), &work) => done,
@@ -216,6 +206,23 @@ fn work_key(work: &Pending) -> Vec<u8> {
         Pending::Resolve { key, .. }
         | Pending::Acquire { key, .. }
         | Pending::Reconcile { key, .. } => key.clone(),
+    }
+}
+
+/// Only lifecycle transitions earn a routine diagnostic line. Reconcile is an
+/// idempotent assertion run on frequent wakes; logging it printed the same
+/// info-hash, raw collection key, and complete file-index list dozens of times
+/// per millisecond without describing any state change. Failures still flow
+/// through the retry/error log.
+fn work_log_summary(work: &Pending) -> Option<String> {
+    match work {
+        Pending::Resolve { source, .. } => Some(format!("resolve source_len={}", source.len())),
+        Pending::Acquire { source, files, .. } => Some(format!(
+            "acquire source_len={} selected_files={}",
+            source.len(),
+            files.len()
+        )),
+        Pending::Reconcile { .. } => None,
     }
 }
 
@@ -485,6 +492,27 @@ mod tests {
     fn correlation_ids_are_short_and_stable() {
         assert_eq!(correlation_id(&[0x01, 0xab, 0x20, 0xff, 0x99]), "01ab20ff");
         assert_eq!(correlation_id(&[0x01]), "01");
+    }
+
+    #[test]
+    fn routine_reconcile_work_is_not_a_diagnostic_event() {
+        assert_eq!(
+            work_log_summary(&Pending::Reconcile {
+                key: vec![1],
+                handle: "aa".repeat(20),
+                paused: false,
+                files: Some((0..18).collect()),
+            }),
+            None
+        );
+        assert_eq!(
+            work_log_summary(&Pending::Acquire {
+                key: vec![1],
+                source: "magnet:?xt=urn:btih:abc".to_owned(),
+                files: vec![0, 1, 2],
+            }),
+            Some("acquire source_len=23 selected_files=3".to_owned())
+        );
     }
 
     fn store() -> (Store, std::path::PathBuf) {
