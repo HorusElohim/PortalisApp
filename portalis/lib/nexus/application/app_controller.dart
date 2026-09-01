@@ -33,6 +33,7 @@ class AppController extends ChangeNotifier {
   Stream<AppDetail?>? _debugDetails;
   Stream<Uint8List>? _debugHistory;
   List<AppCollectionPeer>? _debugPeers;
+  List<AppPeoplePeer>? _debugPeoplePeers;
   AppUserSummary? _debugUserSummary;
   AppSnapshot? get state => _state;
 
@@ -141,6 +142,8 @@ class AppController extends ChangeNotifier {
   /// Seeds the projection for widgets that exercise app composition without a
   /// native runtime. Production state always arrives through [watchStates].
   Future<List<AppPeoplePeer>> peoplePeers() async {
+    final people = _debugPeoplePeers;
+    if (people != null) return people;
     final seeded = _debugPeers;
     if (seeded != null) {
       return [
@@ -148,6 +151,11 @@ class AppController extends ChangeNotifier {
           AppPeoplePeer(
             peer: entry.peer,
             collections: Uint32List.fromList([entry.collection]),
+            live: true,
+            peakDownBytesPerSecond: entry.peer.downBytesPerSecond,
+            peakUpBytesPerSecond: entry.peer.upBytesPerSecond,
+            lastSeenAt: BigInt.from(DateTime.now().microsecondsSinceEpoch) *
+                BigInt.from(1000),
           ),
       ];
     }
@@ -213,6 +221,7 @@ class AppController extends ChangeNotifier {
     Stream<AppDetail?>? details,
     Stream<Uint8List>? history,
     List<AppCollectionPeer>? peers,
+    List<AppPeoplePeer>? peoplePeers,
     AppUserSummary? userSummary,
   }) {
     _state = state;
@@ -223,6 +232,7 @@ class AppController extends ChangeNotifier {
     // library is missing at the moment something happens to subscribe.
     _debugHistory = history ?? const Stream<Uint8List>.empty();
     _debugPeers = peers ?? const [];
+    _debugPeoplePeers = peoplePeers;
     _debugUserSummary = userSummary ?? _emptyUserSummary;
     notifyListeners();
   }

@@ -9,17 +9,18 @@ import '../../../nexus/domain/app_state.dart';
 import '../../collections/domain/peer_observation.dart';
 import '../../collections/presentation/peers.dart';
 
-/// The people and machines this device is connected to.
+/// The people this device knows and the swarm endpoints it has observed.
 ///
 /// Two tiers, deliberately kept apart. A *contact* is somebody this device
 /// holds signed statements about, whose fingerprint a person can compare out
-/// of band. A *connection* is a swarm peer: an address moving bytes right now,
-/// with no signed identity behind it and a self-reported client name at best.
+/// of band. A *peer observation* is a swarm address seen now or in durable
+/// history, with no signed identity behind it and a self-reported client name
+/// at best.
 ///
 /// Merging them would put strangers beside people, wearing the same card. So
 /// they are separate sections with different shapes, and the connection tier
-/// leads with what is actually knowable about it — how much it has sent and
-/// received, and how fast.
+/// leads with what is actually knowable about it — how much it sent/received,
+/// whether it is live now, and the highest interval rate this device measured.
 class PeopleScreen extends StatefulWidget {
   const PeopleScreen({super.key, this.embedded = false});
 
@@ -132,11 +133,12 @@ class _PeopleScreenState extends State<PeopleScreen> with PollingState {
                     const SizedBox(height: 22),
                   ],
                   if (connections.isNotEmpty) ...[
-                    SectionLabel('CONNECTIONS - ${connections.length}'),
+                    SectionLabel('SWARM HISTORY - ${connections.length}'),
                     const SizedBox(height: 6),
                     Text(
-                      'Swarm peers moving bytes right now. These are network '
-                      'addresses, not identified people.',
+                      'Observed swarm endpoints. Live connections are marked; '
+                      'saved rows show historical peak speeds. These are '
+                      'network addresses, not identified people.',
                       style: AppText.secondary(color: AppColors.textDim),
                     ),
                     const SizedBox(height: 10),
@@ -163,7 +165,8 @@ class _PeopleScreenState extends State<PeopleScreen> with PollingState {
     );
   }
 
-  /// Every live peer across every collection, busiest first.
+  /// Every remembered or live peer across every collection, live first and
+  /// then by the highest measured historical rate.
   ///
   /// The same address can appear on two collections and is listed once per
   /// collection: it is one connection per torrent, and pooling them would
@@ -172,7 +175,6 @@ class _PeopleScreenState extends State<PeopleScreen> with PollingState {
     final names = {
       for (final collection in collections) collection.id: collection.name,
     };
-    final now = DateTime.now();
     final observations = [
       for (final entry in _peers)
         PeerObservation(
@@ -181,18 +183,27 @@ class _PeopleScreenState extends State<PeopleScreen> with PollingState {
               .map((id) => names[id] ?? 'Unknown collection')
               .join(' · '),
           address: entry.peer.address,
-          lastSeen: now,
+          lastSeen: entry.lastSeenAt == BigInt.zero
+              ? DateTime.now()
+              : DateTime.fromMicrosecondsSinceEpoch(
+                  (entry.lastSeenAt ~/ BigInt.from(1000)).toInt(),
+                ),
           client: entry.peer.client,
           downBytes: entry.peer.downBytes.toInt(),
           upBytes: entry.peer.upBytes.toInt(),
           downBytesPerSecond: entry.peer.downBytesPerSecond,
           upBytesPerSecond: entry.peer.upBytesPerSecond,
+          live: entry.live,
+          peakDownBytesPerSecond: entry.peakDownBytesPerSecond,
+          peakUpBytesPerSecond: entry.peakUpBytesPerSecond,
         ),
     ];
     observations.sort((a, b) {
-      final moving = (b.downBytesPerSecond + b.upBytesPerSecond)
-          .compareTo(a.downBytesPerSecond + a.upBytesPerSecond);
-      if (moving != 0) return moving;
+      final byLive = (b.live ? 1 : 0).compareTo(a.live ? 1 : 0);
+      if (byLive != 0) return byLive;
+      final peak = (b.peakDownBytesPerSecond + b.peakUpBytesPerSecond)
+          .compareTo(a.peakDownBytesPerSecond + a.peakUpBytesPerSecond);
+      if (peak != 0) return peak;
       return (b.downBytes + b.upBytes).compareTo(a.downBytes + a.upBytes);
     });
     return observations;

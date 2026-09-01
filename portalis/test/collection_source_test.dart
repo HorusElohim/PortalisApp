@@ -23,6 +23,8 @@ void main() {
             upBytes: BigInt.from(1000000),
             lastDownBytesPerSecond: 512000,
             lastUpBytesPerSecond: 64000,
+            peakDownBytesPerSecond: 900000,
+            peakUpBytesPerSecond: 120000,
           ),
         ],
       ];

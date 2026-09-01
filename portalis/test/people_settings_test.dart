@@ -110,6 +110,51 @@ void main() {
       // Connections are never presented as verified people.
       expect(find.text('VERIFIED'), findsNothing);
     });
+
+    testWidgets('saved peers show historical peaks and never claim to be live',
+        (tester) async {
+      await tester.binding.setSurfaceSize(desktopSize);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(const MaterialApp(home: PeopleScreen()));
+      final seen = DateTime.now().subtract(const Duration(minutes: 5));
+      AppControllers.engine.debugSeed(
+        buildNexusState([
+          buildNexusCollection(id: 1, name: 'Iceland trip'),
+        ]),
+        peoplePeers: [
+          AppPeoplePeer(
+            peer: AppPeer(
+              address: '203.0.113.5:6881',
+              client: 'qBittorrent 4.6',
+              downBytes: BigInt.from(4194304),
+              upBytes: BigInt.from(1048576),
+              // A persisted last sample used to turn this card LIVE.
+              downBytesPerSecond: 512000,
+              upBytesPerSecond: 64000,
+            ),
+            collections: Uint32List.fromList([1]),
+            live: false,
+            peakDownBytesPerSecond: 900000,
+            peakUpBytesPerSecond: 120000,
+            lastSeenAt:
+                BigInt.from(seen.microsecondsSinceEpoch) * BigInt.from(1000),
+          ),
+        ],
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('SWARM HISTORY - 1'), findsOneWidget);
+      expect(find.text('LIVE'), findsNothing);
+      expect(find.byType(LiveDot), findsNothing);
+      expect(find.text('DOWN SPEED'), findsNothing);
+      expect(find.text('UP SPEED'), findsNothing);
+      expect(find.text('PEAK DOWN'), findsOneWidget);
+      expect(find.text('PEAK UP'), findsOneWidget);
+      expect(find.text('900 KB/s'), findsOneWidget);
+      expect(find.text('120 KB/s'), findsOneWidget);
+      expect(find.textContaining('SEEN 5m AGO'), findsOneWidget);
+    });
   });
 
   group('settings', () {

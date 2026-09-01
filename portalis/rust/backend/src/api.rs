@@ -1400,6 +1400,8 @@ impl SseDecode for crate::portalis_api::AppPeerHistory {
         let mut var_upBytes = <u64>::sse_decode(deserializer);
         let mut var_lastDownBytesPerSecond = <u32>::sse_decode(deserializer);
         let mut var_lastUpBytesPerSecond = <u32>::sse_decode(deserializer);
+        let mut var_peakDownBytesPerSecond = <u32>::sse_decode(deserializer);
+        let mut var_peakUpBytesPerSecond = <u32>::sse_decode(deserializer);
         return crate::portalis_api::AppPeerHistory {
             address: var_address,
             client: var_client,
@@ -1409,6 +1411,8 @@ impl SseDecode for crate::portalis_api::AppPeerHistory {
             up_bytes: var_upBytes,
             last_down_bytes_per_second: var_lastDownBytesPerSecond,
             last_up_bytes_per_second: var_lastUpBytesPerSecond,
+            peak_down_bytes_per_second: var_peakDownBytesPerSecond,
+            peak_up_bytes_per_second: var_peakUpBytesPerSecond,
         };
     }
 }
@@ -1430,9 +1434,17 @@ impl SseDecode for crate::portalis_api::AppPeoplePeer {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_peer = <crate::portalis_api::AppPeer>::sse_decode(deserializer);
         let mut var_collections = <Vec<u32>>::sse_decode(deserializer);
+        let mut var_live = <bool>::sse_decode(deserializer);
+        let mut var_peakDownBytesPerSecond = <u32>::sse_decode(deserializer);
+        let mut var_peakUpBytesPerSecond = <u32>::sse_decode(deserializer);
+        let mut var_lastSeenAt = <u64>::sse_decode(deserializer);
         return crate::portalis_api::AppPeoplePeer {
             peer: var_peer,
             collections: var_collections,
+            live: var_live,
+            peak_down_bytes_per_second: var_peakDownBytesPerSecond,
+            peak_up_bytes_per_second: var_peakUpBytesPerSecond,
+            last_seen_at: var_lastSeenAt,
         };
     }
 }
@@ -2267,6 +2279,8 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppPeerHistory {
             self.up_bytes.into_into_dart().into_dart(),
             self.last_down_bytes_per_second.into_into_dart().into_dart(),
             self.last_up_bytes_per_second.into_into_dart().into_dart(),
+            self.peak_down_bytes_per_second.into_into_dart().into_dart(),
+            self.peak_up_bytes_per_second.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2309,6 +2323,10 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppPeoplePeer {
         [
             self.peer.into_into_dart().into_dart(),
             self.collections.into_into_dart().into_dart(),
+            self.live.into_into_dart().into_dart(),
+            self.peak_down_bytes_per_second.into_into_dart().into_dart(),
+            self.peak_up_bytes_per_second.into_into_dart().into_dart(),
+            self.last_seen_at.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2722,6 +2740,8 @@ impl SseEncode for crate::portalis_api::AppPeerHistory {
         <u64>::sse_encode(self.up_bytes, serializer);
         <u32>::sse_encode(self.last_down_bytes_per_second, serializer);
         <u32>::sse_encode(self.last_up_bytes_per_second, serializer);
+        <u32>::sse_encode(self.peak_down_bytes_per_second, serializer);
+        <u32>::sse_encode(self.peak_up_bytes_per_second, serializer);
     }
 }
 
@@ -2738,6 +2758,10 @@ impl SseEncode for crate::portalis_api::AppPeoplePeer {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <crate::portalis_api::AppPeer>::sse_encode(self.peer, serializer);
         <Vec<u32>>::sse_encode(self.collections, serializer);
+        <bool>::sse_encode(self.live, serializer);
+        <u32>::sse_encode(self.peak_down_bytes_per_second, serializer);
+        <u32>::sse_encode(self.peak_up_bytes_per_second, serializer);
+        <u64>::sse_encode(self.last_seen_at, serializer);
     }
 }
 
