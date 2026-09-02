@@ -21,6 +21,25 @@ pub struct AppSnapshot {
     pub contacts: Vec<AppContact>,
     pub collections: Vec<AppCollection>,
     pub alerts: Vec<String>,
+    /// What the engine is doing right now, aggregated once here rather than
+    /// left for every screen to recompute from `collections` — two Flutter
+    /// call sites disagreeing about how many transfers were active ("1 ACTIVE
+    /// TRANSFER" above a window reading "0 collections") is exactly the
+    /// class of bug one shared derivation exists to make impossible.
+    pub activity: AppActivity,
+}
+
+/// What the engine is doing right now, as one answer, aggregated across
+/// every collection in the snapshot it came from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AppActivity {
+    /// Collections currently moving bytes.
+    pub transfers: u32,
+    pub down_bytes_per_second: u32,
+    pub up_bytes_per_second: u32,
+    /// Peers across every collection — what "connected" means to a person,
+    /// who does not think per collection.
+    pub peers: u32,
 }
 
 /// This device as a person can identify it.
@@ -1069,7 +1088,31 @@ fn snapshot(state: &PortalisState) -> AppSnapshot {
             .iter()
             .map(|alert| format!("{alert:?}"))
             .collect(),
+        activity: app_activity(&state.collections),
     }
+}
+
+/// What the engine is doing right now, aggregated across every collection.
+///
+/// One derivation, so no two screens can disagree about how many transfers
+/// are active — see [`AppActivity`]'s own doc for the bug this replaced.
+fn app_activity(collections: &[crate::nexus::projection::state::CollectionState]) -> AppActivity {
+    let mut activity = AppActivity {
+        transfers: 0,
+        down_bytes_per_second: 0,
+        up_bytes_per_second: 0,
+        peers: 0,
+    };
+    for collection in collections {
+        let Some(transfer) = collection.transfer else {
+            continue;
+        };
+        activity.transfers += 1;
+        activity.down_bytes_per_second += transfer.down_bytes_per_second;
+        activity.up_bytes_per_second += transfer.up_bytes_per_second;
+        activity.peers += u32::from(transfer.peers);
+    }
+    activity
 }
 
 fn app_collection_lifecycle(
@@ -1351,6 +1394,84 @@ mod tests {
         assert_eq!(app.device.name, "Mina's Mac");
         assert_eq!(app.connectivity, "LocalOnly");
         assert!(app.collections.is_empty());
+        assert_eq!(
+            app.activity,
+            AppActivity {
+                transfers: 0,
+                down_bytes_per_second: 0,
+                up_bytes_per_second: 0,
+                peers: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn snapshot_activity_aggregates_only_moving_collections() {
+        let moving = CollectionState {
+            id: Handle(1),
+            name: "Moving".to_owned(),
+            nature: Nature::Torrent,
+            role: Role::Owner,
+            revision: 1,
+            status: Status::Downloading,
+            members: Vec::new(),
+            entries: 1,
+            total_bytes: 100,
+            on_disk_bytes: 50,
+            uploaded_bytes: 0,
+            started_at: None,
+            completed_at: None,
+            transfer: Some(crate::nexus::projection::state::Transfer {
+                progress: 0.5,
+                source_reading: false,
+                down_bytes_per_second: 125_000,
+                up_bytes_per_second: 250_000,
+                peers: 3,
+                eta_secs: Some(4),
+            }),
+            pending: None,
+        };
+        let idle = CollectionState {
+            id: Handle(2),
+            name: "Idle".to_owned(),
+            nature: Nature::Native,
+            role: Role::Owner,
+            revision: 1,
+            status: Status::Available,
+            members: Vec::new(),
+            entries: 1,
+            total_bytes: 10,
+            on_disk_bytes: 10,
+            uploaded_bytes: 0,
+            started_at: None,
+            completed_at: None,
+            transfer: None,
+            pending: None,
+        };
+        let projection = PortalisState {
+            device: DeviceState {
+                name: "Ada's laptop".to_owned(),
+                handle: None,
+                fingerprint: "aaaa".to_owned(),
+                devices: 1,
+            },
+            connectivity: Connectivity::LocalOnly,
+            contacts: Vec::new(),
+            collections: vec![idle, moving],
+            alerts: Vec::new(),
+        };
+
+        let app = snapshot(&projection);
+        assert_eq!(
+            app.activity,
+            AppActivity {
+                transfers: 1,
+                down_bytes_per_second: 125_000,
+                up_bytes_per_second: 250_000,
+                peers: 3,
+            },
+            "the idle collection contributes nothing; only the moving one counts"
+        );
     }
 
     #[test]

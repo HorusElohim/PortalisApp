@@ -58,8 +58,12 @@ Rust exposes one deliberately app-renderable, typed contract; Flutter renders it
       `Status`/`Nature`/`Role` string comparison. `collection_state_test.dart`
       and `collection.dart` no longer contain a `parse`/`wire` string
       round-trip for these three contracts.
-- [ ] Aggregate engine activity comes from Rust — not yet migrated; still
-      derived in `AppController`/`ActivitySummary` on the Dart side.
+- [x] Aggregate engine activity comes from Rust — `AppActivity` is now a
+      generated bridge struct aggregated once in `app_activity()`
+      (`portalis_api.rs`) and read directly by `AppController.activity`;
+      Flutter's per-collection summing loop is gone.
+      `snapshot_activity_aggregates_only_moving_collections` proves only
+      collections with a live transfer contribute.
 - [ ] Completion notifications consume a Rust event — not yet migrated;
       `TransferCompletionObserver` still diffs successive snapshots itself,
       though it now reads `AppCollectionRole.member` rather than a string.

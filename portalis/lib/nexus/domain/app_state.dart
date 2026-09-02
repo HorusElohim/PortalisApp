@@ -20,6 +20,7 @@ import '../bridge/portalis_api.dart';
 export '../bridge/portalis_api.dart'
     show
         AppAccepted,
+        AppActivity,
         AppAppRun,
         AppCollection,
         AppCollectionCapabilities,
@@ -110,38 +111,10 @@ extension EntryPreview on AppEntry {
   }
 }
 
-/// What the engine is doing right now, as one answer.
-///
-/// Derived in exactly one place and read everywhere, because the alternative
-/// is what shipped before it: the shell chrome counted transfers from the
-/// legacy collections controller while Home counted them from Nexus, and the
-/// two disagreed — "1 ACTIVE TRANSFER" above a window reading "0
-/// collections". A person cannot act on a status that contradicts the list
-/// beside it, so there is one derivation and no widget may make its own.
-class EngineActivity {
-  const EngineActivity({
-    required this.transfers,
-    required this.downBytesPerSecond,
-    required this.upBytesPerSecond,
-    required this.peers,
-  });
-
-  static const idle = EngineActivity(
-    transfers: 0,
-    downBytesPerSecond: 0,
-    upBytesPerSecond: 0,
-    peers: 0,
-  );
-
-  /// Collections currently moving bytes.
-  final int transfers;
-  final int downBytesPerSecond;
-  final int upBytesPerSecond;
-
-  /// Peers across every collection, which is what "connected" means to a
-  /// person: they do not think per collection.
-  final int peers;
-
+/// Formatting derived from the engine's own aggregated activity — see
+/// [AppActivity] in the generated bridge for why this is aggregated in Rust
+/// rather than recomputed per screen.
+extension EngineActivityPresentation on AppActivity {
   bool get isMoving => transfers > 0;
 
   /// Everything moving right now, in the unit the engine counts.

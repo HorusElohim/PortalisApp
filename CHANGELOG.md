@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Moved aggregate engine activity ("N transfers, X down/up, Y peers") into
+  Rust (second slice of ADR-0016). A generated `AppActivity` struct is now
+  computed once per snapshot (`app_activity()` in `portalis_api.rs`) instead
+  of Flutter's `AppController.activity` re-summing every collection's
+  transfer on each read — the exact class of bug that previously let the
+  shell chrome and the collection list disagree about how many transfers
+  were active is now structurally impossible, since there is only one place
+  the count comes from.
 - Replaced Flutter's hand-written collection lifecycle/nature/role string
   parser with a generated Rust typed contract (first slice of ADR-0016).
   Rust now projects `AppCollectionLifecycle`, `AppCollectionNature`,

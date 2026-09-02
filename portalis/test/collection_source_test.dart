@@ -68,6 +68,12 @@ AppSnapshot _state({required BigInt? completedAt}) => AppSnapshot(
         ),
       ],
       alerts: const [],
+      activity: const AppActivity(
+        transfers: 0,
+        downBytesPerSecond: 0,
+        upBytesPerSecond: 0,
+        peers: 0,
+      ),
     );
 
 class _Repository implements AppRepository {

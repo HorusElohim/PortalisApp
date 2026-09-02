@@ -4,6 +4,7 @@ import '../../app/app_controllers.dart';
 import '../../design/design.dart';
 import 'bottom_nav.dart';
 import '../../design/theme.dart';
+import '../../nexus/domain/app_state.dart';
 import '../../features/collections/presentation/home_screen.dart';
 import '../../features/people/presentation/screen.dart';
 import '../../features/settings/presentation/screen.dart';

@@ -261,6 +261,7 @@ void main() {
               contacts: const [],
               collections: [collection],
               alerts: const [],
+              activity: activityFor([collection]),
             ),
             error: null,
             onCreateCollection: () => created = true,
@@ -373,6 +374,25 @@ void main() {
   test('activity sums only what is actually moving', () {
     final controller = AppController(repository: _Repository());
     final idle = _collectionState().collections.single;
+    final moving = buildNexusCollection(
+      id: 10,
+      name: 'Moving',
+      nature: 'Torrent',
+      role: 'Owner',
+      status: 'Downloading',
+      entries: 1,
+      totalBytes: 100,
+      onDiskBytes: 50,
+      transfer: const AppTransfer(
+        progress: 0.5,
+        sourceReading: false,
+        downBytesPerSecond: 125000,
+        upBytesPerSecond: 250000,
+        peers: 3,
+        etaSecs: 4,
+      ),
+    );
+    final collections = [idle, moving];
     controller.debugSeed(
       AppSnapshot(
         device: const AppDevice(
@@ -383,28 +403,9 @@ void main() {
         ),
         connectivity: 'LocalOnly',
         contacts: const [],
-        collections: [
-          idle,
-          buildNexusCollection(
-            id: 10,
-            name: 'Moving',
-            nature: 'Torrent',
-            role: 'Owner',
-            status: 'Downloading',
-            entries: 1,
-            totalBytes: 100,
-            onDiskBytes: 50,
-            transfer: const AppTransfer(
-              progress: 0.5,
-              sourceReading: false,
-              downBytesPerSecond: 125000,
-              upBytesPerSecond: 250000,
-              peers: 3,
-              etaSecs: 4,
-            ),
-          ),
-        ],
+        collections: collections,
         alerts: const [],
+        activity: activityFor(collections),
       ),
     );
 
@@ -539,27 +540,31 @@ void main() {
   });
 }
 
-AppSnapshot _collectionState({String status = 'Available'}) => AppSnapshot(
-      device: const AppDevice(
-        name: 'Mina',
-        handle: null,
-        fingerprint: 'fingerprint',
-        devices: 1,
-      ),
-      connectivity: 'LocalOnly',
-      contacts: const [],
-      collections: [
-        buildNexusCollection(
-          id: 9,
-          name: 'Episode archive',
-          nature: 'Native',
-          role: 'Owner',
-          status: status,
-          entries: 0,
-        ),
-      ],
-      alerts: const [],
-    );
+AppSnapshot _collectionState({String status = 'Available'}) {
+  final collections = [
+    buildNexusCollection(
+      id: 9,
+      name: 'Episode archive',
+      nature: 'Native',
+      role: 'Owner',
+      status: status,
+      entries: 0,
+    ),
+  ];
+  return AppSnapshot(
+    device: const AppDevice(
+      name: 'Mina',
+      handle: null,
+      fingerprint: 'fingerprint',
+      devices: 1,
+    ),
+    connectivity: 'LocalOnly',
+    contacts: const [],
+    collections: collections,
+    alerts: const [],
+    activity: activityFor(collections),
+  );
+}
 
 AppSnapshot _state(String name) => AppSnapshot(
       device: AppDevice(
@@ -572,6 +577,12 @@ AppSnapshot _state(String name) => AppSnapshot(
       contacts: const [],
       collections: const [],
       alerts: const [],
+      activity: const AppActivity(
+        transfers: 0,
+        downBytesPerSecond: 0,
+        upBytesPerSecond: 0,
+        peers: 0,
+      ),
     );
 
 /// One torrent import, downloading. `Torrent` is what makes its files a
@@ -579,29 +590,32 @@ AppSnapshot _state(String name) => AppSnapshot(
 AppSnapshot _torrentState({
   String status = 'Downloading',
   String nature = 'Torrent',
-}) =>
-    AppSnapshot(
-      device: const AppDevice(
-        name: 'Mina',
-        handle: null,
-        fingerprint: 'fingerprint',
-        devices: 1,
-      ),
-      connectivity: 'LocalOnly',
-      contacts: const [],
-      collections: [
-        buildNexusCollection(
-          id: 9,
-          name: 'Big Buck Bunny',
-          nature: nature,
-          role: 'Owner',
-          status: status,
-          entries: 2,
-          totalBytes: 39,
-        ),
-      ],
-      alerts: const [],
-    );
+}) {
+  final collections = [
+    buildNexusCollection(
+      id: 9,
+      name: 'Big Buck Bunny',
+      nature: nature,
+      role: 'Owner',
+      status: status,
+      entries: 2,
+      totalBytes: 39,
+    ),
+  ];
+  return AppSnapshot(
+    device: const AppDevice(
+      name: 'Mina',
+      handle: null,
+      fingerprint: 'fingerprint',
+      devices: 1,
+    ),
+    connectivity: 'LocalOnly',
+    contacts: const [],
+    collections: collections,
+    alerts: const [],
+    activity: activityFor(collections),
+  );
+}
 
 class _Repository implements AppRepository {
   final states = StreamController<AppSnapshot>.broadcast();
