@@ -1502,7 +1502,23 @@ pub mod native {
                     && segments[5] == 0;
                 let is_nat64_local_use =
                     segments[0] == 0x0064 && segments[1] == 0xff9b && segments[2] == 1;
-                if is_nat64_well_known || is_nat64_local_use {
+                // Deprecated IPv4-compatible IPv6 (RFC 4291 §2.5.5.1,
+                // `::a.b.c.d`, first 96 bits zero) is a *different* wire
+                // form from IPv4-mapped (`::ffff:a.b.c.d`, already handled
+                // above by `to_ipv4_mapped`) but embeds an IPv4 address the
+                // same way. `::` and `::1` are excluded because those are
+                // unspecified/loopback in their own right, not an embedding
+                // of `0.0.0.0`/`0.0.0.1` — the general unspecified/loopback
+                // checks below already reject them.
+                let is_ipv4_compatible = segments[0] == 0
+                    && segments[1] == 0
+                    && segments[2] == 0
+                    && segments[3] == 0
+                    && segments[4] == 0
+                    && segments[5] == 0
+                    && !address.is_unspecified()
+                    && !address.is_loopback();
+                if is_nat64_well_known || is_nat64_local_use || is_ipv4_compatible {
                     let octets = address.octets();
                     let embedded =
                         std::net::Ipv4Addr::new(octets[12], octets[13], octets[14], octets[15]);
@@ -1511,6 +1527,13 @@ pub mod native {
                 !(address.is_unspecified()
                     || address.is_loopback()
                     || address.is_multicast()
+                    // 100::/64 — RFC 6666 discard-only prefix. Traffic sent
+                    // here is defined to go nowhere useful, so it is not a
+                    // reachable destination, but it is also not a spoofable
+                    // route to anything private — deny it defensively as a
+                    // known special-purpose range rather than treating an
+                    // unrecognised range as accepted by default.
+                    || segments[0] == 0x0100
                     || segments[0] & 0xfe00 == 0xfc00
                     || segments[0] & 0xffc0 == 0xfe80
                     || segments[0] & 0xffc0 == 0xfec0
@@ -1642,6 +1665,22 @@ pub mod native {
                 // also checked, not just the IPv6 form.
                 IpAddr::V6("64:ff9b::10.0.0.1".parse().expect("nat64 well-known")),
                 IpAddr::V6("64:ff9b:1::127.0.0.1".parse().expect("nat64 local-use")),
+                // Deprecated IPv4-compatible IPv6 (RFC 4291 §2.5.5.1),
+                // `::a.b.c.d` — a distinct wire form from IPv4-mapped
+                // (`::ffff:a.b.c.d`) that embeds a rejected IPv4 address the
+                // same way.
+                IpAddr::V6(
+                    "::10.0.0.1"
+                        .parse()
+                        .expect("ipv4-compatible embedding private"),
+                ),
+                IpAddr::V6(
+                    "::127.0.0.1"
+                        .parse()
+                        .expect("ipv4-compatible embedding loopback"),
+                ),
+                // 100::/64 — RFC 6666 discard-only prefix.
+                IpAddr::V6("100::1".parse().expect("discard-only prefix")),
             ] {
                 assert!(!exact_source_ip_is_public(blocked), "accepted {blocked}");
             }
@@ -1654,10 +1693,16 @@ pub mod native {
                     .parse()
                     .expect("public IPv6")
             )));
-            // A NAT64 address embedding a *public* IPv4 destination is not
-            // itself a policy violation — only the embedded address matters.
+            // A NAT64 or IPv4-compatible address embedding a *public* IPv4
+            // destination is not itself a policy violation — only the
+            // embedded address matters.
             assert!(exact_source_ip_is_public(
                 "64:ff9b::5db8:d822".parse().expect("nat64 public embed")
+            ));
+            assert!(exact_source_ip_is_public(
+                "::93.184.216.34"
+                    .parse()
+                    .expect("ipv4-compatible public embed")
             ));
         }
 
