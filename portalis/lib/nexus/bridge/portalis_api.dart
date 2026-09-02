@@ -7,7 +7,7 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `app_run`, `collection_projection`, `detail_projection`, `group_people_peers`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Opens the local Nexus runtime once. Calling it again is harmless.
 ///
@@ -264,7 +264,7 @@ class AppCollection {
   final String role;
   final BigInt revision;
   final String status;
-  final Uint32List members;
+  final List<AppMember> members;
   final int entries;
   final BigInt totalBytes;
   final BigInt onDiskBytes;
@@ -599,6 +599,32 @@ class AppEntry {
           available == other.available &&
           downloadedBytes == other.downloadedBytes &&
           path == other.path;
+}
+
+/// One member named by the collection's signed current revision.
+class AppMember {
+  /// Durable signing-root fingerprint. This remains present when the member
+  /// is not yet a known local contact.
+  final String fingerprint;
+
+  /// Process-local contact handle when this device knows the person.
+  final int? contact;
+
+  const AppMember({
+    required this.fingerprint,
+    this.contact,
+  });
+
+  @override
+  int get hashCode => fingerprint.hashCode ^ contact.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppMember &&
+          runtimeType == other.runtimeType &&
+          fingerprint == other.fingerprint &&
+          contact == other.contact;
 }
 
 /// One connected swarm peer.

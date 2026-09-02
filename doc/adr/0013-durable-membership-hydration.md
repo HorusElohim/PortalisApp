@@ -37,9 +37,20 @@ Rust hydration reconstructs membership from the current verified revision.
 
 ## Acceptance verification
 
-- [ ] Owner and member collections restore all signed members after restart.
-- [ ] Known contacts resolve to the expected process-local handles.
-- [ ] Unknown authorized members are not silently erased.
-- [ ] A newer accepted revision replaces the projected member set.
-- [ ] Corrupt, rollback, and conflicting revisions project explicit failures.
-- [ ] Bridge round-trip preserves the Rust-projected membership.
+- [x] Owner and member collections restore all signed members after restart —
+      `the_first_snapshot_restores_every_signed_member_after_restart`.
+- [x] Known contacts resolve to the expected process-local handles —
+      `the_first_snapshot_restores_every_signed_member_after_restart`.
+- [x] Unknown authorized members are not silently erased —
+      `the_first_snapshot_restores_every_signed_member_after_restart`.
+- [x] A newer accepted revision replaces the projected member set —
+      `a_newer_signed_revision_replaces_the_hydrated_member_set`.
+- [x] Corrupt, rollback, future, broken-chain, and conflicting revisions project
+      explicit failures — `corrupt_revision_projects_an_explicit_verification_failure`
+      and `persisted_revision_anomalies_are_explicit_hydration_failures`.
+- [x] Bridge round-trip preserves the Rust-projected membership —
+      `collection_bridge_preserves_known_and_unknown_signed_members`, generated
+      by `tool/frb_build.sh --codegen-only --force-frb`.
+
+The status remains `proposed` until owner validation at merge, as required by
+the ADR index convention.

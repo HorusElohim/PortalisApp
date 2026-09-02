@@ -53,7 +53,7 @@ pub struct AppCollection {
     pub role: String,
     pub revision: u64,
     pub status: String,
-    pub members: Vec<u32>,
+    pub members: Vec<AppMember>,
     pub entries: u32,
     pub total_bytes: u64,
     pub on_disk_bytes: u64,
@@ -69,6 +69,16 @@ pub struct AppCollection {
     pub completed_at: Option<u64>,
     pub transfer: Option<AppTransfer>,
     pub pending: Option<AppPending>,
+}
+
+/// One member named by the collection's signed current revision.
+#[derive(Clone, Debug)]
+pub struct AppMember {
+    /// Durable signing-root fingerprint. This remains present when the member
+    /// is not yet a known local contact.
+    pub fingerprint: String,
+    /// Process-local contact handle when this device knows the person.
+    pub contact: Option<u32>,
 }
 
 /// A coalesced transfer sample.
@@ -1021,7 +1031,14 @@ fn collection_projection(
         role: collection.role.wire().to_owned(),
         revision: collection.revision,
         status: status.to_owned(),
-        members: collection.members.iter().map(|member| member.0).collect(),
+        members: collection
+            .members
+            .iter()
+            .map(|member| AppMember {
+                fingerprint: hex::encode(member.root_key),
+                contact: member.contact.map(|contact| contact.0),
+            })
+            .collect(),
         entries: collection.entries,
         total_bytes: collection.total_bytes,
         on_disk_bytes: collection.on_disk_bytes,
@@ -1078,7 +1095,9 @@ fn detail_projection(detail: &Detail) -> AppDetail {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nexus::projection::state::{Connectivity, DeviceState};
+    use crate::nexus::projection::state::{
+        CollectionState, Connectivity, DeviceState, MemberState, Nature, Role, Status,
+    };
     use crate::nexus::store::records::StoredPeerHistory;
 
     fn command(kind: &str) -> AppCommand {
@@ -1171,6 +1190,43 @@ mod tests {
         assert_eq!(app.device.name, "Mina's Mac");
         assert_eq!(app.connectivity, "LocalOnly");
         assert!(app.collections.is_empty());
+    }
+
+    #[test]
+    fn collection_bridge_preserves_known_and_unknown_signed_members() {
+        let collection = CollectionState {
+            id: Handle(9),
+            name: "Shared archive".to_owned(),
+            nature: Nature::Native,
+            role: Role::Member,
+            revision: 4,
+            status: Status::Available,
+            members: vec![
+                MemberState {
+                    root_key: [0x11; portalis_nexus_protocol::DEVICE_KEY_BYTES],
+                    contact: Some(Handle(7)),
+                },
+                MemberState {
+                    root_key: [0x22; portalis_nexus_protocol::DEVICE_KEY_BYTES],
+                    contact: None,
+                },
+            ],
+            entries: 0,
+            total_bytes: 0,
+            on_disk_bytes: 0,
+            uploaded_bytes: 0,
+            started_at: None,
+            completed_at: None,
+            transfer: None,
+            pending: None,
+        };
+
+        let app = collection_projection(&collection);
+        assert_eq!(app.members.len(), 2);
+        assert_eq!(app.members[0].contact, Some(7));
+        assert_eq!(app.members[0].fingerprint, "11".repeat(32));
+        assert_eq!(app.members[1].contact, None);
+        assert_eq!(app.members[1].fingerprint, "22".repeat(32));
     }
 
     #[test]

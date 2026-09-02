@@ -1019,7 +1019,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       role: dco_decode_String(arr[3]),
       revision: dco_decode_u_64(arr[4]),
       status: dco_decode_String(arr[5]),
-      members: dco_decode_list_prim_u_32_strict(arr[6]),
+      members: dco_decode_list_app_member(arr[6]),
       entries: dco_decode_u_32(arr[7]),
       totalBytes: dco_decode_u_64(arr[8]),
       onDiskBytes: dco_decode_u_64(arr[9]),
@@ -1127,6 +1127,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       available: dco_decode_bool(arr[4]),
       downloadedBytes: dco_decode_u_64(arr[5]),
       path: dco_decode_opt_String(arr[6]),
+    );
+  }
+
+  @protected
+  AppMember dco_decode_app_member(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return AppMember(
+      fingerprint: dco_decode_String(arr[0]),
+      contact: dco_decode_opt_box_autoadd_u_32(arr[1]),
     );
   }
 
@@ -1424,6 +1436,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<AppMember> dco_decode_list_app_member(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_app_member).toList();
+  }
+
+  @protected
   List<AppPeer> dco_decode_list_app_peer(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_app_peer).toList();
@@ -1620,7 +1638,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_role = sse_decode_String(deserializer);
     var var_revision = sse_decode_u_64(deserializer);
     var var_status = sse_decode_String(deserializer);
-    var var_members = sse_decode_list_prim_u_32_strict(deserializer);
+    var var_members = sse_decode_list_app_member(deserializer);
     var var_entries = sse_decode_u_32(deserializer);
     var var_totalBytes = sse_decode_u_64(deserializer);
     var var_onDiskBytes = sse_decode_u_64(deserializer);
@@ -1755,6 +1773,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         available: var_available,
         downloadedBytes: var_downloadedBytes,
         path: var_path);
+  }
+
+  @protected
+  AppMember sse_decode_app_member(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_fingerprint = sse_decode_String(deserializer);
+    var var_contact = sse_decode_opt_box_autoadd_u_32(deserializer);
+    return AppMember(fingerprint: var_fingerprint, contact: var_contact);
   }
 
   @protected
@@ -2131,6 +2157,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<AppMember> sse_decode_list_app_member(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AppMember>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_app_member(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<AppPeer> sse_decode_list_app_peer(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -2408,7 +2446,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.role, serializer);
     sse_encode_u_64(self.revision, serializer);
     sse_encode_String(self.status, serializer);
-    sse_encode_list_prim_u_32_strict(self.members, serializer);
+    sse_encode_list_app_member(self.members, serializer);
     sse_encode_u_32(self.entries, serializer);
     sse_encode_u_64(self.totalBytes, serializer);
     sse_encode_u_64(self.onDiskBytes, serializer);
@@ -2487,6 +2525,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.available, serializer);
     sse_encode_u_64(self.downloadedBytes, serializer);
     sse_encode_opt_String(self.path, serializer);
+  }
+
+  @protected
+  void sse_encode_app_member(AppMember self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.fingerprint, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.contact, serializer);
   }
 
   @protected
@@ -2759,6 +2804,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_app_entry(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_app_member(
+      List<AppMember> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_app_member(item, serializer);
     }
   }
 
