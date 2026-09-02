@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fixed collection rows always showing "0 items" (and other item counts
+  disagreeing with the collection's real content). The list-row subtitle
+  computed its item count from `media.length`, but `media` is built only
+  from a subscribed detail — every row in a list, by design, has not
+  subscribed to one — so it read `0 items` regardless of how many entries
+  the collection actually had. The subtitle now reads Rust's own
+  `entryCount` (the summary snapshot's authoritative count, present with no
+  detail needed), matching what the detail screen and every other item-count
+  display already used. Regression test proves the fix: reinstating the old
+  `media.length` computation makes the new test fail with the exact `0
+  items` symptom.
 - Made torrent collection imports idempotent (ADR-0015). Import identity —
   a magnet's or `.torrent` file's BTv1 info hash — is now derived and checked
   against every existing durable collection before a new one is created:

@@ -44,7 +44,11 @@ extension CollectionPresentation on Collection {
   Color get hue => AppColors.hueAt(id.hashCode.abs());
 
   String get subtitle {
-    final count = media.length;
+    // Rust's own summary count, not the media list — that list is empty for
+    // any row that has not subscribed to a detail (every row in a list is
+    // exactly that), which is what made every collection row read "0 items"
+    // regardless of how many entries it actually held.
+    final count = entryCount;
     final items = '$count item${count == 1 ? '' : 's'}';
     if (isConnecting) return '$items · looking for a peer';
     final eta = etaLabel;

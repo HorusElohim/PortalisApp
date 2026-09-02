@@ -4,6 +4,7 @@ import 'package:portalis/app/collection_link.dart';
 import 'package:portalis/nexus/data/collection_view.dart';
 import 'package:portalis/features/collections/presentation/share_qr.dart';
 import 'package:portalis/features/collections/presentation/overview.dart';
+import 'package:portalis/features/collections/presentation/peer_color.dart';
 
 import 'package:portalis/features/collections/domain/picked_file.dart';
 import 'package:portalis/features/collections/domain/transfer_history.dart';
@@ -66,6 +67,20 @@ void main() {
   tearDown(resetTestState);
 
   group('collection', () {
+    test('subtitle reports the summary item count without a detail', () {
+      // The exact "0 items" defect: a list row carries the snapshot's
+      // authoritative entry count but has never subscribed to a detail, so
+      // `media` (built only from `detail?.entries`) is empty. The subtitle
+      // must still show the real count.
+      final collection = Collection(
+        buildNexusCollection(name: 'Iceland trip', entries: 3),
+      );
+
+      expect(collection.media, isEmpty, reason: 'no detail is subscribed');
+      expect(collection.entryCount, 3, reason: 'the summary knows the count');
+      expect(collection.subtitle, '3 items');
+    });
+
     testWidgets('a seed names local ownership instead of downloaded bytes',
         (tester) async {
       final collection = buildCollection(
