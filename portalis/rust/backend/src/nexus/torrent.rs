@@ -1437,10 +1437,81 @@ pub mod native {
             .filter_map(|(_, value)| decode_exact_source(value).ok())
             .find_map(|value| {
                 let url = reqwest::Url::parse(&value).ok()?;
-                (matches!(url.scheme(), "http" | "https")
+                let host = url.host_str()?;
+                let hostname_is_publicly_addressable = host.parse::<IpAddr>().map_or_else(
+                    |_| {
+                        host.contains('.')
+                            && !host.eq_ignore_ascii_case("localhost")
+                            && ![".localhost", ".local", ".internal", ".home", ".lan"]
+                                .iter()
+                                .any(|suffix| host.to_ascii_lowercase().ends_with(suffix))
+                    },
+                    exact_source_ip_is_public,
+                );
+                (url.scheme() == "https"
+                    && url.username().is_empty()
+                    && url.password().is_none()
+                    && url.port_or_known_default() == Some(443)
+                    && url.fragment().is_none()
+                    && hostname_is_publicly_addressable
                     && url.path().to_ascii_lowercase().ends_with(".torrent"))
                 .then(|| url.to_string())
             })
+    }
+
+    /// Whether an exact-source descriptor may connect to this address.
+    ///
+    /// This is deliberately a deny-list of every non-public range rather than
+    /// merely `!is_private()`: loopback, link-local, CGNAT, documentation,
+    /// benchmark, multicast, and reserved ranges are all unsafe destinations
+    /// for a URL supplied by an untrusted magnet.
+    fn exact_source_ip_is_public(address: IpAddr) -> bool {
+        match address {
+            IpAddr::V4(address) => {
+                let [a, b, c, _] = address.octets();
+                !(a == 0
+                    || a == 10
+                    || (a == 100 && (64..=127).contains(&b))
+                    || a == 127
+                    || (a == 169 && b == 254)
+                    || (a == 172 && (16..=31).contains(&b))
+                    || (a == 192 && b == 0 && c == 0)
+                    || (a == 192 && b == 0 && c == 2)
+                    || (a == 192 && b == 168)
+                    || (a == 198 && (b == 18 || b == 19))
+                    || (a == 198 && b == 51 && c == 100)
+                    || (a == 203 && b == 0 && c == 113)
+                    || a >= 224)
+            }
+            IpAddr::V6(address) => {
+                if let Some(mapped) = address.to_ipv4_mapped() {
+                    return exact_source_ip_is_public(IpAddr::V4(mapped));
+                }
+                let segments = address.segments();
+                !(address.is_unspecified()
+                    || address.is_loopback()
+                    || address.is_multicast()
+                    || segments[0] & 0xfe00 == 0xfc00
+                    || segments[0] & 0xffc0 == 0xfe80
+                    || segments[0] & 0xffc0 == 0xfec0
+                    || (segments[0] == 0x2001 && segments[1] == 0x0db8)
+                    || (segments[0] == 0x2001 && segments[1] == 0x0002 && segments[2] == 0)
+                    || (segments[0] == 0x2001 && segments[1] & 0xfff0 == 0x0010))
+            }
+        }
+    }
+
+    fn append_exact_source_chunk(
+        body: &mut Vec<u8>,
+        chunk: &[u8],
+        limit: usize,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            chunk.len() <= limit.saturating_sub(body.len()),
+            "exact-source descriptor is too large"
+        );
+        body.extend_from_slice(chunk);
+        Ok(())
     }
 
     fn decode_exact_source(value: &str) -> anyhow::Result<String> {
@@ -1464,8 +1535,11 @@ pub mod native {
     #[cfg(test)]
     mod peer_hint_tests {
         use super::{
-            peer_hints_from_source, referenced_metadata_dir, torrent_descriptor_url_from_magnet,
+            append_exact_source_chunk, exact_source_ip_is_public, fetch_exact_source_descriptor,
+            install_rustls_ring_provider, peer_hints_from_source, referenced_metadata_dir,
+            torrent_descriptor_url_from_magnet, validate_exact_source_descriptor,
         };
+        use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
         #[test]
         fn magnet_peer_hints_are_decoded_deduplicated_and_ordered() {
@@ -1492,6 +1566,161 @@ pub mod native {
                 Some("https://webtorrent.io/torrents/cosmos-laundromat.torrent".to_owned())
             );
         }
+
+        #[test]
+        fn exact_source_urls_reject_insecure_or_local_targets() {
+            let magnet = |source: &str| {
+                format!("magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&xs={source}")
+            };
+
+            assert_eq!(
+                torrent_descriptor_url_from_magnet(&magnet(
+                    "http%3A%2F%2Fexample.com%2Fdescriptor.torrent"
+                )),
+                None,
+                "plaintext descriptor hints are not trusted"
+            );
+            assert_eq!(
+                torrent_descriptor_url_from_magnet(&magnet(
+                    "https%3A%2F%2Fuser%3Asecret%40example.com%2Fdescriptor.torrent"
+                )),
+                None,
+                "credentials must never cross from an untrusted magnet"
+            );
+            assert_eq!(
+                torrent_descriptor_url_from_magnet(&magnet(
+                    "https%3A%2F%2F127.0.0.1%2Fdescriptor.torrent"
+                )),
+                None,
+                "literal local addresses are rejected before DNS or HTTP"
+            );
+        }
+
+        #[test]
+        fn exact_source_address_policy_accepts_only_public_unicast() {
+            for blocked in [
+                IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                IpAddr::V4(Ipv4Addr::LOCALHOST),
+                IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+                IpAddr::V4(Ipv4Addr::new(100, 64, 0, 1)),
+                IpAddr::V4(Ipv4Addr::new(169, 254, 1, 1)),
+                IpAddr::V4(Ipv4Addr::new(172, 16, 0, 1)),
+                IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
+                IpAddr::V4(Ipv4Addr::new(198, 18, 0, 1)),
+                IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1)),
+                IpAddr::V4(Ipv4Addr::BROADCAST),
+                IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+                IpAddr::V6(Ipv6Addr::LOCALHOST),
+                IpAddr::V6("fd00::1".parse().expect("ULA")),
+                IpAddr::V6("fe80::1".parse().expect("link local")),
+                IpAddr::V6("2001:db8::1".parse().expect("documentation")),
+                IpAddr::V6("ff02::1".parse().expect("multicast")),
+            ] {
+                assert!(!exact_source_ip_is_public(blocked), "accepted {blocked}");
+            }
+
+            assert!(exact_source_ip_is_public(IpAddr::V4(Ipv4Addr::new(
+                93, 184, 216, 34
+            ))));
+            assert!(exact_source_ip_is_public(IpAddr::V6(
+                "2606:2800:220:1:248:1893:25c8:1946"
+                    .parse()
+                    .expect("public IPv6")
+            )));
+        }
+
+        #[test]
+        fn exact_source_body_is_bounded_before_buffering_overflow() {
+            let mut body = vec![1_u8, 2, 3];
+            append_exact_source_chunk(&mut body, &[4, 5], 5).expect("fits exactly");
+            assert_eq!(body, [1, 2, 3, 4, 5]);
+
+            let error = append_exact_source_chunk(&mut body, &[6], 5)
+                .expect_err("one byte beyond the limit is refused");
+            assert!(error.to_string().contains("too large"));
+            assert_eq!(body, [1, 2, 3, 4, 5], "overflow is never appended");
+        }
+
+        #[test]
+        fn exact_source_descriptor_must_match_the_magnet_info_hash() {
+            const DESCRIPTOR: &[u8] = b"d4:infod6:lengthi1e4:name1:x12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaee";
+            let parsed = librqbit::torrent_from_bytes(DESCRIPTOR).expect("valid test descriptor");
+            let matching = format!("magnet:?xt=urn:btih:{}", parsed.info_hash.as_string());
+
+            assert_eq!(
+                validate_exact_source_descriptor(&matching, DESCRIPTOR)
+                    .expect("matching descriptor"),
+                DESCRIPTOR
+            );
+            let error = validate_exact_source_descriptor(
+                "magnet:?xt=urn:btih:0000000000000000000000000000000000000000",
+                DESCRIPTOR,
+            )
+            .expect_err("mismatched descriptor");
+            assert!(error.to_string().contains("does not match"));
+        }
+
+        #[test]
+        fn exact_source_client_ignores_environment_proxies() {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0")
+                .expect("binds a proxy observation socket");
+            listener
+                .set_nonblocking(true)
+                .expect("makes proxy observation bounded");
+            let proxy = format!("http://{}", listener.local_addr().expect("proxy address"));
+            let executable = std::env::current_exe().expect("current test executable");
+            let mut child = std::process::Command::new(executable)
+                .arg("exact_source_proxy_child")
+                .arg("--nocapture")
+                .arg("--test-threads=1")
+                .env("PORTALIS_EXACT_SOURCE_PROXY_CHILD", "1")
+                .env("HTTPS_PROXY", &proxy)
+                .env("https_proxy", &proxy)
+                .env_remove("ALL_PROXY")
+                .env_remove("all_proxy")
+                .env_remove("NO_PROXY")
+                .env_remove("no_proxy")
+                .spawn()
+                .expect("starts isolated proxy probe");
+
+            let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+            let mut contacted = false;
+            while std::time::Instant::now() < deadline {
+                match listener.accept() {
+                    Ok(_) => {
+                        contacted = true;
+                        break;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("observing proxy connection: {error}"),
+                }
+                if child.try_wait().expect("checks proxy probe").is_some() {
+                    break;
+                }
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+            assert!(
+                !contacted,
+                "an environment proxy bypassed validated and pinned exact-source DNS"
+            );
+        }
+
+        #[test]
+        fn exact_source_proxy_child() {
+            if std::env::var_os("PORTALIS_EXACT_SOURCE_PROXY_CHILD").is_none() {
+                return;
+            }
+            install_rustls_ring_provider();
+            let runtime = tokio::runtime::Runtime::new().expect("test runtime");
+            let _ = runtime.block_on(fetch_exact_source_descriptor(
+                "https://example.com/proxy-probe.torrent",
+                std::time::Duration::from_secs(2),
+            ));
+        }
+
         #[test]
         fn referenced_metadata_is_namespaced_by_torrent_identity_not_collection_name() {
             let first = referenced_metadata_dir("1111111111111111111111111111111111111111");
@@ -2011,6 +2240,108 @@ pub mod native {
     /// may open a file the person chose and still not be able to hand that
     /// path to something that opens it again later.
     const EXACT_SOURCE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+    const EXACT_SOURCE_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+    const MAX_EXACT_SOURCE_DESCRIPTOR_BYTES: usize = 8 * 1024 * 1024;
+
+    async fn fetch_exact_source_descriptor(
+        descriptor_url: &str,
+        timeout: std::time::Duration,
+    ) -> anyhow::Result<Vec<u8>> {
+        let url = reqwest::Url::parse(descriptor_url)
+            .context("parsing magnet exact-source descriptor URL")?;
+        let host = url
+            .host_str()
+            .ok_or_else(|| anyhow::anyhow!("exact-source descriptor URL has no host"))?;
+        let port = url
+            .port_or_known_default()
+            .ok_or_else(|| anyhow::anyhow!("exact-source descriptor URL has no port"))?;
+
+        let literal = host.parse::<IpAddr>().ok();
+        let addresses = if let Some(address) = literal {
+            anyhow::ensure!(
+                exact_source_ip_is_public(address),
+                "exact-source descriptor resolves to a non-public address"
+            );
+            vec![SocketAddr::new(address, port)]
+        } else {
+            let addresses = tokio::net::lookup_host((host, port))
+                .await
+                .context("resolving magnet exact-source descriptor host")?
+                .collect::<Vec<_>>();
+            anyhow::ensure!(
+                !addresses.is_empty(),
+                "exact-source descriptor host resolved to no addresses"
+            );
+            anyhow::ensure!(
+                addresses
+                    .iter()
+                    .all(|address| exact_source_ip_is_public(address.ip())),
+                "exact-source descriptor resolves to a non-public address"
+            );
+            addresses
+        };
+
+        let mut client = reqwest::Client::builder()
+            .https_only(true)
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(EXACT_SOURCE_CONNECT_TIMEOUT.min(timeout))
+            .timeout(timeout);
+        if literal.is_none() {
+            // Pin the already-validated DNS answer. A second lookup at connect
+            // time would reopen the DNS-rebinding window this validation closes.
+            client = client.resolve_to_addrs(host, &addresses);
+        }
+        let client = client
+            .build()
+            .context("building restricted exact-source descriptor client")?;
+        let mut response = client
+            .get(url)
+            .send()
+            .await
+            .context("fetching magnet exact-source descriptor")?;
+        anyhow::ensure!(
+            response.status().is_success(),
+            "exact-source descriptor returned {}",
+            response.status()
+        );
+        if let Some(length) = response.content_length() {
+            anyhow::ensure!(
+                length <= MAX_EXACT_SOURCE_DESCRIPTOR_BYTES as u64,
+                "exact-source descriptor is too large"
+            );
+        }
+
+        let mut body = Vec::with_capacity(
+            response
+                .content_length()
+                .and_then(|length| usize::try_from(length).ok())
+                .unwrap_or_default()
+                .min(MAX_EXACT_SOURCE_DESCRIPTOR_BYTES),
+        );
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .context("reading magnet exact-source descriptor")?
+        {
+            append_exact_source_chunk(&mut body, &chunk, MAX_EXACT_SOURCE_DESCRIPTOR_BYTES)?;
+        }
+        Ok(body)
+    }
+
+    fn validate_exact_source_descriptor(source: &str, bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+        let expected = librqbit::Magnet::parse(source)
+            .context("parsing magnet exact-source metadata")?
+            .as_id20()
+            .context("magnet exact-source metadata has no BTv1 info hash")?;
+        let parsed = librqbit::torrent_from_bytes(bytes)
+            .context("decoding magnet exact-source descriptor")?;
+        anyhow::ensure!(
+            parsed.info_hash == expected,
+            "exact-source descriptor does not match the magnet's BTv1 info hash"
+        );
+        Ok(bytes.to_vec())
+    }
 
     async fn add_torrent_for(source: &str) -> anyhow::Result<AddTorrent<'static>> {
         add_torrent_for_with_exact_source_timeout(source, EXACT_SOURCE_TIMEOUT).await
@@ -2022,29 +2353,11 @@ pub mod native {
     ) -> anyhow::Result<AddTorrent<'static>> {
         if let Some(descriptor_url) = torrent_descriptor_url_from_magnet(source) {
             let exact_source = async {
-                let expected = librqbit::Magnet::parse(source)
-                    .context("parsing magnet exact-source metadata")?
-                    .as_id20()
-                    .context("magnet exact-source metadata has no BTv1 info hash")?;
-                let response = reqwest::get(&descriptor_url)
-                    .await
-                    .context("fetching magnet exact-source descriptor")?;
-                anyhow::ensure!(
-                    response.status().is_success(),
-                    "exact-source descriptor returned {}",
-                    response.status()
-                );
-                let bytes = response
-                    .bytes()
-                    .await
-                    .context("reading magnet exact-source descriptor")?;
-                let parsed = librqbit::torrent_from_bytes(&bytes)
-                    .context("decoding magnet exact-source descriptor")?;
-                anyhow::ensure!(
-                    parsed.info_hash == expected,
-                    "exact-source descriptor does not match the magnet's BTv1 info hash"
-                );
-                anyhow::Ok(AddTorrent::from_bytes(bytes.to_vec()))
+                let bytes =
+                    fetch_exact_source_descriptor(&descriptor_url, exact_source_timeout).await?;
+                anyhow::Ok(AddTorrent::from_bytes(validate_exact_source_descriptor(
+                    source, &bytes,
+                )?))
             };
             let exact_source = tokio::time::timeout(exact_source_timeout, exact_source).await;
             match exact_source {
@@ -2967,21 +3280,7 @@ pub mod native {
         async fn an_unavailable_exact_source_falls_back_to_the_magnet() {
             let _state = crate::nexus::paths::redirect_to_temp();
             let _session = session().await.expect("installs the TLS provider");
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-                .await
-                .expect("binds a local dead descriptor server");
-            let port = listener.local_addr().expect("local address").port();
-            let server = tokio::spawn(async move {
-                use tokio::io::AsyncWriteExt;
-                let (mut stream, _) = listener.accept().await.expect("accepts one request");
-                stream
-                    .write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n")
-                    .await
-                    .expect("writes the unavailable response");
-            });
-            let magnet = format!(
-                "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&xs=http%3A%2F%2F127.0.0.1%3A{port}%2Fdead.torrent"
-            );
+            let magnet = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&xs=http%3A%2F%2Fexample.com%2Fdead.torrent".to_owned();
 
             let add = add_torrent_for(&magnet)
                 .await
@@ -2992,23 +3291,18 @@ pub mod native {
                     panic!("an unavailable descriptor must not become torrent bytes")
                 }
             }
-            server.await.expect("descriptor server exits");
         }
 
         #[tokio::test]
-        async fn a_hung_exact_source_does_not_hold_metadata_resolution_forever() {
+        async fn a_rejected_local_exact_source_is_never_requested() {
             let _state = crate::nexus::paths::redirect_to_temp();
             let _session = session().await.expect("installs the TLS provider");
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
                 .await
-                .expect("binds a local hanging descriptor server");
+                .expect("binds a local observation socket");
             let port = listener.local_addr().expect("local address").port();
-            let server = tokio::spawn(async move {
-                let (_stream, _) = listener.accept().await.expect("accepts one request");
-                std::future::pending::<()>().await;
-            });
             let magnet = format!(
-                "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&xs=http%3A%2F%2F127.0.0.1%3A{port}%2Fhung.torrent"
+                "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&xs=https%3A%2F%2F127.0.0.1%3A{port}%2Frejected.torrent"
             );
 
             let add = add_torrent_for_with_exact_source_timeout(
@@ -3020,10 +3314,15 @@ pub mod native {
             match add {
                 AddTorrent::Url(source) => assert_eq!(source, magnet),
                 AddTorrent::TorrentFileBytes(_) => {
-                    panic!("a hung descriptor must not become torrent bytes")
+                    panic!("a rejected descriptor must not become torrent bytes")
                 }
             }
-            server.abort();
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(30), listener.accept())
+                    .await
+                    .is_err(),
+                "Portalis must reject the target before opening a connection"
+            );
         }
 
         #[test]
