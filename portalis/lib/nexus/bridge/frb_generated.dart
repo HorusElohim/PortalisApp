@@ -1010,25 +1010,73 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppCollection dco_decode_app_collection(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 15)
-      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
+    if (arr.length != 18)
+      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
     return AppCollection(
       id: dco_decode_u_32(arr[0]),
       name: dco_decode_String(arr[1]),
-      nature: dco_decode_String(arr[2]),
-      role: dco_decode_String(arr[3]),
+      nature: dco_decode_app_collection_nature(arr[2]),
+      role: dco_decode_app_collection_role(arr[3]),
       revision: dco_decode_u_64(arr[4]),
-      status: dco_decode_String(arr[5]),
-      members: dco_decode_list_app_member(arr[6]),
-      entries: dco_decode_u_32(arr[7]),
-      totalBytes: dco_decode_u_64(arr[8]),
-      onDiskBytes: dco_decode_u_64(arr[9]),
-      uploadedBytes: dco_decode_u_64(arr[10]),
-      startedAt: dco_decode_opt_box_autoadd_u_64(arr[11]),
-      completedAt: dco_decode_opt_box_autoadd_u_64(arr[12]),
-      transfer: dco_decode_opt_box_autoadd_app_transfer(arr[13]),
-      pending: dco_decode_opt_box_autoadd_app_pending(arr[14]),
+      lifecycle: dco_decode_app_collection_lifecycle(arr[5]),
+      statusLabel: dco_decode_String(arr[6]),
+      capabilities: dco_decode_app_collection_capabilities(arr[7]),
+      facts: dco_decode_app_collection_facts(arr[8]),
+      members: dco_decode_list_app_member(arr[9]),
+      entries: dco_decode_u_32(arr[10]),
+      totalBytes: dco_decode_u_64(arr[11]),
+      onDiskBytes: dco_decode_u_64(arr[12]),
+      uploadedBytes: dco_decode_u_64(arr[13]),
+      startedAt: dco_decode_opt_box_autoadd_u_64(arr[14]),
+      completedAt: dco_decode_opt_box_autoadd_u_64(arr[15]),
+      transfer: dco_decode_opt_box_autoadd_app_transfer(arr[16]),
+      pending: dco_decode_opt_box_autoadd_app_pending(arr[17]),
     );
+  }
+
+  @protected
+  AppCollectionCapabilities dco_decode_app_collection_capabilities(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return AppCollectionCapabilities(
+      canAddMedia: dco_decode_bool(arr[0]),
+      canSelect: dco_decode_bool(arr[1]),
+      canShare: dco_decode_bool(arr[2]),
+      canPause: dco_decode_bool(arr[3]),
+      canResume: dco_decode_bool(arr[4]),
+      canDelete: dco_decode_bool(arr[5]),
+      canDeleteFiles: dco_decode_bool(arr[6]),
+    );
+  }
+
+  @protected
+  AppCollectionFacts dco_decode_app_collection_facts(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return AppCollectionFacts(
+      complete: dco_decode_bool(arr[0]),
+      sharing: dco_decode_bool(arr[1]),
+      moving: dco_decode_bool(arr[2]),
+      preparing: dco_decode_bool(arr[3]),
+      progress: dco_decode_f_32(arr[4]),
+    );
+  }
+
+  @protected
+  AppCollectionLifecycle dco_decode_app_collection_lifecycle(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AppCollectionLifecycle.values[raw as int];
+  }
+
+  @protected
+  AppCollectionNature dco_decode_app_collection_nature(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AppCollectionNature.values[raw as int];
   }
 
   @protected
@@ -1041,6 +1089,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       collection: dco_decode_u_32(arr[0]),
       peer: dco_decode_app_peer(arr[1]),
     );
+  }
+
+  @protected
+  AppCollectionRole dco_decode_app_collection_role(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AppCollectionRole.values[raw as int];
   }
 
   @protected
@@ -1400,6 +1454,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int dco_decode_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
   List<String> dco_decode_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_String).toList();
@@ -1634,10 +1694,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_u_32(deserializer);
     var var_name = sse_decode_String(deserializer);
-    var var_nature = sse_decode_String(deserializer);
-    var var_role = sse_decode_String(deserializer);
+    var var_nature = sse_decode_app_collection_nature(deserializer);
+    var var_role = sse_decode_app_collection_role(deserializer);
     var var_revision = sse_decode_u_64(deserializer);
-    var var_status = sse_decode_String(deserializer);
+    var var_lifecycle = sse_decode_app_collection_lifecycle(deserializer);
+    var var_statusLabel = sse_decode_String(deserializer);
+    var var_capabilities = sse_decode_app_collection_capabilities(deserializer);
+    var var_facts = sse_decode_app_collection_facts(deserializer);
     var var_members = sse_decode_list_app_member(deserializer);
     var var_entries = sse_decode_u_32(deserializer);
     var var_totalBytes = sse_decode_u_64(deserializer);
@@ -1653,7 +1716,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         nature: var_nature,
         role: var_role,
         revision: var_revision,
-        status: var_status,
+        lifecycle: var_lifecycle,
+        statusLabel: var_statusLabel,
+        capabilities: var_capabilities,
+        facts: var_facts,
         members: var_members,
         entries: var_entries,
         totalBytes: var_totalBytes,
@@ -1666,12 +1732,74 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AppCollectionCapabilities sse_decode_app_collection_capabilities(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_canAddMedia = sse_decode_bool(deserializer);
+    var var_canSelect = sse_decode_bool(deserializer);
+    var var_canShare = sse_decode_bool(deserializer);
+    var var_canPause = sse_decode_bool(deserializer);
+    var var_canResume = sse_decode_bool(deserializer);
+    var var_canDelete = sse_decode_bool(deserializer);
+    var var_canDeleteFiles = sse_decode_bool(deserializer);
+    return AppCollectionCapabilities(
+        canAddMedia: var_canAddMedia,
+        canSelect: var_canSelect,
+        canShare: var_canShare,
+        canPause: var_canPause,
+        canResume: var_canResume,
+        canDelete: var_canDelete,
+        canDeleteFiles: var_canDeleteFiles);
+  }
+
+  @protected
+  AppCollectionFacts sse_decode_app_collection_facts(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_complete = sse_decode_bool(deserializer);
+    var var_sharing = sse_decode_bool(deserializer);
+    var var_moving = sse_decode_bool(deserializer);
+    var var_preparing = sse_decode_bool(deserializer);
+    var var_progress = sse_decode_f_32(deserializer);
+    return AppCollectionFacts(
+        complete: var_complete,
+        sharing: var_sharing,
+        moving: var_moving,
+        preparing: var_preparing,
+        progress: var_progress);
+  }
+
+  @protected
+  AppCollectionLifecycle sse_decode_app_collection_lifecycle(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return AppCollectionLifecycle.values[inner];
+  }
+
+  @protected
+  AppCollectionNature sse_decode_app_collection_nature(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return AppCollectionNature.values[inner];
+  }
+
+  @protected
   AppCollectionPeer sse_decode_app_collection_peer(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_collection = sse_decode_u_32(deserializer);
     var var_peer = sse_decode_app_peer(deserializer);
     return AppCollectionPeer(collection: var_collection, peer: var_peer);
+  }
+
+  @protected
+  AppCollectionRole sse_decode_app_collection_role(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return AppCollectionRole.values[inner];
   }
 
   @protected
@@ -2083,6 +2211,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int sse_decode_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getInt32();
+  }
+
+  @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -2356,12 +2490,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
-  }
-
-  @protected
   void sse_encode_AnyhowException(
       AnyhowException self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2442,10 +2570,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_32(self.id, serializer);
     sse_encode_String(self.name, serializer);
-    sse_encode_String(self.nature, serializer);
-    sse_encode_String(self.role, serializer);
+    sse_encode_app_collection_nature(self.nature, serializer);
+    sse_encode_app_collection_role(self.role, serializer);
     sse_encode_u_64(self.revision, serializer);
-    sse_encode_String(self.status, serializer);
+    sse_encode_app_collection_lifecycle(self.lifecycle, serializer);
+    sse_encode_String(self.statusLabel, serializer);
+    sse_encode_app_collection_capabilities(self.capabilities, serializer);
+    sse_encode_app_collection_facts(self.facts, serializer);
     sse_encode_list_app_member(self.members, serializer);
     sse_encode_u_32(self.entries, serializer);
     sse_encode_u_64(self.totalBytes, serializer);
@@ -2458,11 +2589,56 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_app_collection_capabilities(
+      AppCollectionCapabilities self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.canAddMedia, serializer);
+    sse_encode_bool(self.canSelect, serializer);
+    sse_encode_bool(self.canShare, serializer);
+    sse_encode_bool(self.canPause, serializer);
+    sse_encode_bool(self.canResume, serializer);
+    sse_encode_bool(self.canDelete, serializer);
+    sse_encode_bool(self.canDeleteFiles, serializer);
+  }
+
+  @protected
+  void sse_encode_app_collection_facts(
+      AppCollectionFacts self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.complete, serializer);
+    sse_encode_bool(self.sharing, serializer);
+    sse_encode_bool(self.moving, serializer);
+    sse_encode_bool(self.preparing, serializer);
+    sse_encode_f_32(self.progress, serializer);
+  }
+
+  @protected
+  void sse_encode_app_collection_lifecycle(
+      AppCollectionLifecycle self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_app_collection_nature(
+      AppCollectionNature self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_app_collection_peer(
       AppCollectionPeer self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_32(self.collection, serializer);
     sse_encode_app_peer(self.peer, serializer);
+  }
+
+  @protected
+  void sse_encode_app_collection_role(
+      AppCollectionRole self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
   }
 
   @protected
@@ -2749,6 +2925,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putInt32(self);
+  }
+
+  @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
@@ -2982,11 +3164,5 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_encode_unit(void self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-  }
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putInt32(self);
   }
 }

@@ -49,7 +49,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppCollection dco_decode_app_collection(dynamic raw);
 
   @protected
+  AppCollectionCapabilities dco_decode_app_collection_capabilities(dynamic raw);
+
+  @protected
+  AppCollectionFacts dco_decode_app_collection_facts(dynamic raw);
+
+  @protected
+  AppCollectionLifecycle dco_decode_app_collection_lifecycle(dynamic raw);
+
+  @protected
+  AppCollectionNature dco_decode_app_collection_nature(dynamic raw);
+
+  @protected
   AppCollectionPeer dco_decode_app_collection_peer(dynamic raw);
+
+  @protected
+  AppCollectionRole dco_decode_app_collection_role(dynamic raw);
 
   @protected
   AppCommand dco_decode_app_command(dynamic raw);
@@ -131,6 +146,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double dco_decode_f_32(dynamic raw);
+
+  @protected
+  int dco_decode_i_32(dynamic raw);
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
@@ -239,7 +257,27 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppCollection sse_decode_app_collection(SseDeserializer deserializer);
 
   @protected
+  AppCollectionCapabilities sse_decode_app_collection_capabilities(
+      SseDeserializer deserializer);
+
+  @protected
+  AppCollectionFacts sse_decode_app_collection_facts(
+      SseDeserializer deserializer);
+
+  @protected
+  AppCollectionLifecycle sse_decode_app_collection_lifecycle(
+      SseDeserializer deserializer);
+
+  @protected
+  AppCollectionNature sse_decode_app_collection_nature(
+      SseDeserializer deserializer);
+
+  @protected
   AppCollectionPeer sse_decode_app_collection_peer(
+      SseDeserializer deserializer);
+
+  @protected
+  AppCollectionRole sse_decode_app_collection_role(
       SseDeserializer deserializer);
 
   @protected
@@ -324,6 +362,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double sse_decode_f_32(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
@@ -413,9 +454,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer);
-
-  @protected
   void sse_encode_AnyhowException(
       AnyhowException self, SseSerializer serializer);
 
@@ -444,8 +482,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_app_collection(AppCollection self, SseSerializer serializer);
 
   @protected
+  void sse_encode_app_collection_capabilities(
+      AppCollectionCapabilities self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_collection_facts(
+      AppCollectionFacts self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_collection_lifecycle(
+      AppCollectionLifecycle self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_collection_nature(
+      AppCollectionNature self, SseSerializer serializer);
+
+  @protected
   void sse_encode_app_collection_peer(
       AppCollectionPeer self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_collection_role(
+      AppCollectionRole self, SseSerializer serializer);
 
   @protected
   void sse_encode_app_command(AppCommand self, SseSerializer serializer);
@@ -539,6 +597,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_f_32(double self, SseSerializer serializer);
 
   @protected
+  void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
@@ -629,9 +690,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer);
 }
 
 // Section: wire_class

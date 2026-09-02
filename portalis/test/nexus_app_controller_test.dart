@@ -1,13 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/nexus/application/app_controller.dart';
 import 'package:portalis/nexus/data/app_repository.dart';
-import 'package:portalis/nexus/domain/app_state.dart';
-import 'package:portalis/features/collections/presentation/route.dart';
 import 'package:portalis/features/collections/presentation/home_library.dart';
+
+import 'test_support.dart';
 
 void main() {
   test('owns one state subscription and forwards lifecycle changes', () async {
@@ -238,20 +236,14 @@ void main() {
       'translated rather than reimplemented', (tester) async {
     AppCollection? opened;
     var created = false;
-    final collection = AppCollection(
+    final collection = buildNexusCollection(
       id: 9,
       name: 'Episode archive',
       nature: 'Torrent',
       role: 'Owner',
-      revision: BigInt.one,
-      status: 'Preparing',
-      members: const [],
+      status: 'ResolvingMetadata',
       entries: 2,
-      totalBytes: BigInt.from(39),
-      onDiskBytes: BigInt.zero,
-      uploadedBytes: BigInt.zero,
-      transfer: null,
-      pending: null,
+      totalBytes: 39,
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -282,7 +274,7 @@ void main() {
     expect(find.text('Episode archive'), findsOneWidget);
     // The engine's own word, shown as it is — there is no second vocabulary
     // between the two any more, and so nothing that can disagree.
-    expect(find.text('PREPARING'), findsOneWidget);
+    expect(find.text('RESOLVING METADATA'), findsOneWidget);
     await tester.tap(find.text('Episode archive'));
     expect(opened, same(collection));
     await tester.tap(find.byKey(const Key('shareCollectionAction')));
@@ -393,18 +385,15 @@ void main() {
         contacts: const [],
         collections: [
           idle,
-          AppCollection(
+          buildNexusCollection(
             id: 10,
             name: 'Moving',
             nature: 'Torrent',
             role: 'Owner',
-            revision: BigInt.one,
             status: 'Downloading',
-            members: const [],
             entries: 1,
-            totalBytes: BigInt.from(100),
-            onDiskBytes: BigInt.from(50),
-            uploadedBytes: BigInt.zero,
+            totalBytes: 100,
+            onDiskBytes: 50,
             transfer: const AppTransfer(
               progress: 0.5,
               sourceReading: false,
@@ -413,7 +402,6 @@ void main() {
               peers: 3,
               etaSecs: 4,
             ),
-            pending: null,
           ),
         ],
         alerts: const [],
@@ -561,20 +549,13 @@ AppSnapshot _collectionState({String status = 'Available'}) => AppSnapshot(
       connectivity: 'LocalOnly',
       contacts: const [],
       collections: [
-        AppCollection(
+        buildNexusCollection(
           id: 9,
           name: 'Episode archive',
           nature: 'Native',
           role: 'Owner',
-          revision: BigInt.one,
           status: status,
-          members: const [],
           entries: 0,
-          totalBytes: BigInt.zero,
-          onDiskBytes: BigInt.zero,
-          uploadedBytes: BigInt.zero,
-          transfer: null,
-          pending: null,
         ),
       ],
       alerts: const [],
@@ -609,20 +590,14 @@ AppSnapshot _torrentState({
       connectivity: 'LocalOnly',
       contacts: const [],
       collections: [
-        AppCollection(
+        buildNexusCollection(
           id: 9,
           name: 'Big Buck Bunny',
           nature: nature,
           role: 'Owner',
-          revision: BigInt.one,
           status: status,
-          members: const [],
           entries: 2,
-          totalBytes: BigInt.from(39),
-          onDiskBytes: BigInt.zero,
-          uploadedBytes: BigInt.zero,
-          transfer: null,
-          pending: null,
+          totalBytes: 39,
         ),
       ],
       alerts: const [],

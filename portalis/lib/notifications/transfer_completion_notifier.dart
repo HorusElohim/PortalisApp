@@ -29,7 +29,8 @@ class TransferCompletionObserver {
   Future<void> _observe(AppSnapshot snapshot) async {
     final current = <int, BigInt>{
       for (final collection in snapshot.collections)
-        if (collection.role == 'Receiver' && collection.completedAt != null)
+        if (collection.role == AppCollectionRole.member &&
+            collection.completedAt != null)
           collection.id: collection.completedAt!,
     };
     if (_seeded) {

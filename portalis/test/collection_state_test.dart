@@ -1,112 +1,53 @@
 import 'test_support.dart';
 import 'package:portalis/features/collections/domain/collection_state.dart';
 
-/// The backend sends one word per collection and the interface decides what to
-/// draw from it. Those words are a shipped contract — see
-/// `projection/wire.rs` for the half that produces them — so this pins the
-/// half that reads them.
 void main() {
-  group('collection state contract', () {
-    /// Written out literally rather than derived from `wire`, so a rename has
-    /// to be made twice on purpose instead of agreeing with itself.
-    test('every word the backend sends parses to its own state', () {
-      const contract = {
-        'Available': CollectionState.available,
-        'Seeding': CollectionState.seeding,
-        'Paused': CollectionState.paused,
-        'Draft': CollectionState.draft,
-        'ResolvingMetadata': CollectionState.resolvingMetadata,
-        'WaitingForSender': CollectionState.waitingForSender,
-        'MetadataReady': CollectionState.metadataReady,
-        'DownloadRequested': CollectionState.downloadRequested,
-        'RetryingMetadata': CollectionState.retryingMetadata,
-        'Downloading': CollectionState.downloading,
-        'Updating': CollectionState.updating,
-        'WaitingForOwner': CollectionState.waitingForOwner,
-        'AccessRemoved': CollectionState.accessRemoved,
-        'NeedsNewerVersion': CollectionState.needsNewerVersion,
-        'CannotVerify': CollectionState.cannotVerify,
-        'ConflictingHistory': CollectionState.conflictingHistory,
-      };
-
-      contract.forEach((word, state) {
-        expect(CollectionState.parse(word), state, reason: word);
-        expect(state.wire!, word, reason: 'round trip for $word');
-      });
-    });
-
-    /// Every state except [CollectionState.unknown] must have a word, or the
-    /// backend could never produce it.
-    test('only the unknown state has no word of its own', () {
-      for (final state in CollectionState.values) {
-        expect(
-          state.wire,
-          state == CollectionState.unknown ? isNull : isNotNull,
-          reason: '$state',
-        );
-      }
-    });
-
-    /// The bug this replaced. Three sites compared against these two strings,
-    /// which the backend has never sent, so every one of them was silently
-    /// false — a progress badge that never appeared and an empty-state message
-    /// that was always the wrong one.
-    test('a word the backend never sends is unknown, not a real state', () {
-      expect(CollectionState.parse('downloading'), CollectionState.unknown,
-          reason: 'case matters — the backend sends Downloading');
-      expect(CollectionState.parse('importing'), CollectionState.unknown,
-          reason: 'never a status the backend has emitted');
-      expect(CollectionState.parse(''), CollectionState.unknown);
-    });
-
-    /// A newer backend saying something this build has never heard of shows
-    /// the word itself, which is more use than a placeholder.
-    test('an unknown word is still shown to the person', () {
-      expect(CollectionState.unknown.label('SomethingNew'), 'SOMETHINGNEW');
+  group('typed collection state contract', () {
+    test('generated lifecycle values are formatted for people, not parsed', () {
       expect(
-        CollectionState.waitingForOwner.label('WaitingForOwner'),
+        AppCollectionLifecycle.waitingForOwner.label('WaitingForOwner'),
         'WAITING FOR OWNER',
+      );
+      expect(
+        AppCollectionLifecycle.downloading.label('Downloading'),
+        'DOWNLOADING',
       );
     });
 
-    test('nature and role parse the same way', () {
-      expect(CollectionNature.parse('Torrent'), CollectionNature.torrent);
-      expect(CollectionNature.parse('Native'), CollectionNature.native);
-      expect(CollectionNature.parse('torrent'), CollectionNature.unknown);
-      expect(CollectionRole.parse('Owner'), CollectionRole.owner);
-      expect(CollectionRole.parse('Member'), CollectionRole.member);
-      expect(CollectionRole.parse('owner'), CollectionRole.unknown);
-    });
-  });
-
-  group('collection reads its state through the contract', () {
-    test('a downloading collection reports itself as downloading', () {
+    test('a downloading collection reads Rust lifecycle and facts directly',
+        () {
       final collection = buildCollection(status: 'Downloading');
 
+      expect(collection.lifecycle, AppCollectionLifecycle.downloading);
       expect(collection.isDownloading, isTrue);
-      expect(collection.lifecycle, CollectionState.downloading);
       expect(collection.isComplete, isFalse);
+      expect(collection.source.facts.moving, isTrue);
     });
 
-    /// An owner seeding its own zero-copy source is complete without ever
-    /// having been `Available` — see `status_for` in the backend.
-    test('a seeding owner is complete', () {
+    test('a seeding owner is complete from the Rust fact', () {
       final collection = buildCollection(status: 'Seeding');
 
+      expect(collection.lifecycle, AppCollectionLifecycle.seeding);
       expect(collection.isSeeding, isTrue);
       expect(collection.isComplete, isTrue);
+      expect(collection.source.facts.complete, isTrue);
     });
 
-    test('a word this build cannot interpret answers no to every question', () {
-      final collection = buildCollection(status: 'SomethingNewerBackendsSay');
+    test('metadata preparation and selection capabilities come from Rust', () {
+      final resolving = buildCollection(
+        nature: 'Torrent',
+        status: 'ResolvingMetadata',
+      );
+      final ready = buildCollection(
+        nature: 'Torrent',
+        status: 'MetadataReady',
+      );
 
-      expect(collection.lifecycle, CollectionState.unknown);
-      expect(collection.isDownloading, isFalse);
-      expect(collection.isPaused, isFalse);
-      expect(collection.isDraft, isFalse);
-      expect(collection.isComplete, isFalse);
-      // And it is still legible, rather than being dropped on the floor.
-      expect(collection.state, 'SomethingNewerBackendsSay');
+      expect(resolving.isPreparing, isTrue);
+      expect(resolving.source.facts.preparing, isTrue);
+      expect(resolving.source.capabilities.canSelect, isFalse);
+      expect(ready.hasMetadata, isTrue);
+      expect(ready.source.capabilities.canSelect, isTrue);
     });
   });
 }

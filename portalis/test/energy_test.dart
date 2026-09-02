@@ -34,13 +34,13 @@ void main() {
 
     test('downloading or pending is not sharing', () {
       expect(_c(status: 'Downloading').isSharing, isFalse);
-      expect(_c(status: 'Preparing').isSharing, isFalse);
+      expect(_c(status: 'ResolvingMetadata').isSharing, isFalse);
     });
   });
 
   group('glow is earned, never decorative', () {
     test('an idle, unshared collection has none', () {
-      expect(_c(status: 'Preparing').glow, GlowLevel.none);
+      expect(_c(status: 'ResolvingMetadata').glow, GlowLevel.none);
       expect(_c(status: 'Available', entries: const []).glow, GlowLevel.none);
     });
 

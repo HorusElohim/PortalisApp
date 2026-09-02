@@ -6,8 +6,8 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `app_run`, `collection_projection`, `detail_projection`, `group_people_peers`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `app_collection_contract`, `app_collection_lifecycle`, `app_run`, `collection_projection`, `detail_projection`, `group_people_peers`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Opens the local Nexus runtime once. Calling it again is harmless.
 ///
@@ -260,10 +260,15 @@ class AppAppRun {
 class AppCollection {
   final int id;
   final String name;
-  final String nature;
-  final String role;
+  final AppCollectionNature nature;
+  final AppCollectionRole role;
   final BigInt revision;
-  final String status;
+  final AppCollectionLifecycle lifecycle;
+
+  /// Human-readable/raw backend label for presentation and diagnostics.
+  final String statusLabel;
+  final AppCollectionCapabilities capabilities;
+  final AppCollectionFacts facts;
   final List<AppMember> members;
   final int entries;
   final BigInt totalBytes;
@@ -288,7 +293,10 @@ class AppCollection {
     required this.nature,
     required this.role,
     required this.revision,
-    required this.status,
+    required this.lifecycle,
+    required this.statusLabel,
+    required this.capabilities,
+    required this.facts,
     required this.members,
     required this.entries,
     required this.totalBytes,
@@ -307,7 +315,10 @@ class AppCollection {
       nature.hashCode ^
       role.hashCode ^
       revision.hashCode ^
-      status.hashCode ^
+      lifecycle.hashCode ^
+      statusLabel.hashCode ^
+      capabilities.hashCode ^
+      facts.hashCode ^
       members.hashCode ^
       entries.hashCode ^
       totalBytes.hashCode ^
@@ -328,7 +339,10 @@ class AppCollection {
           nature == other.nature &&
           role == other.role &&
           revision == other.revision &&
-          status == other.status &&
+          lifecycle == other.lifecycle &&
+          statusLabel == other.statusLabel &&
+          capabilities == other.capabilities &&
+          facts == other.facts &&
           members == other.members &&
           entries == other.entries &&
           totalBytes == other.totalBytes &&
@@ -338,6 +352,124 @@ class AppCollection {
           completedAt == other.completedAt &&
           transfer == other.transfer &&
           pending == other.pending;
+}
+
+/// Application decisions that only Rust may make.
+class AppCollectionCapabilities {
+  final bool canAddMedia;
+  final bool canSelect;
+  final bool canShare;
+  final bool canPause;
+  final bool canResume;
+  final bool canDelete;
+  final bool canDeleteFiles;
+
+  const AppCollectionCapabilities({
+    required this.canAddMedia,
+    required this.canSelect,
+    required this.canShare,
+    required this.canPause,
+    required this.canResume,
+    required this.canDelete,
+    required this.canDeleteFiles,
+  });
+
+  @override
+  int get hashCode =>
+      canAddMedia.hashCode ^
+      canSelect.hashCode ^
+      canShare.hashCode ^
+      canPause.hashCode ^
+      canResume.hashCode ^
+      canDelete.hashCode ^
+      canDeleteFiles.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppCollectionCapabilities &&
+          runtimeType == other.runtimeType &&
+          canAddMedia == other.canAddMedia &&
+          canSelect == other.canSelect &&
+          canShare == other.canShare &&
+          canPause == other.canPause &&
+          canResume == other.canResume &&
+          canDelete == other.canDelete &&
+          canDeleteFiles == other.canDeleteFiles;
+}
+
+/// Presentation-ready collection facts derived once in Rust.
+class AppCollectionFacts {
+  final bool complete;
+  final bool sharing;
+  final bool moving;
+
+  /// Metadata discovery is active or retrying. There may be no byte total
+  /// yet, so Flutter renders an indeterminate indicator from this fact.
+  final bool preparing;
+
+  /// Authoritative zero-to-one progress even when no live transfer sample
+  /// exists (completed collections remain 1.0 after restart).
+  final double progress;
+
+  const AppCollectionFacts({
+    required this.complete,
+    required this.sharing,
+    required this.moving,
+    required this.preparing,
+    required this.progress,
+  });
+
+  @override
+  int get hashCode =>
+      complete.hashCode ^
+      sharing.hashCode ^
+      moving.hashCode ^
+      preparing.hashCode ^
+      progress.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppCollectionFacts &&
+          runtimeType == other.runtimeType &&
+          complete == other.complete &&
+          sharing == other.sharing &&
+          moving == other.moving &&
+          preparing == other.preparing &&
+          progress == other.progress;
+}
+
+/// The typed lifecycle Rust projects for application decisions.
+///
+/// This replaces Flutter's hand-written parser for `Status::wire()` strings.
+/// Human-readable labels remain separate presentation data; widgets compare
+/// this generated enum and never reinterpret backend spelling.
+enum AppCollectionLifecycle {
+  available,
+  seeding,
+  paused,
+  draft,
+  resolvingMetadata,
+  waitingForSender,
+  metadataReady,
+  downloadRequested,
+  retryingMetadata,
+  downloading,
+  updating,
+  waitingForOwner,
+  accessRemoved,
+  needsNewerVersion,
+  cannotVerify,
+  conflictingHistory,
+  ;
+}
+
+/// What a collection contains and how it entered Portalis.
+enum AppCollectionNature {
+  native,
+  torrent,
+  ;
 }
 
 /// One swarm connection, and which collection it belongs to.
@@ -364,6 +496,13 @@ class AppCollectionPeer {
           runtimeType == other.runtimeType &&
           collection == other.collection &&
           peer == other.peer;
+}
+
+/// This device's role in a collection.
+enum AppCollectionRole {
+  owner,
+  member,
+  ;
 }
 
 /// A request from the app. `kind` is explicit so this stays a single command

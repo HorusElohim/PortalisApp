@@ -411,14 +411,28 @@ class _CollectionDetailState extends State<CollectionDetail> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 22),
               child: Center(
-                child: Text(
-                  // An import with no file list yet is still being answered —
-                  // by a descriptor on disk or by the swarm. Saying it holds
-                  // nothing would be the screen guessing, and guessing wrong.
-                  collection.isPreparing
-                      ? 'Looking up what this torrent contains…'
-                      : 'Nothing in this collection yet.',
-                  style: AppText.secondary(color: AppColors.textDim),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      // An import with no file list yet is still being answered —
+                      // by a descriptor on disk or by the swarm. Saying it holds
+                      // nothing would be the screen guessing, and guessing wrong.
+                      collection.isPreparing
+                          ? 'Looking up what this torrent contains…'
+                          : 'Nothing in this collection yet.',
+                      style: AppText.secondary(color: AppColors.textDim),
+                    ),
+                    if (collection.isPreparing) ...[
+                      const SizedBox(height: 14),
+                      const SizedBox(
+                        width: 220,
+                        child: LinearProgressIndicator(
+                          key: Key('collectionMetadataProgress'),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             )

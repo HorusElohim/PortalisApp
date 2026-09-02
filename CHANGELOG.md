@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Replaced Flutter's hand-written collection lifecycle/nature/role string
+  parser with a generated Rust typed contract (first slice of ADR-0016).
+  Rust now projects `AppCollectionLifecycle`, `AppCollectionNature`,
+  `AppCollectionRole`, and explicit `AppCollectionCapabilities`
+  (can-share/select/add-media/pause/resume/delete) and `AppCollectionFacts`
+  (complete/sharing/moving/preparing/authoritative progress) alongside every
+  collection. Flutter no longer parses a `Status`/`Nature`/`Role` wire string
+  or recomputes eligibility/progress locally — it renders the generated
+  facts and capabilities directly. The collection screen's empty-list state
+  for a resolving torrent also now shows a visible indeterminate progress
+  indicator instead of only static text.
 - Reworked iOS PhotoKit source reads for bounded, cancellable, zero-copy
   access (ADR-0014). Direct PhotoKit URLs still use exact read-only `pread`
   calls against the original source. Assets without a direct URL now reuse a

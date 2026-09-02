@@ -1,129 +1,31 @@
 import '../../../nexus/domain/app_state.dart';
 
-/// What a collection is doing, as the backend named it.
+/// Compatibility names for presentation code while the generated Rust enums
+/// are migrated through every widget. These are aliases, not second enums:
+/// there is no parser and no independent lifecycle vocabulary in Dart.
+typedef CollectionState = AppCollectionLifecycle;
+typedef CollectionNature = AppCollectionNature;
+typedef CollectionRole = AppCollectionRole;
+
+/// Human-facing formatting for the generated Rust lifecycle.
 ///
-/// The backend sends one word per collection and the interface used to compare
-/// it against string literals wherever a decision was needed. That put the
-/// spelling of a Rust enum in a dozen widgets, and it rotted exactly as you
-/// would expect: three sites tested for `'downloading'` and `'importing'`,
-/// which the backend has never sent, so they were quietly always false.
-///
-/// Parsing once, here, makes an unrecognised word visible as [unknown] instead
-/// of silently answering `false` to every question. See `projection/wire.rs`
-/// for the other half of the contract.
-enum CollectionState {
-  available,
-  seeding,
-  paused,
-  draft,
-  resolvingMetadata,
-  waitingForSender,
-  metadataReady,
-  downloadRequested,
-  retryingMetadata,
-  downloading,
-  updating,
-  waitingForOwner,
-  accessRemoved,
-  needsNewerVersion,
-  cannotVerify,
-  conflictingHistory,
-
-  /// A word this build does not know. Reported rather than guessed: a newer
-  /// backend saying something new is a real possibility, and treating it as
-  /// any particular state would be the interface inventing a fact.
-  unknown;
-
-  /// The word the backend uses for this state, or `null` for [unknown], which
-  /// names no single one.
-  String? get wire => switch (this) {
-        CollectionState.available => 'Available',
-        CollectionState.seeding => 'Seeding',
-        CollectionState.paused => 'Paused',
-        CollectionState.draft => 'Draft',
-        CollectionState.resolvingMetadata => 'ResolvingMetadata',
-        CollectionState.waitingForSender => 'WaitingForSender',
-        CollectionState.metadataReady => 'MetadataReady',
-        CollectionState.downloadRequested => 'DownloadRequested',
-        CollectionState.retryingMetadata => 'RetryingMetadata',
-        CollectionState.downloading => 'Downloading',
-        CollectionState.updating => 'Updating',
-        CollectionState.waitingForOwner => 'WaitingForOwner',
-        CollectionState.accessRemoved => 'AccessRemoved',
-        CollectionState.needsNewerVersion => 'NeedsNewerVersion',
-        CollectionState.cannotVerify => 'CannotVerify',
-        CollectionState.conflictingHistory => 'ConflictingHistory',
-        CollectionState.unknown => null,
-      };
-
-  static CollectionState parse(String word) => switch (word) {
-        'Available' => CollectionState.available,
-        'Seeding' => CollectionState.seeding,
-        'Paused' => CollectionState.paused,
-        'Draft' => CollectionState.draft,
-        'ResolvingMetadata' => CollectionState.resolvingMetadata,
-        'WaitingForSender' => CollectionState.waitingForSender,
-        'MetadataReady' => CollectionState.metadataReady,
-        'DownloadRequested' => CollectionState.downloadRequested,
-        'RetryingMetadata' => CollectionState.retryingMetadata,
-        'Downloading' => CollectionState.downloading,
-        'Updating' => CollectionState.updating,
-        'WaitingForOwner' => CollectionState.waitingForOwner,
-        'AccessRemoved' => CollectionState.accessRemoved,
-        'NeedsNewerVersion' => CollectionState.needsNewerVersion,
-        'CannotVerify' => CollectionState.cannotVerify,
-        'ConflictingHistory' => CollectionState.conflictingHistory,
-        _ => CollectionState.unknown,
-      };
-
-  /// What to show a person who is looking at this collection.
-  ///
-  /// [unknown] falls back to the backend's own word rather than a placeholder:
-  /// if a newer backend says something this build cannot interpret, showing it
-  /// verbatim is more use than showing nothing.
+/// Formatting belongs in Flutter; deciding which lifecycle applies belongs in
+/// Rust. Unknown-string fallback disappeared with the string wire contract — a
+/// newer enum variant makes codegen/compilation fail instead of silently
+/// answering false to every capability question.
+extension CollectionStatePresentation on AppCollectionLifecycle {
   String label(String raw) => switch (this) {
-        CollectionState.resolvingMetadata => 'RESOLVING METADATA',
-        CollectionState.waitingForSender => 'WAITING FOR SENDER',
-        CollectionState.metadataReady => 'METADATA READY · CHOOSE FILES',
-        CollectionState.downloadRequested => 'DOWNLOAD REQUESTED',
-        CollectionState.retryingMetadata => 'METADATA TIMEOUT · RETRYING',
-        CollectionState.waitingForOwner => 'WAITING FOR OWNER',
-        CollectionState.accessRemoved => 'ACCESS REMOVED',
-        CollectionState.needsNewerVersion => 'NEEDS NEWER VERSION',
-        CollectionState.cannotVerify => 'CANNOT VERIFY',
-        CollectionState.conflictingHistory => 'CONFLICTING HISTORY',
+        AppCollectionLifecycle.resolvingMetadata => 'RESOLVING METADATA',
+        AppCollectionLifecycle.waitingForSender => 'WAITING FOR SENDER',
+        AppCollectionLifecycle.metadataReady => 'METADATA READY · CHOOSE FILES',
+        AppCollectionLifecycle.downloadRequested => 'DOWNLOAD REQUESTED',
+        AppCollectionLifecycle.retryingMetadata =>
+          'METADATA TIMEOUT · RETRYING',
+        AppCollectionLifecycle.waitingForOwner => 'WAITING FOR OWNER',
+        AppCollectionLifecycle.accessRemoved => 'ACCESS REMOVED',
+        AppCollectionLifecycle.needsNewerVersion => 'NEEDS NEWER VERSION',
+        AppCollectionLifecycle.cannotVerify => 'CANNOT VERIFY',
+        AppCollectionLifecycle.conflictingHistory => 'CONFLICTING HISTORY',
         _ => raw.toUpperCase(),
       };
-}
-
-/// How a collection's content entered Portalis.
-enum CollectionNature {
-  native,
-  torrent,
-  unknown;
-
-  static CollectionNature parse(String word) => switch (word) {
-        'Native' => CollectionNature.native,
-        'Torrent' => CollectionNature.torrent,
-        _ => CollectionNature.unknown,
-      };
-}
-
-/// Whether this device publishes a collection or reads it.
-enum CollectionRole {
-  owner,
-  member,
-  unknown;
-
-  static CollectionRole parse(String word) => switch (word) {
-        'Owner' => CollectionRole.owner,
-        'Member' => CollectionRole.member,
-        _ => CollectionRole.unknown,
-      };
-}
-
-extension AppCollectionContract on AppCollection {
-  CollectionState get lifecycle => CollectionState.parse(status);
-  CollectionNature get kind => CollectionNature.parse(nature);
-  CollectionRole get ownership => CollectionRole.parse(role);
 }

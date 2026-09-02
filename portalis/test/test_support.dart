@@ -146,27 +146,102 @@ AppCollection buildNexusCollection({
   String nature = 'Native',
   String role = 'Owner',
   String status = 'Available',
+  int revision = 1,
   int entries = 0,
   int totalBytes = 0,
   int onDiskBytes = 0,
+  int uploadedBytes = 0,
+  BigInt? startedAt,
+  BigInt? completedAt,
   List<AppMember>? members,
   AppTransfer? transfer,
-}) =>
-    AppCollection(
-      id: id,
-      name: name,
-      nature: nature,
-      role: role,
-      revision: BigInt.one,
-      status: status,
-      members: members ?? const [],
-      entries: entries,
-      totalBytes: BigInt.from(totalBytes),
-      onDiskBytes: BigInt.from(onDiskBytes),
-      uploadedBytes: BigInt.zero,
-      transfer: transfer,
-      pending: null,
-    );
+}) {
+  final lifecycle = _testLifecycle(status);
+  final typedNature = nature == 'Torrent'
+      ? AppCollectionNature.torrent
+      : AppCollectionNature.native;
+  final typedRole = role == 'Member' || role == 'Receiver'
+      ? AppCollectionRole.member
+      : AppCollectionRole.owner;
+  final complete = lifecycle == AppCollectionLifecycle.available ||
+      lifecycle == AppCollectionLifecycle.seeding;
+  final preparing = lifecycle == AppCollectionLifecycle.resolvingMetadata ||
+      lifecycle == AppCollectionLifecycle.retryingMetadata ||
+      lifecycle == AppCollectionLifecycle.waitingForSender;
+  final moving = lifecycle == AppCollectionLifecycle.downloading ||
+      (transfer?.downBytesPerSecond ?? 0) > 0 ||
+      (transfer?.upBytesPerSecond ?? 0) > 0;
+  final progress = transfer?.progress ??
+      (complete
+          ? 1
+          : totalBytes == 0
+              ? 0
+              : (onDiskBytes / totalBytes).clamp(0.0, 1.0));
+  return AppCollection(
+    id: id,
+    name: name,
+    nature: typedNature,
+    role: typedRole,
+    revision: BigInt.from(revision),
+    lifecycle: lifecycle,
+    statusLabel: status,
+    capabilities: AppCollectionCapabilities(
+      canAddMedia: typedNature == AppCollectionNature.native &&
+          lifecycle == AppCollectionLifecycle.draft,
+      canSelect: typedNature == AppCollectionNature.torrent &&
+          lifecycle == AppCollectionLifecycle.metadataReady,
+      canShare: lifecycle != AppCollectionLifecycle.draft &&
+          (entries > 0 || revision > 0),
+      canPause: const {
+        AppCollectionLifecycle.available,
+        AppCollectionLifecycle.seeding,
+        AppCollectionLifecycle.downloadRequested,
+        AppCollectionLifecycle.downloading,
+        AppCollectionLifecycle.updating,
+      }.contains(lifecycle),
+      canResume: lifecycle == AppCollectionLifecycle.paused,
+      canDelete: true,
+      canDeleteFiles: onDiskBytes > 0,
+    ),
+    facts: AppCollectionFacts(
+      complete: complete,
+      sharing: complete && entries > 0,
+      moving: moving,
+      preparing: preparing,
+      progress: progress,
+    ),
+    members: members ?? const [],
+    entries: entries,
+    totalBytes: BigInt.from(totalBytes),
+    onDiskBytes: BigInt.from(onDiskBytes),
+    uploadedBytes: BigInt.from(uploadedBytes),
+    startedAt: startedAt,
+    completedAt: completedAt,
+    transfer: transfer,
+    pending: null,
+  );
+}
+
+AppCollectionLifecycle _testLifecycle(String status) => switch (status) {
+      'Available' => AppCollectionLifecycle.available,
+      'Seeding' => AppCollectionLifecycle.seeding,
+      'Paused' => AppCollectionLifecycle.paused,
+      'Draft' => AppCollectionLifecycle.draft,
+      'ResolvingMetadata' => AppCollectionLifecycle.resolvingMetadata,
+      'WaitingForSender' => AppCollectionLifecycle.waitingForSender,
+      'MetadataReady' => AppCollectionLifecycle.metadataReady,
+      'DownloadRequested' => AppCollectionLifecycle.downloadRequested,
+      'RetryingMetadata' => AppCollectionLifecycle.retryingMetadata,
+      'Downloading' => AppCollectionLifecycle.downloading,
+      'Updating' => AppCollectionLifecycle.updating,
+      'WaitingForOwner' => AppCollectionLifecycle.waitingForOwner,
+      'AccessRemoved' => AppCollectionLifecycle.accessRemoved,
+      'NeedsNewerVersion' => AppCollectionLifecycle.needsNewerVersion,
+      'CannotVerify' => AppCollectionLifecycle.cannotVerify,
+      'ConflictingHistory' => AppCollectionLifecycle.conflictingHistory,
+      _ =>
+        throw ArgumentError.value(status, 'status', 'unknown test lifecycle'),
+    };
 
 AppSnapshot buildNexusState(List<AppCollection> collections) => AppSnapshot(
       device: const AppDevice(

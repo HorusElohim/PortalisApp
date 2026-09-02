@@ -1210,10 +1210,15 @@ impl SseDecode for crate::portalis_api::AppCollection {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_id = <u32>::sse_decode(deserializer);
         let mut var_name = <String>::sse_decode(deserializer);
-        let mut var_nature = <String>::sse_decode(deserializer);
-        let mut var_role = <String>::sse_decode(deserializer);
+        let mut var_nature = <crate::portalis_api::AppCollectionNature>::sse_decode(deserializer);
+        let mut var_role = <crate::portalis_api::AppCollectionRole>::sse_decode(deserializer);
         let mut var_revision = <u64>::sse_decode(deserializer);
-        let mut var_status = <String>::sse_decode(deserializer);
+        let mut var_lifecycle =
+            <crate::portalis_api::AppCollectionLifecycle>::sse_decode(deserializer);
+        let mut var_statusLabel = <String>::sse_decode(deserializer);
+        let mut var_capabilities =
+            <crate::portalis_api::AppCollectionCapabilities>::sse_decode(deserializer);
+        let mut var_facts = <crate::portalis_api::AppCollectionFacts>::sse_decode(deserializer);
         let mut var_members = <Vec<crate::portalis_api::AppMember>>::sse_decode(deserializer);
         let mut var_entries = <u32>::sse_decode(deserializer);
         let mut var_totalBytes = <u64>::sse_decode(deserializer);
@@ -1229,7 +1234,10 @@ impl SseDecode for crate::portalis_api::AppCollection {
             nature: var_nature,
             role: var_role,
             revision: var_revision,
-            status: var_status,
+            lifecycle: var_lifecycle,
+            status_label: var_statusLabel,
+            capabilities: var_capabilities,
+            facts: var_facts,
             members: var_members,
             entries: var_entries,
             total_bytes: var_totalBytes,
@@ -1243,6 +1251,84 @@ impl SseDecode for crate::portalis_api::AppCollection {
     }
 }
 
+impl SseDecode for crate::portalis_api::AppCollectionCapabilities {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_canAddMedia = <bool>::sse_decode(deserializer);
+        let mut var_canSelect = <bool>::sse_decode(deserializer);
+        let mut var_canShare = <bool>::sse_decode(deserializer);
+        let mut var_canPause = <bool>::sse_decode(deserializer);
+        let mut var_canResume = <bool>::sse_decode(deserializer);
+        let mut var_canDelete = <bool>::sse_decode(deserializer);
+        let mut var_canDeleteFiles = <bool>::sse_decode(deserializer);
+        return crate::portalis_api::AppCollectionCapabilities {
+            can_add_media: var_canAddMedia,
+            can_select: var_canSelect,
+            can_share: var_canShare,
+            can_pause: var_canPause,
+            can_resume: var_canResume,
+            can_delete: var_canDelete,
+            can_delete_files: var_canDeleteFiles,
+        };
+    }
+}
+
+impl SseDecode for crate::portalis_api::AppCollectionFacts {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_complete = <bool>::sse_decode(deserializer);
+        let mut var_sharing = <bool>::sse_decode(deserializer);
+        let mut var_moving = <bool>::sse_decode(deserializer);
+        let mut var_preparing = <bool>::sse_decode(deserializer);
+        let mut var_progress = <f32>::sse_decode(deserializer);
+        return crate::portalis_api::AppCollectionFacts {
+            complete: var_complete,
+            sharing: var_sharing,
+            moving: var_moving,
+            preparing: var_preparing,
+            progress: var_progress,
+        };
+    }
+}
+
+impl SseDecode for crate::portalis_api::AppCollectionLifecycle {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::portalis_api::AppCollectionLifecycle::Available,
+            1 => crate::portalis_api::AppCollectionLifecycle::Seeding,
+            2 => crate::portalis_api::AppCollectionLifecycle::Paused,
+            3 => crate::portalis_api::AppCollectionLifecycle::Draft,
+            4 => crate::portalis_api::AppCollectionLifecycle::ResolvingMetadata,
+            5 => crate::portalis_api::AppCollectionLifecycle::WaitingForSender,
+            6 => crate::portalis_api::AppCollectionLifecycle::MetadataReady,
+            7 => crate::portalis_api::AppCollectionLifecycle::DownloadRequested,
+            8 => crate::portalis_api::AppCollectionLifecycle::RetryingMetadata,
+            9 => crate::portalis_api::AppCollectionLifecycle::Downloading,
+            10 => crate::portalis_api::AppCollectionLifecycle::Updating,
+            11 => crate::portalis_api::AppCollectionLifecycle::WaitingForOwner,
+            12 => crate::portalis_api::AppCollectionLifecycle::AccessRemoved,
+            13 => crate::portalis_api::AppCollectionLifecycle::NeedsNewerVersion,
+            14 => crate::portalis_api::AppCollectionLifecycle::CannotVerify,
+            15 => crate::portalis_api::AppCollectionLifecycle::ConflictingHistory,
+            _ => unreachable!("Invalid variant for AppCollectionLifecycle: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::portalis_api::AppCollectionNature {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::portalis_api::AppCollectionNature::Native,
+            1 => crate::portalis_api::AppCollectionNature::Torrent,
+            _ => unreachable!("Invalid variant for AppCollectionNature: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::portalis_api::AppCollectionPeer {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1251,6 +1337,18 @@ impl SseDecode for crate::portalis_api::AppCollectionPeer {
         return crate::portalis_api::AppCollectionPeer {
             collection: var_collection,
             peer: var_peer,
+        };
+    }
+}
+
+impl SseDecode for crate::portalis_api::AppCollectionRole {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::portalis_api::AppCollectionRole::Owner,
+            1 => crate::portalis_api::AppCollectionRole::Member,
+            _ => unreachable!("Invalid variant for AppCollectionRole: {}", inner),
         };
     }
 }
@@ -1658,6 +1756,13 @@ impl SseDecode for f32 {
     }
 }
 
+impl SseDecode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for Vec<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1948,13 +2053,6 @@ impl SseDecode for () {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {}
 }
 
-impl SseDecode for i32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
-    }
-}
-
 fn pde_ffi_dispatcher_primary_impl(
     func_id: i32,
     port: flutter_rust_bridge::for_generated::MessagePort,
@@ -2094,7 +2192,10 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppCollection {
             self.nature.into_into_dart().into_dart(),
             self.role.into_into_dart().into_dart(),
             self.revision.into_into_dart().into_dart(),
-            self.status.into_into_dart().into_dart(),
+            self.lifecycle.into_into_dart().into_dart(),
+            self.status_label.into_into_dart().into_dart(),
+            self.capabilities.into_into_dart().into_dart(),
+            self.facts.into_into_dart().into_dart(),
             self.members.into_into_dart().into_dart(),
             self.entries.into_into_dart().into_dart(),
             self.total_bytes.into_into_dart().into_dart(),
@@ -2120,6 +2221,112 @@ impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppCollection>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppCollectionCapabilities {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.can_add_media.into_into_dart().into_dart(),
+            self.can_select.into_into_dart().into_dart(),
+            self.can_share.into_into_dart().into_dart(),
+            self.can_pause.into_into_dart().into_dart(),
+            self.can_resume.into_into_dart().into_dart(),
+            self.can_delete.into_into_dart().into_dart(),
+            self.can_delete_files.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::portalis_api::AppCollectionCapabilities
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppCollectionCapabilities>
+    for crate::portalis_api::AppCollectionCapabilities
+{
+    fn into_into_dart(self) -> crate::portalis_api::AppCollectionCapabilities {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppCollectionFacts {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.complete.into_into_dart().into_dart(),
+            self.sharing.into_into_dart().into_dart(),
+            self.moving.into_into_dart().into_dart(),
+            self.preparing.into_into_dart().into_dart(),
+            self.progress.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::portalis_api::AppCollectionFacts
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppCollectionFacts>
+    for crate::portalis_api::AppCollectionFacts
+{
+    fn into_into_dart(self) -> crate::portalis_api::AppCollectionFacts {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppCollectionLifecycle {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Available => 0.into_dart(),
+            Self::Seeding => 1.into_dart(),
+            Self::Paused => 2.into_dart(),
+            Self::Draft => 3.into_dart(),
+            Self::ResolvingMetadata => 4.into_dart(),
+            Self::WaitingForSender => 5.into_dart(),
+            Self::MetadataReady => 6.into_dart(),
+            Self::DownloadRequested => 7.into_dart(),
+            Self::RetryingMetadata => 8.into_dart(),
+            Self::Downloading => 9.into_dart(),
+            Self::Updating => 10.into_dart(),
+            Self::WaitingForOwner => 11.into_dart(),
+            Self::AccessRemoved => 12.into_dart(),
+            Self::NeedsNewerVersion => 13.into_dart(),
+            Self::CannotVerify => 14.into_dart(),
+            Self::ConflictingHistory => 15.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::portalis_api::AppCollectionLifecycle
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppCollectionLifecycle>
+    for crate::portalis_api::AppCollectionLifecycle
+{
+    fn into_into_dart(self) -> crate::portalis_api::AppCollectionLifecycle {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppCollectionNature {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Native => 0.into_dart(),
+            Self::Torrent => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::portalis_api::AppCollectionNature
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppCollectionNature>
+    for crate::portalis_api::AppCollectionNature
+{
+    fn into_into_dart(self) -> crate::portalis_api::AppCollectionNature {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppCollectionPeer {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2137,6 +2344,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppCollectionPeer>
     for crate::portalis_api::AppCollectionPeer
 {
     fn into_into_dart(self) -> crate::portalis_api::AppCollectionPeer {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppCollectionRole {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Owner => 0.into_dart(),
+            Self::Member => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::portalis_api::AppCollectionRole
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppCollectionRole>
+    for crate::portalis_api::AppCollectionRole
+{
+    fn into_into_dart(self) -> crate::portalis_api::AppCollectionRole {
         self
     }
 }
@@ -2671,10 +2899,13 @@ impl SseEncode for crate::portalis_api::AppCollection {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <u32>::sse_encode(self.id, serializer);
         <String>::sse_encode(self.name, serializer);
-        <String>::sse_encode(self.nature, serializer);
-        <String>::sse_encode(self.role, serializer);
+        <crate::portalis_api::AppCollectionNature>::sse_encode(self.nature, serializer);
+        <crate::portalis_api::AppCollectionRole>::sse_encode(self.role, serializer);
         <u64>::sse_encode(self.revision, serializer);
-        <String>::sse_encode(self.status, serializer);
+        <crate::portalis_api::AppCollectionLifecycle>::sse_encode(self.lifecycle, serializer);
+        <String>::sse_encode(self.status_label, serializer);
+        <crate::portalis_api::AppCollectionCapabilities>::sse_encode(self.capabilities, serializer);
+        <crate::portalis_api::AppCollectionFacts>::sse_encode(self.facts, serializer);
         <Vec<crate::portalis_api::AppMember>>::sse_encode(self.members, serializer);
         <u32>::sse_encode(self.entries, serializer);
         <u64>::sse_encode(self.total_bytes, serializer);
@@ -2687,11 +2918,97 @@ impl SseEncode for crate::portalis_api::AppCollection {
     }
 }
 
+impl SseEncode for crate::portalis_api::AppCollectionCapabilities {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.can_add_media, serializer);
+        <bool>::sse_encode(self.can_select, serializer);
+        <bool>::sse_encode(self.can_share, serializer);
+        <bool>::sse_encode(self.can_pause, serializer);
+        <bool>::sse_encode(self.can_resume, serializer);
+        <bool>::sse_encode(self.can_delete, serializer);
+        <bool>::sse_encode(self.can_delete_files, serializer);
+    }
+}
+
+impl SseEncode for crate::portalis_api::AppCollectionFacts {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.complete, serializer);
+        <bool>::sse_encode(self.sharing, serializer);
+        <bool>::sse_encode(self.moving, serializer);
+        <bool>::sse_encode(self.preparing, serializer);
+        <f32>::sse_encode(self.progress, serializer);
+    }
+}
+
+impl SseEncode for crate::portalis_api::AppCollectionLifecycle {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::portalis_api::AppCollectionLifecycle::Available => 0,
+                crate::portalis_api::AppCollectionLifecycle::Seeding => 1,
+                crate::portalis_api::AppCollectionLifecycle::Paused => 2,
+                crate::portalis_api::AppCollectionLifecycle::Draft => 3,
+                crate::portalis_api::AppCollectionLifecycle::ResolvingMetadata => 4,
+                crate::portalis_api::AppCollectionLifecycle::WaitingForSender => 5,
+                crate::portalis_api::AppCollectionLifecycle::MetadataReady => 6,
+                crate::portalis_api::AppCollectionLifecycle::DownloadRequested => 7,
+                crate::portalis_api::AppCollectionLifecycle::RetryingMetadata => 8,
+                crate::portalis_api::AppCollectionLifecycle::Downloading => 9,
+                crate::portalis_api::AppCollectionLifecycle::Updating => 10,
+                crate::portalis_api::AppCollectionLifecycle::WaitingForOwner => 11,
+                crate::portalis_api::AppCollectionLifecycle::AccessRemoved => 12,
+                crate::portalis_api::AppCollectionLifecycle::NeedsNewerVersion => 13,
+                crate::portalis_api::AppCollectionLifecycle::CannotVerify => 14,
+                crate::portalis_api::AppCollectionLifecycle::ConflictingHistory => 15,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::portalis_api::AppCollectionNature {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::portalis_api::AppCollectionNature::Native => 0,
+                crate::portalis_api::AppCollectionNature::Torrent => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::portalis_api::AppCollectionPeer {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <u32>::sse_encode(self.collection, serializer);
         <crate::portalis_api::AppPeer>::sse_encode(self.peer, serializer);
+    }
+}
+
+impl SseEncode for crate::portalis_api::AppCollectionRole {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::portalis_api::AppCollectionRole::Owner => 0,
+                crate::portalis_api::AppCollectionRole::Member => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 
@@ -2937,6 +3254,13 @@ impl SseEncode for f32 {
     }
 }
 
+impl SseEncode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
+    }
+}
+
 impl SseEncode for Vec<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3178,13 +3502,6 @@ impl SseEncode for u8 {
 impl SseEncode for () {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {}
-}
-
-impl SseEncode for i32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
-    }
 }
 
 #[cfg(not(target_family = "wasm"))]
