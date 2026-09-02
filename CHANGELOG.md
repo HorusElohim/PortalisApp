@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Made torrent collection imports idempotent (ADR-0015). Import identity —
+  a magnet's or `.torrent` file's BTv1 info hash — is now derived and checked
+  against every existing durable collection before a new one is created:
+  two concurrent identical imports (the OS delivering the same deep link
+  twice, or an initial link racing its own stream event) return the same
+  collection instead of creating two, differently-encoded magnets for the
+  same torrent resolve to one collection, and reimporting after a restart
+  returns the existing collection rather than duplicating it. A rejected or
+  failed import never poisons the identity — retrying with a valid source
+  still succeeds. Flutter's deep-link receiver now also tracks in-flight
+  import keys so a second concurrent delivery of the same URI cannot open a
+  second navigation route while the first is still importing.
 - Restored collection collaborators from the current signed revision before
   the first post-restart snapshot. Hydration now runs the same structural
   validation, signature, owner-authority, and chain-position checks admission

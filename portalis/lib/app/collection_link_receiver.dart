@@ -20,7 +20,25 @@ class CollectionLinkReceiver {
 
   final AppLinks _links;
   Future<void>? _starting;
+
+  /// A link whose import succeeded and already navigated — a later delivery
+  /// of the identical URI must not navigate again.
   String? _handled;
+
+  /// Links currently mid-import. Rust owns import identity and returns the
+  /// same collection for concurrent equivalent sources (ADR-0015), but
+  /// Flutter is not the deduplication authority for that — it is, however,
+  /// the one authority for how many times *navigation* fires. Without this,
+  /// two deliveries of the same URI landing before either's `await` resolves
+  /// (the OS's initial link and its own stream both firing for one URI is
+  /// the common real case) would both pass the `_handled` check, both call
+  /// import, and — since Rust now correctly answers both with the same
+  /// collection — both would still push a second, redundant route.
+  ///
+  /// Cleared unconditionally when an attempt finishes, success or failure,
+  /// so a failed import never permanently blocks a genuine future retry of
+  /// the same link — only concurrent duplicates of one attempt are merged.
+  final Set<String> _inFlight = {};
 
   Future<void> start() => _starting ??= _start();
 
@@ -40,14 +58,16 @@ class CollectionLinkReceiver {
   }
 
   Future<void> _receive(Uri? uri) async {
-    if (uri == null || _handled == uri.toString()) return;
+    if (uri == null) return;
+    final key = uri.toString();
+    if (_handled == key || !_inFlight.add(key)) return;
     try {
       final collection = await importCollectionLink(
         uri,
         send: AppControllers.engine.send,
       );
       if (collection == null) return;
-      _handled = uri.toString();
+      _handled = key;
       AppNavigation.goHome();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final navigator = AppNavigation.navigatorKey.currentState;
@@ -63,6 +83,8 @@ class CollectionLinkReceiver {
       // The link is external input; report its failure without taking down the
       // app or navigating somewhere that suggests an import succeeded.
       debugPrint('Portalis collection link was not imported: $error');
+    } finally {
+      _inFlight.remove(key);
     }
   }
 }

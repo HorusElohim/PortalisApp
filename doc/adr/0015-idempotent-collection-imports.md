@@ -37,10 +37,23 @@ Rust owns import identity and idempotency.
 
 ## Acceptance verification
 
-- [ ] Two concurrent identical links return one collection.
-- [ ] Equivalent magnet encodings resolve to one durable identity.
-- [ ] Reimport after restart returns the existing collection.
-- [ ] A failed import can be retried successfully.
-- [ ] Flutter navigates once for duplicate delivery.
-- [ ] Manual magnet and scanned Portalis links preserve explicit selection and
-      never start a download without the Download action.
+- [x] Two concurrent identical links return one collection —
+      `concurrent_identical_imports_return_one_collection`.
+- [x] Equivalent magnet encodings resolve to one durable identity —
+      `equivalent_magnet_encodings_resolve_to_one_durable_identity`.
+- [x] Reimport after restart returns the existing collection —
+      `reimport_after_restart_returns_the_existing_collection`.
+- [x] A failed import can be retried successfully —
+      `a_failed_import_can_be_retried_successfully`.
+- [x] Flutter navigates once for duplicate delivery — `CollectionLinkReceiver`
+      tracks in-flight import keys so a second concurrent delivery of the same
+      URI is dropped before a second `importCollectionLink` call, rather than
+      relying on the already-completed `_handled` check alone.
+- [x] Manual magnet and scanned Portalis links preserve explicit selection and
+      never start a download without the Download action — pre-existing
+      behavior in `collection_link.dart`
+      (`startCollectionLinkDownload`/`downloadSelection`), unaffected by this
+      change and covered by `collection_link_test.dart`.
+
+The status remains `proposed` until owner validation at merge, as required by
+the ADR index convention.
