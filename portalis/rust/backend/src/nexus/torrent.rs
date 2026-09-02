@@ -653,6 +653,42 @@ pub(crate) fn is_magnet(source: &str) -> bool {
     source.len() >= "magnet:".len() && source[.."magnet:".len()].eq_ignore_ascii_case("magnet:")
 }
 
+/// The durable identity two imports of the same torrent must share, derived
+/// without any network access.
+///
+/// A magnet's BTv1 info hash is available from the URI itself; a local
+/// `.torrent` file's is available from one synchronous read of a file
+/// already on this device — neither requires the network round trip that
+/// full metadata resolution does, so identity can be known, and duplicate
+/// imports refused, before this device ever contacts anything.
+///
+/// Returns `None` for a source whose identity is not knowable synchronously
+/// (a malformed magnet, an unreadable `.torrent` file, or a bare remote URL)
+/// — such a source is not deduplicated at admission time.
+#[cfg(not(target_arch = "wasm32"))]
+#[must_use]
+pub(crate) fn canonical_import_identity(source: &str) -> Option<String> {
+    if is_magnet(source) {
+        return librqbit::Magnet::parse(source)
+            .ok()?
+            .as_id20()
+            .map(|id| id.as_string());
+    }
+    if is_torrent_path(source) {
+        let bytes = std::fs::read(source).ok()?;
+        return librqbit::torrent_from_bytes(&bytes)
+            .ok()
+            .map(|parsed| parsed.info_hash.as_string());
+    }
+    None
+}
+
+#[cfg(target_arch = "wasm32")]
+#[must_use]
+pub(crate) fn canonical_import_identity(_source: &str) -> Option<String> {
+    None
+}
+
 /// Whether a source names something to fetch rather than a file to open.
 ///
 /// Checked *before* any extension, and that order is the whole point: a

@@ -92,6 +92,14 @@ pub struct Nexus {
     /// Wakes the worker that resolves torrent sources and starts downloads.
     torrents: Arc<Notify>,
     activity: crate::nexus::activity::DeviceActivityTracker,
+    /// Serializes import admission, so two commands racing inside the same
+    /// process moment cannot both pass the durable-uniqueness check before
+    /// either has written its row (ADR-0015). Held only for the duration of
+    /// `import_torrent` — imports are an occasional user action, not a hot
+    /// path — and never poisoned permanently by a failed import, since the
+    /// guard is dropped (not the identity remembered) when the function
+    /// returns either way.
+    importing: Arc<Mutex<()>>,
 }
 
 /// Everything the detail tier is assembled from.
@@ -711,6 +719,7 @@ impl Nexus {
             publisher,
             torrents,
             activity,
+            importing: Arc::new(Mutex::new(())),
         })
     }
 
@@ -1178,6 +1187,31 @@ impl Nexus {
             },
             source.len()
         );
+
+        // Import identity is derived synchronously from the source itself
+        // (a magnet's or `.torrent` file's BTv1 info hash), so duplicate
+        // admission can be refused before this device contacts anything
+        // (ADR-0015). The lock is held for the rest of this function —
+        // imports are an occasional user action, not a hot path, and
+        // holding it here is what makes two commands racing on the same
+        // identity from different threads resolve to one durable row
+        // instead of two: the second sees the first's already-durable
+        // collection rather than a stale "not found yet" read.
+        let identity = crate::nexus::torrent::canonical_import_identity(source);
+        let _admission = self
+            .importing
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(identity) = identity.as_deref()
+            && let Some(existing) = self.find_collection_by_import_identity(identity)?
+        {
+            crate::nexus::log::clog!(
+                "nexus",
+                "import_torrent identity={identity} already durable, returning existing collection"
+            );
+            return Ok(existing);
+        }
+
         let id = crate::nexus::collections::model::CollectionId::generate();
         let stored = StoredCollection {
             // A placeholder until the source says its real name. Taken from
@@ -1237,6 +1271,39 @@ impl Nexus {
         // The import worker resolves the durable source asynchronously.
         self.torrents.notify_one();
         Ok(handle)
+    }
+
+    /// The existing durable collection whose stored import source has the
+    /// same canonical identity, if any.
+    ///
+    /// Fully store-driven rather than reading any in-memory cache, so a
+    /// reimport of the same torrent after a process restart returns the
+    /// existing collection exactly like one during the same run does.
+    fn find_collection_by_import_identity(
+        &self,
+        identity: &str,
+    ) -> Result<Option<Handle>, CommandError> {
+        for (key, _stored) in self.store.collections().map_err(persistence)? {
+            let Some(source) = self.store.torrent_import(&key).map_err(persistence)? else {
+                continue;
+            };
+            if crate::nexus::torrent::canonical_import_identity(&source).as_deref()
+                != Some(identity)
+            {
+                continue;
+            }
+            let handle = self
+                .collections
+                .lock()
+                .map_err(|_| {
+                    CommandError::Persistence("the collection index was poisoned".to_owned())
+                })?
+                .handle(&key);
+            if handle.is_some() {
+                return Ok(handle);
+            }
+        }
+        Ok(None)
     }
 
     fn add_media(&self, handle: Handle, files: &[LocalFile]) -> Result<(), CommandError> {
@@ -3733,6 +3800,134 @@ mod tests {
             StoredLifecycle::TorrentResolving
         );
         reopened.close().await;
+    }
+
+    /// ADR-0015: two concurrent identical imports return one collection
+    /// rather than two racing to create durable rows for the same torrent.
+    #[tokio::test]
+    async fn concurrent_identical_imports_return_one_collection() {
+        let scratch = Scratch::new("concurrent-identical-imports");
+        let nexus = Arc::new(open(&scratch));
+        const MAGNET: &str = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567";
+
+        let first_nexus = Arc::clone(&nexus);
+        let second_nexus = Arc::clone(&nexus);
+        let first = tokio::task::spawn_blocking(move || {
+            first_nexus.command(&Command::ImportTorrent {
+                source: MAGNET.to_owned(),
+            })
+        });
+        let second = tokio::task::spawn_blocking(move || {
+            second_nexus.command(&Command::ImportTorrent {
+                source: MAGNET.to_owned(),
+            })
+        });
+        let first = first.await.expect("task joins").expect("accepted");
+        let second = second.await.expect("task joins").expect("accepted");
+
+        assert_eq!(
+            first.collection, second.collection,
+            "two racing identical imports must resolve to one collection"
+        );
+        assert_eq!(
+            nexus.state().collections.len(),
+            1,
+            "no duplicate durable collection was created"
+        );
+        Arc::into_inner(nexus)
+            .expect("no other references remain")
+            .close()
+            .await;
+    }
+
+    /// ADR-0015: equivalent magnet encodings (different casing, different
+    /// optional parameters) name the same durable torrent identity.
+    #[tokio::test]
+    async fn equivalent_magnet_encodings_resolve_to_one_durable_identity() {
+        let scratch = Scratch::new("equivalent-magnet-encodings");
+        let nexus = open(&scratch);
+        const CANONICAL: &str = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567";
+        // Same info hash, different case and an extra display-name parameter
+        // — cosmetically different, but the same torrent.
+        const EQUIVALENT: &str =
+            "magnet:?xt=urn:btih:0123456789ABCDEF0123456789ABCDEF01234567&dn=Same+Torrent";
+
+        let first = nexus
+            .command(&Command::ImportTorrent {
+                source: CANONICAL.to_owned(),
+            })
+            .expect("first import accepted");
+        let second = nexus
+            .command(&Command::ImportTorrent {
+                source: EQUIVALENT.to_owned(),
+            })
+            .expect("equivalent import accepted");
+
+        assert_eq!(
+            first.collection, second.collection,
+            "differently encoded magnets for the same info hash are one collection"
+        );
+        assert_eq!(nexus.state().collections.len(), 1);
+        nexus.close().await;
+    }
+
+    /// ADR-0015: reimporting the same torrent after a restart returns the
+    /// existing collection rather than creating another durable row.
+    #[tokio::test]
+    async fn reimport_after_restart_returns_the_existing_collection() {
+        let scratch = Scratch::new("reimport-after-restart");
+        const MAGNET: &str = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567";
+
+        let nexus = open(&scratch);
+        nexus
+            .command(&Command::ImportTorrent {
+                source: MAGNET.to_owned(),
+            })
+            .expect("first import accepted");
+        nexus.close().await;
+
+        let reopened = open(&scratch);
+        reopened
+            .command(&Command::ImportTorrent {
+                source: MAGNET.to_owned(),
+            })
+            .expect("reimport accepted");
+        assert_eq!(
+            reopened.state().collections.len(),
+            1,
+            "reimport after restart must not create a second row"
+        );
+        reopened.close().await;
+    }
+
+    /// ADR-0015: a failed import can be retried successfully — failure must
+    /// never permanently poison the identity it was attempted under.
+    #[tokio::test]
+    async fn a_failed_import_can_be_retried_successfully() {
+        let scratch = Scratch::new("retry-after-failure");
+        let nexus = open(&scratch);
+
+        // Malformed: is_magnet and is_torrent_path both reject this, so
+        // command validation refuses it before any collection row exists.
+        let rejected = nexus.command(&Command::ImportTorrent {
+            source: String::new(),
+        });
+        assert!(rejected.is_err(), "an empty source is refused up front");
+        assert!(
+            nexus.state().collections.is_empty(),
+            "a refused import leaves no row to retry against"
+        );
+
+        // The identical, valid source now succeeds — nothing about the
+        // earlier rejection poisoned it.
+        let accepted = nexus
+            .command(&Command::ImportTorrent {
+                source: "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567".to_owned(),
+            })
+            .expect("retry with a valid source succeeds");
+        assert!(accepted.collection.is_some());
+        assert_eq!(nexus.state().collections.len(), 1);
+        nexus.close().await;
     }
 
     /// A source is recorded at once and resolved afterwards, whether it is a
