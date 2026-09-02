@@ -192,39 +192,7 @@ pub async fn verify<S: ChainStore>(
     member_logs: &[([u8; DEVICE_KEY_BYTES], portalis_nexus_protocol::LogHash)],
     continuity: Continuity,
 ) -> Result<Accepted, ChainError> {
-    revision.validate()?;
-
-    // Cheapest first, and self-contained: no store read pays for a forgery.
-    if !revision.verify() {
-        return Err(ChainError::ForgedSignature {
-            number: revision.number,
-        });
-    }
-
-    // The log must be the one this revision claims to answer to. Verifying
-    // against some other person's log would prove nothing about this owner.
-    if revision.owner_root_key != owner_log.root_key() {
-        return Err(ChainError::NotTheOwner {
-            number: revision.number,
-        });
-    }
-    match owner_log
-        .history()
-        .into_iter()
-        .find(|device| device.signing_key == revision.author_key)
-    {
-        None => {
-            return Err(ChainError::UnknownAuthor {
-                number: revision.number,
-            });
-        }
-        Some(device) if !device.is_authorized() => {
-            return Err(ChainError::RevokedAuthor {
-                number: revision.number,
-            });
-        }
-        Some(_) => {}
-    }
+    verify_signature_and_authority(revision, owner_log)?;
 
     let held = store.highest(revision.collection_id).await?;
     position(revision, held.as_ref(), continuity)?;
@@ -248,6 +216,60 @@ pub async fn verify<S: ChainStore>(
         state,
         reseal_owed: reseal_owed(revision, member_logs),
     })
+}
+
+/// Structural validity, signature, owner binding, and author authority —
+/// everything about a revision that can be judged from itself plus the
+/// owner's device log alone, with no store read.
+///
+/// Split out so hydration (`Nexus::open`, before any store write is trusted)
+/// and live admission (`verify`) share exactly one authority check. A
+/// version of this logic duplicated at hydration time previously verified
+/// only the signature and skipped structural validation, owner-root binding,
+/// and author authorization/revocation — which let a replaced persisted
+/// revision row install an arbitrary self-signed owner and membership that
+/// admission would have refused. There must be exactly one place this
+/// decision is made.
+///
+/// # Errors
+///
+/// Returns [`ChainError::Malformed`], [`ChainError::ForgedSignature`],
+/// [`ChainError::NotTheOwner`], [`ChainError::UnknownAuthor`], or
+/// [`ChainError::RevokedAuthor`] — never a chain-position or store error,
+/// which are the caller's to check afterward.
+pub(crate) fn verify_signature_and_authority(
+    revision: &Revision,
+    owner_log: &DeviceLog,
+) -> Result<(), ChainError> {
+    revision.validate()?;
+
+    // Cheapest first, and self-contained: no store read pays for a forgery.
+    if !revision.verify() {
+        return Err(ChainError::ForgedSignature {
+            number: revision.number,
+        });
+    }
+
+    // The log must be the one this revision claims to answer to. Verifying
+    // against some other person's log would prove nothing about this owner.
+    if revision.owner_root_key != owner_log.root_key() {
+        return Err(ChainError::NotTheOwner {
+            number: revision.number,
+        });
+    }
+    match owner_log
+        .history()
+        .into_iter()
+        .find(|device| device.signing_key == revision.author_key)
+    {
+        None => Err(ChainError::UnknownAuthor {
+            number: revision.number,
+        }),
+        Some(device) if !device.is_authorized() => Err(ChainError::RevokedAuthor {
+            number: revision.number,
+        }),
+        Some(_) => Ok(()),
+    }
 }
 
 /// Whether this revision belongs where it claims to.

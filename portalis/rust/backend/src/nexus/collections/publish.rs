@@ -246,8 +246,25 @@ pub(crate) mod tests {
 
     impl Person {
         pub(crate) fn new(seed: u8) -> Self {
-            let signing = SigningKey::from_bytes(&[seed; 32]);
-            let secret = StaticSecret::from([seed.wrapping_add(0x40); ENCRYPTION_KEY_BYTES]);
+            Self::from_signing_key(SigningKey::from_bytes(&[seed; 32]))
+        }
+
+        /// Builds a person around an existing signing key — the seam a
+        /// caller uses to make the fixture *be* a specific already-loaded
+        /// identity (e.g. this device's own), rather than an arbitrary one.
+        pub(crate) fn from_signing_key(signing: SigningKey) -> Self {
+            // Deterministic from the signing key rather than truly random:
+            // fixtures need a valid, distinct encryption key, not entropy —
+            // and determinism keeps this call site free of an extra RNG
+            // dependency edge. XOR-folding the 32-byte signing key against a
+            // fixed distinguisher is enough to make it differ from the
+            // signing key itself while staying a valid x25519 scalar input.
+            let signing_bytes = signing.to_bytes();
+            let mut secret_bytes = [0_u8; ENCRYPTION_KEY_BYTES];
+            for (index, byte) in secret_bytes.iter_mut().enumerate() {
+                *byte = signing_bytes[index] ^ 0x5a;
+            }
+            let secret = StaticSecret::from(secret_bytes);
             let public = signing.verifying_key().to_bytes();
 
             let mut root = LogEntry {
