@@ -44,15 +44,84 @@ pub struct AppContact {
     pub reachable: Option<String>,
 }
 
+/// What a collection contains and how it entered Portalis.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AppCollectionNature {
+    Native,
+    Torrent,
+}
+
+/// This device's role in a collection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AppCollectionRole {
+    Owner,
+    Member,
+}
+
+/// The typed lifecycle Rust projects for application decisions.
+///
+/// This replaces Flutter's hand-written parser for `Status::wire()` strings.
+/// Human-readable labels remain separate presentation data; widgets compare
+/// this generated enum and never reinterpret backend spelling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AppCollectionLifecycle {
+    Available,
+    Seeding,
+    Paused,
+    Draft,
+    ResolvingMetadata,
+    WaitingForSender,
+    MetadataReady,
+    DownloadRequested,
+    RetryingMetadata,
+    Downloading,
+    Updating,
+    WaitingForOwner,
+    AccessRemoved,
+    NeedsNewerVersion,
+    CannotVerify,
+    ConflictingHistory,
+}
+
+/// Application decisions that only Rust may make.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AppCollectionCapabilities {
+    pub can_add_media: bool,
+    pub can_select: bool,
+    pub can_share: bool,
+    pub can_pause: bool,
+    pub can_resume: bool,
+    pub can_delete: bool,
+    pub can_delete_files: bool,
+}
+
+/// Presentation-ready collection facts derived once in Rust.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AppCollectionFacts {
+    pub complete: bool,
+    pub sharing: bool,
+    pub moving: bool,
+    /// Metadata discovery is active or retrying. There may be no byte total
+    /// yet, so Flutter renders an indeterminate indicator from this fact.
+    pub preparing: bool,
+    /// Authoritative zero-to-one progress even when no live transfer sample
+    /// exists (completed collections remain 1.0 after restart).
+    pub progress: f32,
+}
+
 /// One collection in the inexpensive list projection.
 #[derive(Clone, Debug)]
 pub struct AppCollection {
     pub id: u32,
     pub name: String,
-    pub nature: String,
-    pub role: String,
+    pub nature: AppCollectionNature,
+    pub role: AppCollectionRole,
     pub revision: u64,
-    pub status: String,
+    pub lifecycle: AppCollectionLifecycle,
+    /// Human-readable/raw backend label for presentation and diagnostics.
+    pub status_label: String,
+    pub capabilities: AppCollectionCapabilities,
+    pub facts: AppCollectionFacts,
     pub members: Vec<AppMember>,
     pub entries: u32,
     pub total_bytes: u64,
@@ -1003,6 +1072,88 @@ fn snapshot(state: &PortalisState) -> AppSnapshot {
     }
 }
 
+fn app_collection_lifecycle(
+    status: crate::nexus::projection::state::Status,
+) -> AppCollectionLifecycle {
+    use crate::nexus::projection::state::Status;
+    match status {
+        Status::Available => AppCollectionLifecycle::Available,
+        Status::Seeding => AppCollectionLifecycle::Seeding,
+        Status::Paused => AppCollectionLifecycle::Paused,
+        Status::Draft => AppCollectionLifecycle::Draft,
+        Status::ResolvingMetadata => AppCollectionLifecycle::ResolvingMetadata,
+        Status::WaitingForSender => AppCollectionLifecycle::WaitingForSender,
+        Status::MetadataReady => AppCollectionLifecycle::MetadataReady,
+        Status::DownloadRequested => AppCollectionLifecycle::DownloadRequested,
+        Status::RetryingMetadata => AppCollectionLifecycle::RetryingMetadata,
+        Status::Downloading => AppCollectionLifecycle::Downloading,
+        Status::Updating => AppCollectionLifecycle::Updating,
+        Status::WaitingForOwner => AppCollectionLifecycle::WaitingForOwner,
+        Status::AccessRemoved => AppCollectionLifecycle::AccessRemoved,
+        Status::NeedsNewerVersion => AppCollectionLifecycle::NeedsNewerVersion,
+        Status::CannotVerify(_) => AppCollectionLifecycle::CannotVerify,
+        Status::ConflictingHistory => AppCollectionLifecycle::ConflictingHistory,
+    }
+}
+
+fn app_collection_contract(
+    collection: &crate::nexus::projection::state::CollectionState,
+) -> (AppCollectionCapabilities, AppCollectionFacts) {
+    use crate::nexus::projection::state::{Nature, Status};
+
+    let complete = matches!(collection.status, Status::Available | Status::Seeding);
+    let preparing = matches!(
+        collection.status,
+        Status::ResolvingMetadata | Status::RetryingMetadata | Status::WaitingForSender
+    );
+    let moving = matches!(collection.status, Status::Downloading)
+        || collection.transfer.is_some_and(|transfer| {
+            transfer.down_bytes_per_second > 0 || transfer.up_bytes_per_second > 0
+        });
+    let progress = collection.transfer.map_or_else(
+        || {
+            if complete {
+                1.0
+            } else if collection.total_bytes == 0 {
+                0.0
+            } else {
+                #[allow(clippy::cast_precision_loss, reason = "UI progress fraction")]
+                {
+                    (collection.on_disk_bytes as f32 / collection.total_bytes as f32)
+                        .clamp(0.0, 1.0)
+                }
+            }
+        },
+        |transfer| transfer.progress.clamp(0.0, 1.0),
+    );
+    let capabilities = AppCollectionCapabilities {
+        can_add_media: collection.nature == Nature::Native && collection.status == Status::Draft,
+        can_select: collection.nature == Nature::Torrent
+            && collection.status == Status::MetadataReady,
+        can_share: collection.status != Status::Draft
+            && (collection.entries > 0 || collection.revision > 0),
+        can_pause: matches!(
+            collection.status,
+            Status::Available
+                | Status::Seeding
+                | Status::DownloadRequested
+                | Status::Downloading
+                | Status::Updating
+        ),
+        can_resume: collection.status == Status::Paused,
+        can_delete: true,
+        can_delete_files: collection.on_disk_bytes > 0,
+    };
+    let facts = AppCollectionFacts {
+        complete,
+        sharing: complete && collection.entries > 0,
+        moving,
+        preparing,
+        progress,
+    };
+    (capabilities, facts)
+}
+
 /// One collection, as the app reads it.
 ///
 /// Split out so the contract check has somewhere to live that is not four
@@ -1024,13 +1175,23 @@ fn collection_projection(
         "status {status:?} is not a word the app contract knows"
     );
 
+    let (capabilities, facts) = app_collection_contract(collection);
     AppCollection {
         id: collection.id.0,
         name: collection.name.clone(),
-        nature: collection.nature.wire().to_owned(),
-        role: collection.role.wire().to_owned(),
+        nature: match collection.nature {
+            crate::nexus::projection::state::Nature::Native => AppCollectionNature::Native,
+            crate::nexus::projection::state::Nature::Torrent => AppCollectionNature::Torrent,
+        },
+        role: match collection.role {
+            crate::nexus::projection::state::Role::Owner => AppCollectionRole::Owner,
+            crate::nexus::projection::state::Role::Member => AppCollectionRole::Member,
+        },
         revision: collection.revision,
-        status: status.to_owned(),
+        lifecycle: app_collection_lifecycle(collection.status),
+        status_label: status.to_owned(),
+        capabilities,
+        facts,
         members: collection
             .members
             .iter()
@@ -1227,6 +1388,42 @@ mod tests {
         assert_eq!(app.members[0].fingerprint, "11".repeat(32));
         assert_eq!(app.members[1].contact, None);
         assert_eq!(app.members[1].fingerprint, "22".repeat(32));
+        assert_eq!(app.lifecycle, AppCollectionLifecycle::Available);
+        assert_eq!(app.nature, AppCollectionNature::Native);
+        assert_eq!(app.role, AppCollectionRole::Member);
+        assert!(app.facts.complete);
+        assert!(!app.facts.preparing);
+        assert!(app.capabilities.can_share);
+        assert!(app.capabilities.can_delete);
+    }
+
+    #[test]
+    fn metadata_resolution_is_a_typed_preparing_fact() {
+        let resolving = CollectionState {
+            id: Handle(12),
+            name: "Scanned collection".to_owned(),
+            nature: Nature::Torrent,
+            role: Role::Owner,
+            revision: 0,
+            status: Status::ResolvingMetadata,
+            members: Vec::new(),
+            entries: 0,
+            total_bytes: 0,
+            on_disk_bytes: 0,
+            uploaded_bytes: 0,
+            started_at: None,
+            completed_at: None,
+            transfer: None,
+            pending: None,
+        };
+
+        let app = collection_projection(&resolving);
+        assert_eq!(app.lifecycle, AppCollectionLifecycle::ResolvingMetadata);
+        assert_eq!(app.nature, AppCollectionNature::Torrent);
+        assert!(app.facts.preparing);
+        assert!(!app.facts.complete);
+        assert!(!app.capabilities.can_share);
+        assert!(!app.capabilities.can_pause);
     }
 
     #[test]

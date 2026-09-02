@@ -1,6 +1,5 @@
 import '../../../nexus/domain/app_state.dart';
 import '../../media/domain/item.dart';
-import 'collection_state.dart';
 
 /// One collection, as the interface reads it.
 ///
@@ -41,61 +40,42 @@ class Collection {
   String get id => '${source.id}';
   String get name => source.name;
 
-  /// The engine's own word, not a translation of it. Kept as the raw string
-  /// for anything that displays it; every *decision* goes through [lifecycle]
-  /// instead, so an unrecognised word is visible rather than silently false.
-  String get state => source.status;
+  /// Rust's presentation label for the typed lifecycle.
+  String get state => source.statusLabel;
 
-  /// What this collection is doing, parsed once. See [CollectionState].
-  CollectionState get lifecycle => source.lifecycle;
+  /// The generated Rust lifecycle — no Dart parser or second vocabulary.
+  AppCollectionLifecycle get lifecycle => source.lifecycle;
 
-  bool get isTorrent => source.kind == CollectionNature.torrent;
+  bool get isTorrent => source.nature == AppCollectionNature.torrent;
   bool get isShared => !isTorrent;
 
-  /// Chosen but not shared: private to this device, and free to abandon.
-  bool get isDraft => lifecycle == CollectionState.draft;
-
-  /// Told to stop. A person's decision, so it outranks whatever the numbers
-  /// are doing — and it decides which half of the start/stop pair is offered.
-  bool get isPaused => lifecycle == CollectionState.paused;
-  bool get isConnecting => lifecycle == CollectionState.waitingForOwner;
-  bool get isDownloading => lifecycle == CollectionState.downloading;
-  bool get isPreparing => lifecycle == CollectionState.resolvingMetadata;
-  bool get isWaitingForSender => lifecycle == CollectionState.waitingForSender;
-  bool get hasMetadata => lifecycle == CollectionState.metadataReady;
+  bool get isDraft => lifecycle == AppCollectionLifecycle.draft;
+  bool get isPaused => source.capabilities.canResume;
+  bool get isConnecting => lifecycle == AppCollectionLifecycle.waitingForOwner;
+  bool get isDownloading => lifecycle == AppCollectionLifecycle.downloading;
+  bool get isPreparing => source.facts.preparing;
+  bool get isWaitingForSender =>
+      lifecycle == AppCollectionLifecycle.waitingForSender;
+  bool get hasMetadata => source.capabilities.canSelect;
   bool get isDownloadRequested =>
-      lifecycle == CollectionState.downloadRequested;
-  bool get isRetryingMetadata => lifecycle == CollectionState.retryingMetadata;
-  bool get isSeeding => lifecycle == CollectionState.seeding;
+      lifecycle == AppCollectionLifecycle.downloadRequested;
+  bool get isRetryingMetadata =>
+      lifecycle == AppCollectionLifecycle.retryingMetadata;
+  bool get isSeeding => lifecycle == AppCollectionLifecycle.seeding;
 
-  /// Complete, and with something to serve. Nothing to serve means nothing is
-  /// being served — telling somebody their photos are available when the
-  /// collection is empty is the kind of claim this interface must not make.
-  bool get isSharing => isComplete && entryCount > 0;
-
-  /// A published revision remains shareable while the list/detail projections
-  /// catch up after a restart. Entry count alone is transient during hydration.
-  bool get canShareQr => !isDraft && (entryCount > 0 || revision > 0);
-
-  bool get isComplete => lifecycle == CollectionState.available || isSeeding;
-  bool get isMoving =>
-      isDownloading || downBytesPerSecond > 0 || upBytesPerSecond > 0;
+  bool get isSharing => source.facts.sharing;
+  bool get canShareQr => source.capabilities.canShare;
+  bool get isComplete => source.facts.complete;
+  bool get isMoving => source.facts.moving;
 
   int get totalBytes => source.totalBytes.toInt();
   int get downloadedBytes => source.onDiskBytes.toInt();
   int get uploadedBytes => source.uploadedBytes.toInt();
   int get revision => source.revision.toInt();
 
-  /// Zero to one. The engine's own reading while a transfer is live, and the
-  /// recorded history's last reading once it is not — never an arithmetic
-  /// guess of this interface's own.
-  double get progress {
-    final live = source.transfer;
-    if (live != null) return live.progress;
-    // A zero-copy owner already has the original source. An idle seed has no
-    // transfer sample by design, so history cannot stand in for ownership.
-    return isSeeding ? 1 : (lastReading?.progress ?? 0);
-  }
+  /// Rust's authoritative zero-to-one progress, including durable completion
+  /// after the live transfer sample disappears.
+  double get progress => source.facts.progress;
 
   /// Bytes per second, as the engine counts them. Never megabits: converting
   /// to them and then labelling the result "MB/s" showed every rate in the

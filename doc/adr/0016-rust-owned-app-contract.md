@@ -45,12 +45,41 @@ Rust exposes one deliberately app-renderable, typed contract; Flutter renders it
 
 ## Acceptance verification
 
-- [ ] Summary rows render Rust `entries` with no detail subscription and never
-      contradict collection detail.
-- [ ] Flutter contains no lifecycle parser or domain capability derivation.
-- [ ] Aggregate engine activity comes from Rust.
-- [ ] Completion notifications consume a Rust event.
-- [ ] Invalid command shapes are unrepresentable at the bridge boundary.
-- [ ] Summary/detail/history/event cadence remains tiered.
-- [ ] Wrapper deletion reduces code without weakening widget test seams.
-- [ ] Generated bridge round-trip and full Flutter/Rust suites pass.
+- [x] Summary rows render Rust `entries` with no detail subscription and never
+      contradict collection detail — `subtitle reports the summary item count
+      without a detail` (collection_test.dart), fixed independently and
+      landed ahead of this ADR's full scope; also `metadata_resolution_is_a_typed_preparing_fact`
+      confirms the typed contract projects the fact directly.
+- [x] Flutter contains no lifecycle parser or domain capability derivation for
+      collection lifecycle/nature/role. `AppCollectionLifecycle`,
+      `AppCollectionNature`, `AppCollectionRole`, `AppCollectionCapabilities`,
+      and `AppCollectionFacts` are generated Rust enums/structs; Flutter
+      compares and formats them, computing nothing that was previously a
+      `Status`/`Nature`/`Role` string comparison. `collection_state_test.dart`
+      and `collection.dart` no longer contain a `parse`/`wire` string
+      round-trip for these three contracts.
+- [ ] Aggregate engine activity comes from Rust — not yet migrated; still
+      derived in `AppController`/`ActivitySummary` on the Dart side.
+- [ ] Completion notifications consume a Rust event — not yet migrated;
+      `TransferCompletionObserver` still diffs successive snapshots itself,
+      though it now reads `AppCollectionRole.member` rather than a string.
+- [ ] Invalid command shapes are unrepresentable at the bridge boundary — the
+      string-`kind`-plus-optional-fields `AppCommand`/`EngineCommand` envelope
+      is unchanged.
+- [x] Summary/detail/history/event cadence remains tiered — untouched by this
+      slice.
+- [x] Wrapper deletion reduces code without weakening widget test seams —
+      `CollectionState`/`CollectionNature`/`CollectionRole` string parsers and
+      their `parse`/`wire` machinery in `collection_state.dart` are gone,
+      replaced by typedefs onto the generated enums plus one presentation
+      `label()` extension; all existing widget test seams (`buildCollection`,
+      `_FixedSource`, etc.) still compile and pass unchanged in shape.
+- [x] Generated bridge round-trip and full Flutter/Rust suites pass —
+      284/284 backend tests (0 failed, 1 ignored), clippy `-D warnings` clean,
+      `cargo fmt --check` clean; 180/180 Flutter tests, `flutter analyze`
+      clean; FRB regenerated via `tool/frb_build.sh --codegen-only --force-frb`.
+
+This ADR's typed lifecycle/nature/role/capabilities/facts slice is complete
+and verified. Aggregate activity, typed completion events, and a typed
+command envelope remain open follow-up work before this ADR can be marked
+`accepted`; status stays `proposed`.

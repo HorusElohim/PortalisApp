@@ -88,7 +88,7 @@ void main() {
           id: 2,
           name: 'Studio',
           nature: 'Torrent',
-          status: 'Preparing',
+          status: 'ResolvingMetadata',
         ),
       ]);
 
@@ -193,7 +193,7 @@ void main() {
         buildNexusCollection(
           name: 'Episode',
           nature: 'Torrent',
-          status: 'Preparing',
+          status: 'ResolvingMetadata',
         ),
       ]);
       await tester.tap(find.text('Episode'));

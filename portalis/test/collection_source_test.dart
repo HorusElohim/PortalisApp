@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/nexus/application/app_controller.dart';
 import 'package:portalis/nexus/data/app_repository.dart';
 import 'package:portalis/nexus/data/collection_source.dart';
-import 'package:portalis/nexus/domain/app_state.dart';
+
+import 'test_support.dart';
 
 void main() {
   test('completion reloads the durable peers before live peers disappear',
@@ -55,21 +55,16 @@ AppSnapshot _state({required BigInt? completedAt}) => AppSnapshot(
       connectivity: 'LocalOnly',
       contacts: const [],
       collections: [
-        AppCollection(
+        buildNexusCollection(
           id: 7,
           name: 'Iceland',
           nature: 'Torrent',
-          role: 'Receiver',
-          revision: BigInt.one,
+          role: 'Member',
           status: completedAt == null ? 'Downloading' : 'Available',
-          members: const [],
           entries: 1,
-          totalBytes: BigInt.from(4000000),
-          onDiskBytes: BigInt.from(4000000),
-          uploadedBytes: BigInt.zero,
+          totalBytes: 4000000,
+          onDiskBytes: 4000000,
           completedAt: completedAt,
-          transfer: null,
-          pending: null,
         ),
       ],
       alerts: const [],

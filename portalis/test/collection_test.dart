@@ -81,6 +81,34 @@ void main() {
       expect(collection.subtitle, '3 items');
     });
 
+    testWidgets('a scanned torrent visibly reports metadata progress',
+        (tester) async {
+      // A QR scan returns immediately with a Rust collection in
+      // ResolvingMetadata. There are no transfer bytes yet (the descriptor is
+      // still being discovered), so the normal TransferPanel is intentionally
+      // absent; the screen must still render an indeterminate progress
+      // indicator rather than looking frozen.
+      final collection = buildCollection(
+        nature: 'Torrent',
+        status: 'ResolvingMetadata',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CollectionScreen(
+            collection: collection,
+            source: _FixedSource(collection),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+          find.text('Looking up what this torrent contains…'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('a seed names local ownership instead of downloaded bytes',
         (tester) async {
       final collection = buildCollection(

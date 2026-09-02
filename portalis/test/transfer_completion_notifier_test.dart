@@ -1,6 +1,6 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/notifications/transfer_completion_notifier.dart';
-import 'package:portalis/nexus/domain/app_state.dart';
+
+import 'test_support.dart';
 
 void main() {
   test('completion observer alerts once when a live transfer completes',
@@ -45,18 +45,15 @@ AppSnapshot _snapshot({required BigInt? completedAt}) => AppSnapshot(
       connectivity: 'LocalOnly',
       contacts: const [],
       collections: [
-        AppCollection(
+        buildNexusCollection(
           id: 7,
           name: 'Northern lights',
           nature: 'Torrent',
-          role: 'Receiver',
-          revision: BigInt.one,
+          role: 'Member',
           status: completedAt == null ? 'Downloading' : 'Available',
-          members: const [],
           entries: 1,
-          totalBytes: BigInt.from(100),
-          onDiskBytes: BigInt.from(100),
-          uploadedBytes: BigInt.zero,
+          totalBytes: 100,
+          onDiskBytes: 100,
           completedAt: completedAt,
         ),
       ],
