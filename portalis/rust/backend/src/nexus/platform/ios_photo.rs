@@ -24,20 +24,32 @@ pub(crate) fn asset_length(identifier: &str) -> anyhow::Result<u64> {
 }
 
 pub(crate) fn read_asset(identifier: &str, offset: u64, buffer: &mut [u8]) -> anyhow::Result<()> {
-    let identifier = CString::new(identifier)?;
+    let identifier_c = CString::new(identifier)?;
     let result = unsafe {
         portalis_photo_asset_read(
-            identifier.as_ptr(),
+            identifier_c.as_ptr(),
             offset,
             buffer.as_mut_ptr(),
             buffer.len(),
         )
     };
-    anyhow::ensure!(
-        result == 0,
-        "PhotoKit could not read the requested asset range ({result})"
+    if result == 0 {
+        return Ok(());
+    }
+    // The native reader refuses to restart a streaming-only asset from byte
+    // zero (see ADR-0014): a read that does not continue exactly where the
+    // last one on this identifier stopped is a caller ordering bug, not a
+    // transient failure, and is reported distinctly so it is never confused
+    // with a genuine PhotoKit/network error.
+    anyhow::bail!(
+        "PhotoKit could not read asset {identifier} at offset {offset} for {} bytes ({})",
+        buffer.len(),
+        match result {
+            -4 => "reads of this asset must be sequential and in order",
+            -3 => "the stream ended or timed out before delivering every requested byte",
+            _ => "native PhotoKit read failure",
+        }
     );
-    Ok(())
 }
 
 /// Imports one verified received file into Photos and returns the durable

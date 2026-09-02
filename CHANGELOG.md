@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Reworked iOS PhotoKit source reads for bounded, cancellable, zero-copy
+  access (ADR-0014). Direct PhotoKit URLs still use exact read-only `pread`
+  calls against the original source. Assets without a direct URL now reuse a
+  forward-only sequential PhotoKit stream instead of restarting at byte zero
+  for every torrent range, reject backward/out-of-order reads explicitly,
+  apply finite permission/metadata/read/completion waits, cancel failed or
+  completed streams, and return distinct native errors to Rust. No cache-file
+  or Portalis-owned source clone is introduced. This implementation was
+  committed for Mac/iOS validation by the owner; this Linux host has no Xcode
+  or Apple SDK and therefore cannot claim the Objective-C/native iOS build or
+  runtime tests pass yet.
 - Fixed collection rows always showing "0 items" (and other item counts
   disagreeing with the collection's real content). The list-row subtitle
   computed its item count from `media.length`, but `media` is built only
