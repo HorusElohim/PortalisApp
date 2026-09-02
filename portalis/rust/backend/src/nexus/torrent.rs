@@ -1477,6 +1477,7 @@ pub mod native {
                     || (a == 172 && (16..=31).contains(&b))
                     || (a == 192 && b == 0 && c == 0)
                     || (a == 192 && b == 0 && c == 2)
+                    || (a == 192 && b == 88 && c == 99)
                     || (a == 192 && b == 168)
                     || (a == 198 && (b == 18 || b == 19))
                     || (a == 198 && b == 51 && c == 100)
@@ -1488,6 +1489,25 @@ pub mod native {
                     return exact_source_ip_is_public(IpAddr::V4(mapped));
                 }
                 let segments = address.segments();
+                // NAT64 (RFC 6052) well-known and local-use prefixes embed
+                // an IPv4 address in the low 32 bits. A translator can make
+                // this address reach that embedded IPv4 destination, so it
+                // must be judged by the *same* IPv4 policy above rather than
+                // treated as an ordinary global-unicast IPv6 address.
+                let is_nat64_well_known = segments[0] == 0x0064
+                    && segments[1] == 0xff9b
+                    && segments[2] == 0
+                    && segments[3] == 0
+                    && segments[4] == 0
+                    && segments[5] == 0;
+                let is_nat64_local_use =
+                    segments[0] == 0x0064 && segments[1] == 0xff9b && segments[2] == 1;
+                if is_nat64_well_known || is_nat64_local_use {
+                    let octets = address.octets();
+                    let embedded =
+                        std::net::Ipv4Addr::new(octets[12], octets[13], octets[14], octets[15]);
+                    return exact_source_ip_is_public(IpAddr::V4(embedded));
+                }
                 !(address.is_unspecified()
                     || address.is_loopback()
                     || address.is_multicast()
@@ -1607,6 +1627,7 @@ pub mod native {
                 IpAddr::V4(Ipv4Addr::new(172, 16, 0, 1)),
                 IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
                 IpAddr::V4(Ipv4Addr::new(198, 18, 0, 1)),
+                IpAddr::V4(Ipv4Addr::new(192, 88, 99, 1)),
                 IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1)),
                 IpAddr::V4(Ipv4Addr::BROADCAST),
                 IpAddr::V6(Ipv6Addr::UNSPECIFIED),
@@ -1615,6 +1636,12 @@ pub mod native {
                 IpAddr::V6("fe80::1".parse().expect("link local")),
                 IpAddr::V6("2001:db8::1".parse().expect("documentation")),
                 IpAddr::V6("ff02::1".parse().expect("multicast")),
+                // NAT64 (RFC 6052): these embed a rejected IPv4 address
+                // (10.0.0.1 and 127.0.0.1) in the low 32 bits, so a
+                // translator could reach it unless the embedded address is
+                // also checked, not just the IPv6 form.
+                IpAddr::V6("64:ff9b::10.0.0.1".parse().expect("nat64 well-known")),
+                IpAddr::V6("64:ff9b:1::127.0.0.1".parse().expect("nat64 local-use")),
             ] {
                 assert!(!exact_source_ip_is_public(blocked), "accepted {blocked}");
             }
@@ -1627,6 +1654,11 @@ pub mod native {
                     .parse()
                     .expect("public IPv6")
             )));
+            // A NAT64 address embedding a *public* IPv4 destination is not
+            // itself a policy violation — only the embedded address matters.
+            assert!(exact_source_ip_is_public(
+                "64:ff9b::5db8:d822".parse().expect("nat64 public embed")
+            ));
         }
 
         #[test]
