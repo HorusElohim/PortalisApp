@@ -34,10 +34,12 @@
   treated as a hint: on any failure Portalis continues through the magnet's
   DHT, trackers, and direct peers. The complete metadata operation remains
   bounded too. Untrusted exact-source hints are now HTTPS-only, reject local
-  and non-public destinations before connecting, pin validated DNS answers,
-  bypass environment proxies, disable redirects, cap descriptor bodies at
-  8 MiB, and still require the descriptor's info hash to match the magnet
-  before admission.
+  and non-public destinations before connecting — including 6to4 relay
+  (192.88.99.0/24) and NAT64 (RFC 6052) addresses that embed a rejected IPv4
+  destination in their low 32 bits — pin validated DNS answers, bypass
+  environment proxies, disable redirects, cap descriptor bodies at 8 MiB, and
+  still require the descriptor's info hash to match the magnet before
+  admission.
 - Torrent collection rows now show a format-aware icon (film reel, image,
   archive, etc.) once metadata has resolved a dominant file type, instead of
   the same generic download arrow for every torrent.
