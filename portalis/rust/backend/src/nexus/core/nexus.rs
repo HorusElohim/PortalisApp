@@ -306,7 +306,11 @@ struct HydratedMembership {
     failure: Option<Status>,
 }
 
-fn hydrate_membership(store: &Store, key: &[u8]) -> Result<HydratedMembership, StoreError> {
+fn hydrate_membership(
+    store: &Store,
+    key: &[u8],
+    local_owner_root: [u8; portalis_nexus_protocol::DEVICE_KEY_BYTES],
+) -> Result<HydratedMembership, StoreError> {
     let rows = store.revisions(key)?;
     let Some((highest_number, _)) = rows.last() else {
         return Ok(HydratedMembership {
@@ -320,6 +324,10 @@ fn hydrate_membership(store: &Store, key: &[u8]) -> Result<HydratedMembership, S
     let mut previous: Option<portalis_nexus_protocol::Revision> = None;
 
     for (stored_number, bytes) in rows {
+        // `Revision::decode` already runs `Revision::validate()` internally
+        // (member ordering/uniqueness, first-revision shape, member count),
+        // so a structurally invalid row is refused here before any of its
+        // fields — including its member list — are trusted.
         let revision = match portalis_nexus_protocol::Revision::decode(&bytes) {
             Ok(revision) => revision,
             Err(portalis_nexus_protocol::RevisionError::UnknownDomain) => {
@@ -354,6 +362,27 @@ fn hydrate_membership(store: &Store, key: &[u8]) -> Result<HydratedMembership, S
             });
         }
         if !revision.verify() {
+            return Ok(HydratedMembership {
+                number: highest_number,
+                roots: Vec::new(),
+                failure: Some(Status::CannotVerify(
+                    crate::nexus::core::events::VerifyFailure::Signature,
+                )),
+            });
+        }
+        // A genuine signature alone proves nothing about *authority* — any
+        // keypair can sign a well-formed revision naming itself as owner.
+        // Admission (`crypto::verify`) additionally requires the author to
+        // be an authorized, non-revoked device on the claimed owner's
+        // device log. Hydration reads its own persisted rows rather than a
+        // network offer, and today's product only ever persists collections
+        // this device itself owns or was admitted to via that same
+        // authority check — so the equivalent hydration-time authority
+        // check is: the revision's owner and author must be *this device's
+        // own* identity. Anything else means the on-disk row was replaced
+        // by something this device never verified, and must not be trusted
+        // merely because it carries a valid signature over *some* key.
+        if revision.owner_root_key != local_owner_root || revision.author_key != local_owner_root {
             return Ok(HydratedMembership {
                 number: highest_number,
                 roots: Vec::new(),
@@ -415,7 +444,14 @@ fn hydrate_membership(store: &Store, key: &[u8]) -> Result<HydratedMembership, S
 impl LocalCollections {
     fn hydrate(
         store: &Store,
-    ) -> Result<(Self, Vec<ContactState>, Vec<CollectionState>), StoreError> {
+    ) -> Result<(Self, Vec<ContactState>, Vec<CollectionState>), OpenError> {
+        // The signing identity that authored/owns every revision this
+        // device is willing to trust at hydration time. Loaded once, not
+        // per collection: identity load failure fails the whole open
+        // rather than silently treating some collections as unowned.
+        let local_owner_root = crate::nexus::device::current_signing_identity()
+            .map(|identity| identity.public_key())
+            .map_err(|error| OpenError::Identity(error.to_string()))?;
         let mut local = Self::default();
         let mut contacts = LocalContacts::default();
         let mut projected = Vec::new();
@@ -423,7 +459,7 @@ impl LocalCollections {
             let imported_entries = store.torrent_import_entries(&key)?;
             let local_sources = &stored.sources;
             let handle = local.assign(key.clone());
-            let membership = hydrate_membership(store, &key)?;
+            let membership = hydrate_membership(store, &key, local_owner_root)?;
             let revision = membership.number;
             let members = membership
                 .roots
@@ -2956,6 +2992,7 @@ mod tests {
     async fn the_first_snapshot_restores_every_signed_member_after_restart() {
         use crate::nexus::collections::publish::tests::Person;
 
+        let _state = crate::nexus::paths::redirect_to_temp();
         let scratch = Scratch::new("durable-members");
         let nexus = open(&scratch);
         let collection = nexus
@@ -2974,7 +3011,15 @@ mod tests {
             .expect("stored collection");
         nexus.close().await;
 
-        let owner = Person::new(11);
+        // The owner of a persisted revision must be *this device's own*
+        // identity for hydration to trust it (ADR-0013) — a hydration-time
+        // authority check equivalent to admission's for the only case the
+        // shipped product persists today: collections this device owns.
+        let local_identity =
+            crate::nexus::device::current_signing_identity().expect("loads local identity");
+        let owner = Person::from_signing_key(ed25519_dalek::SigningKey::from_bytes(
+            &local_identity.to_bytes(),
+        ));
         let known = Person::new(12);
         let unknown = Person::new(13);
         let collection_id =
@@ -3062,9 +3107,14 @@ mod tests {
     fn a_newer_signed_revision_replaces_the_hydrated_member_set() {
         use crate::nexus::collections::publish::tests::{Person, descriptors, owned};
 
+        let _state = crate::nexus::paths::redirect_to_temp();
         let scratch = Scratch::new("newer-members");
         let store = Store::open(scratch.0.join("portalis.redb")).expect("opens store");
-        let owner = Person::new(21);
+        let local_identity =
+            crate::nexus::device::current_signing_identity().expect("loads local identity");
+        let owner = Person::from_signing_key(ed25519_dalek::SigningKey::from_bytes(
+            &local_identity.to_bytes(),
+        ));
         let removed = Person::new(22);
         let added = Person::new(23);
         let initial = owned(&owner);
@@ -3092,7 +3142,8 @@ mod tests {
             .put_revision(&key, second.revision.number, &second.revision.encode())
             .expect("stores second revision");
 
-        let hydrated = hydrate_membership(&store, &key).expect("hydrates production membership");
+        let hydrated = hydrate_membership(&store, &key, local_identity.public_key())
+            .expect("hydrates production membership");
         assert_eq!(hydrated.number, 2);
         assert!(
             hydrated
@@ -3111,7 +3162,12 @@ mod tests {
     fn persisted_revision_anomalies_are_explicit_hydration_failures() {
         use crate::nexus::collections::publish::tests::{Person, descriptors, owned};
 
-        let owner = Person::new(24);
+        let _state = crate::nexus::paths::redirect_to_temp();
+        let local_identity =
+            crate::nexus::device::current_signing_identity().expect("loads local identity");
+        let owner = Person::from_signing_key(ed25519_dalek::SigningKey::from_bytes(
+            &local_identity.to_bytes(),
+        ));
         let initial = owned(&owner);
         let key = initial.id.0;
         let (published, first) = crate::nexus::collections::publish::publish(
@@ -3140,7 +3196,7 @@ mod tests {
                     .expect("stores anomaly fixture");
             }
             assert_eq!(
-                hydrate_membership(&store, &key)
+                hydrate_membership(&store, &key, local_identity.public_key())
                     .expect("hydrates explicit failure")
                     .failure,
                 Some(expected)
@@ -3179,10 +3235,16 @@ mod tests {
             &owner,
             &conflicting.signing_payload(),
         );
+        // Hydration's authority check (this device only trusts revisions it
+        // owns) rejects the foreign `owner_root_key` before chain-position
+        // logic ever runs, so this now surfaces as an explicit signature/
+        // authority failure rather than reaching `ConflictingHistory` —
+        // fail-closed earlier is the correct outcome for an owner swap an
+        // attacker could stage exactly like this.
         check(
             "conflicting-owner-history",
             &[(1, first.revision.encode()), (2, conflicting.encode())],
-            Status::ConflictingHistory,
+            Status::CannotVerify(crate::nexus::core::events::VerifyFailure::Signature),
         );
     }
 

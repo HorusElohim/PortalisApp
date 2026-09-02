@@ -3,8 +3,12 @@
 ## Unreleased
 
 - Restored collection collaborators from the current signed revision before
-  the first post-restart snapshot. Known roots resolve to local contact handles,
-  unknown authorized roots remain explicit, and corrupt, rollback, future, or
+  the first post-restart snapshot. Hydration now runs the same structural
+  validation, signature, owner-authority, and chain-position checks admission
+  uses — a validly self-signed but unauthorized or out-of-order persisted
+  revision is rejected rather than trusted merely for parsing and verifying
+  against itself. Known roots resolve to local contact handles, unknown
+  authorized roots remain explicit, and corrupt, rollback, future, or
   conflicting durable revision state now renders a verification status instead
   of a successful-looking empty member list. The generated app contract carries
   each member's durable fingerprint and optional process-local contact handle.
