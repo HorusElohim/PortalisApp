@@ -53,7 +53,7 @@ Collection buildCollection({
   List<AppPeer> torrentPeers = const [],
   List<AppEntry> entries = const [],
   List<AppContact> contacts = const [],
-  Uint32List? members,
+  List<AppMember>? members,
   int totalBytes = 0,
   int downloadedBytes = 0,
   int? etaSecs,
@@ -149,7 +149,7 @@ AppCollection buildNexusCollection({
   int entries = 0,
   int totalBytes = 0,
   int onDiskBytes = 0,
-  Uint32List? members,
+  List<AppMember>? members,
   AppTransfer? transfer,
 }) =>
     AppCollection(
@@ -159,7 +159,7 @@ AppCollection buildNexusCollection({
       role: role,
       revision: BigInt.one,
       status: status,
-      members: members ?? Uint32List(0),
+      members: members ?? const [],
       entries: entries,
       totalBytes: BigInt.from(totalBytes),
       onDiskBytes: BigInt.from(onDiskBytes),
@@ -188,7 +188,8 @@ AppAppRun buildAppRun({
   String endReason = 'current',
   int networkDownBytes = 0,
   int networkUpBytes = 0,
-}) => AppAppRun(
+}) =>
+    AppAppRun(
       runId: BigInt.from(runId),
       startedAt: BigInt.from(startedAt),
       endedAt: endedAt == null ? null : BigInt.from(endedAt),
@@ -211,7 +212,8 @@ AppUserSummary buildUserSummary({
   int collectionsOwned = 0,
   int collectionsReceived = 0,
   List<AppAppRun> recentRuns = const [],
-}) => AppUserSummary(
+}) =>
+    AppUserSummary(
       device: const AppDevice(
         name: 'Portalis',
         handle: null,

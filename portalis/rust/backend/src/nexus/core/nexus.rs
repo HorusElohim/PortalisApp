@@ -31,8 +31,8 @@ use tokio::sync::{Notify, watch};
 use super::supervisor::Supervisor;
 use crate::nexus::projection::emit::Projector;
 use crate::nexus::projection::state::{
-    Accepted, CollectionState, Command, CommandError, Connectivity, Detail, DeviceState, Handle,
-    LocalFile, Nature, PortalisState, Role, Status,
+    Accepted, CollectionState, Command, CommandError, Connectivity, ContactState, Detail,
+    DeviceState, Friendship, Handle, LocalFile, MemberState, Nature, PortalisState, Role, Status,
 };
 use crate::nexus::store::records::{
     Role as StoredRole, StoredActivity, StoredCollection, StoredLifecycle, StoredSourceFile,
@@ -253,34 +253,202 @@ pub struct LocalCollections {
     next_handle: u32,
 }
 
+#[derive(Debug, Default)]
+struct LocalContacts {
+    handles: HashMap<[u8; portalis_nexus_protocol::DEVICE_KEY_BYTES], Handle>,
+    states: Vec<ContactState>,
+    next_handle: u32,
+}
+
+impl LocalContacts {
+    fn member(
+        &mut self,
+        store: &Store,
+        root_key: [u8; portalis_nexus_protocol::DEVICE_KEY_BYTES],
+    ) -> Result<MemberState, StoreError> {
+        let Some(stored) = store.contact(&root_key)? else {
+            return Ok(MemberState {
+                root_key,
+                contact: None,
+            });
+        };
+        let handle = if let Some(handle) = self.handles.get(&root_key) {
+            *handle
+        } else {
+            self.next_handle = self.next_handle.saturating_add(1);
+            let handle = Handle(self.next_handle);
+            let display_name = stored
+                .handle
+                .split_once('#')
+                .map_or_else(|| stored.handle.clone(), |(name, _)| name.to_owned());
+            self.handles.insert(root_key, handle);
+            self.states.push(ContactState {
+                id: handle,
+                display_name,
+                handle: Some(stored.handle),
+                fingerprint: hex::encode(root_key),
+                verified: stored.fingerprint_verified,
+                friendship: Friendship::Accepted,
+                reachable: None,
+            });
+            handle
+        };
+        Ok(MemberState {
+            root_key,
+            contact: Some(handle),
+        })
+    }
+}
+
+struct HydratedMembership {
+    number: u64,
+    roots: Vec<[u8; portalis_nexus_protocol::DEVICE_KEY_BYTES]>,
+    failure: Option<Status>,
+}
+
+fn hydrate_membership(store: &Store, key: &[u8]) -> Result<HydratedMembership, StoreError> {
+    let rows = store.revisions(key)?;
+    let Some((highest_number, _)) = rows.last() else {
+        return Ok(HydratedMembership {
+            number: 0,
+            roots: Vec::new(),
+            failure: None,
+        });
+    };
+    let highest_number = *highest_number;
+    let expected_collection = <[u8; portalis_nexus_protocol::SHARE_ID_BYTES]>::try_from(key).ok();
+    let mut previous: Option<portalis_nexus_protocol::Revision> = None;
+
+    for (stored_number, bytes) in rows {
+        let revision = match portalis_nexus_protocol::Revision::decode(&bytes) {
+            Ok(revision) => revision,
+            Err(portalis_nexus_protocol::RevisionError::UnknownDomain) => {
+                return Ok(HydratedMembership {
+                    number: highest_number,
+                    roots: Vec::new(),
+                    failure: Some(Status::NeedsNewerVersion),
+                });
+            }
+            Err(_) => {
+                return Ok(HydratedMembership {
+                    number: highest_number,
+                    roots: Vec::new(),
+                    failure: Some(Status::CannotVerify(
+                        crate::nexus::core::events::VerifyFailure::ContentMismatch,
+                    )),
+                });
+            }
+        };
+        let collection_matches =
+            expected_collection.is_some_and(|collection| revision.collection_id == collection);
+        if !collection_matches || revision.number != stored_number {
+            let failure = if revision.number < stored_number {
+                crate::nexus::core::events::VerifyFailure::Rollback
+            } else {
+                crate::nexus::core::events::VerifyFailure::ContentMismatch
+            };
+            return Ok(HydratedMembership {
+                number: highest_number,
+                roots: Vec::new(),
+                failure: Some(Status::CannotVerify(failure)),
+            });
+        }
+        if !revision.verify() {
+            return Ok(HydratedMembership {
+                number: highest_number,
+                roots: Vec::new(),
+                failure: Some(Status::CannotVerify(
+                    crate::nexus::core::events::VerifyFailure::Signature,
+                )),
+            });
+        }
+        if let Some(held) = previous.as_ref()
+            && revision.owner_root_key != held.owner_root_key
+        {
+            return Ok(HydratedMembership {
+                number: highest_number,
+                roots: Vec::new(),
+                failure: Some(Status::ConflictingHistory),
+            });
+        }
+        let held = previous
+            .as_ref()
+            .map(|held| crate::nexus::crypto::ChainState {
+                collection_id: held.collection_id,
+                number: held.number,
+                revision_hash: held.hash(),
+            });
+        let continuity = if held.is_some() {
+            crate::nexus::crypto::Continuity::Strict
+        } else {
+            crate::nexus::crypto::Continuity::Join
+        };
+        if let Err(error) = crate::nexus::crypto::position(&revision, held.as_ref(), continuity) {
+            let failure = match error {
+                crate::nexus::crypto::ChainError::Fork { .. } => Status::ConflictingHistory,
+                crate::nexus::crypto::ChainError::Rollback { .. } => {
+                    Status::CannotVerify(crate::nexus::core::events::VerifyFailure::Rollback)
+                }
+                _ => Status::CannotVerify(crate::nexus::core::events::VerifyFailure::BrokenChain),
+            };
+            return Ok(HydratedMembership {
+                number: highest_number,
+                roots: Vec::new(),
+                failure: Some(failure),
+            });
+        }
+        previous = Some(revision);
+    }
+
+    let current = previous.expect("a non-empty revision set has a current revision");
+    Ok(HydratedMembership {
+        number: current.number,
+        roots: current
+            .members
+            .into_iter()
+            .map(|member| member.root_key)
+            .collect(),
+        failure: None,
+    })
+}
+
 impl LocalCollections {
-    fn hydrate(store: &Store) -> Result<(Self, Vec<CollectionState>), StoreError> {
+    fn hydrate(
+        store: &Store,
+    ) -> Result<(Self, Vec<ContactState>, Vec<CollectionState>), StoreError> {
         let mut local = Self::default();
+        let mut contacts = LocalContacts::default();
         let mut projected = Vec::new();
         for (key, stored) in store.collections()? {
             let imported_entries = store.torrent_import_entries(&key)?;
             let local_sources = &stored.sources;
             let handle = local.assign(key.clone());
-            let revision = store
-                .current_revision(&key)?
-                .map_or(0, |(number, _)| number);
+            let membership = hydrate_membership(store, &key)?;
+            let revision = membership.number;
+            let members = membership
+                .roots
+                .into_iter()
+                .map(|root| contacts.member(store, root))
+                .collect::<Result<Vec<_>, _>>()?;
             let torrent_import = store.torrent_import(&key)?;
             let lifecycle = stored.lifecycle;
             let torrent_import = torrent_import.is_some();
             // No live reading yet: hydration happens at open, before the
             // first poll. `status_for` knows that, and the poller refines it
             // within a second.
-            let status = crate::nexus::projection::state::status_for(
-                crate::nexus::projection::state::StatusFacts {
-                    completed: stored.completed_at.is_some(),
-                    carried: stored.substrate_handle.is_some(),
-                    publishing: !local_sources.is_empty() && revision == 0,
-                    importing: torrent_import,
-                    locally_complete: !local_sources.is_empty()
-                        && stored.substrate_handle.is_some(),
-                    ..crate::nexus::projection::state::StatusFacts::from_lifecycle(lifecycle)
-                },
-            );
+            let status = membership.failure.unwrap_or_else(|| {
+                crate::nexus::projection::state::status_for(
+                    crate::nexus::projection::state::StatusFacts {
+                        completed: stored.completed_at.is_some(),
+                        carried: stored.substrate_handle.is_some(),
+                        publishing: !local_sources.is_empty() && revision == 0,
+                        importing: torrent_import,
+                        locally_complete: !local_sources.is_empty()
+                            && stored.substrate_handle.is_some(),
+                        ..crate::nexus::projection::state::StatusFacts::from_lifecycle(lifecycle)
+                    },
+                )
+            });
             let (entries, total_bytes) = if local_sources.is_empty() {
                 (
                     imported_entries.len(),
@@ -314,7 +482,7 @@ impl LocalCollections {
                 },
                 revision,
                 status,
-                members: Vec::new(),
+                members,
                 entries: u32::try_from(entries).unwrap_or(u32::MAX),
                 total_bytes,
                 on_disk_bytes: stored.on_disk_bytes,
@@ -323,7 +491,7 @@ impl LocalCollections {
                 pending: None,
             });
         }
-        Ok((local, projected))
+        Ok((local, contacts.states, projected))
     }
 
     fn assign(&mut self, key: Vec<u8>) -> Handle {
@@ -386,7 +554,7 @@ impl Nexus {
         store: Arc<Store>,
         substrate: Arc<dyn crate::nexus::substrate::Substrate>,
     ) -> Result<Self, OpenError> {
-        let (collections, collection_states) = LocalCollections::hydrate(&store)?;
+        let (collections, contacts, collection_states) = LocalCollections::hydrate(&store)?;
         let device = DeviceState {
             name: config.device_name.clone(),
             handle: None,
@@ -396,7 +564,7 @@ impl Nexus {
         let first = PortalisState {
             device,
             connectivity: Connectivity::LocalOnly,
-            contacts: Vec::new(),
+            contacts,
             collections: collection_states,
             alerts: Vec::new(),
         };
@@ -1878,7 +2046,7 @@ mod tests {
     use crate::nexus::core::supervisor::Shutdown;
     use crate::nexus::core::transfers::{self as transfers, Holdings};
     use crate::nexus::projection::state::{CollectionState, Role, Status};
-    use crate::nexus::store::records::StoredImportEntry;
+    use crate::nexus::store::records::{StoredContact, StoredImportEntry};
 
     /// A directory that removes itself.
     struct Scratch(std::path::PathBuf);
@@ -2782,6 +2950,298 @@ mod tests {
         let empty = open(&scratch);
         assert!(empty.state().collections.is_empty());
         empty.close().await;
+    }
+
+    #[tokio::test]
+    async fn the_first_snapshot_restores_every_signed_member_after_restart() {
+        use crate::nexus::collections::publish::tests::Person;
+
+        let scratch = Scratch::new("durable-members");
+        let nexus = open(&scratch);
+        let collection = nexus
+            .command(&Command::CreateCollection {
+                name: "Shared archive".to_owned(),
+                files: Vec::new(),
+            })
+            .expect("creates the durable collection")
+            .collection
+            .expect("names the collection");
+        let key = nexus.collection_key(collection).expect("collection key");
+        let stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("stored collection");
+        nexus.close().await;
+
+        let owner = Person::new(11);
+        let known = Person::new(12);
+        let unknown = Person::new(13);
+        let collection_id =
+            <[u8; portalis_nexus_protocol::SHARE_ID_BYTES]>::try_from(key.as_slice())
+                .expect("collection key shape");
+        let signed = crate::nexus::collections::model::Collection {
+            id: crate::nexus::collections::model::CollectionId(collection_id),
+            name: stored.name.clone(),
+            role: stored.role,
+            content_key: stored.content_key,
+            revision: None,
+            manifest: portalis_nexus_protocol::Manifest::default(),
+        };
+        let (_, publication) = crate::nexus::collections::publish::publish(
+            &signed,
+            &owner,
+            &[owner.recipient(), known.recipient(), unknown.recipient()],
+            &[],
+            1_700_000_000_000_000_000,
+        )
+        .expect("publishes a signed membership");
+        let known_root = known.signing.verifying_key().to_bytes();
+        let unknown_root = unknown.signing.verifying_key().to_bytes();
+        let store = Store::open(scratch.0.join("portalis.redb")).expect("reopens store");
+        store
+            .put_revision(
+                &key,
+                publication.revision.number,
+                &publication.revision.encode(),
+            )
+            .expect("persists signed revision");
+        store
+            .put_contact(&StoredContact {
+                handle: "known#MEMBER".to_owned(),
+                fingerprint_verified: true,
+                root_key: known_root,
+            })
+            .expect("persists known contact");
+        drop(store);
+
+        let reopened = open(&scratch);
+        let first = reopened.watch().borrow().clone();
+        assert_eq!(first.collections[0].members.len(), 3);
+        let known_member = first.collections[0]
+            .members
+            .iter()
+            .find(|member| member.root_key == known_root)
+            .expect("known signed member survives");
+        let unknown_member = first.collections[0]
+            .members
+            .iter()
+            .find(|member| member.root_key == unknown_root)
+            .expect("unknown signed member is explicit");
+        assert!(known_member.contact.is_some());
+        assert!(unknown_member.contact.is_none());
+        assert_eq!(first.contacts.len(), 1);
+        assert_eq!(
+            first.contacts[0].id,
+            known_member.contact.expect("known handle")
+        );
+        reopened.close().await;
+
+        let store = Store::open(scratch.0.join("portalis.redb")).expect("reopens store");
+        let held = store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("stored collection");
+        store
+            .put_collection(
+                &key,
+                &StoredCollection {
+                    role: StoredRole::Member,
+                    ..held
+                },
+            )
+            .expect("records member role");
+        drop(store);
+        let member_reopened = open(&scratch);
+        assert_eq!(member_reopened.state().collections[0].role, Role::Member);
+        assert_eq!(member_reopened.state().collections[0].members.len(), 3);
+        member_reopened.close().await;
+    }
+
+    #[test]
+    fn a_newer_signed_revision_replaces_the_hydrated_member_set() {
+        use crate::nexus::collections::publish::tests::{Person, descriptors, owned};
+
+        let scratch = Scratch::new("newer-members");
+        let store = Store::open(scratch.0.join("portalis.redb")).expect("opens store");
+        let owner = Person::new(21);
+        let removed = Person::new(22);
+        let added = Person::new(23);
+        let initial = owned(&owner);
+        let key = initial.id.0;
+        let (published, first) = crate::nexus::collections::publish::publish(
+            &initial,
+            &owner,
+            &[owner.recipient(), removed.recipient()],
+            &descriptors(),
+            1,
+        )
+        .expect("first signed revision");
+        let (_, second) = crate::nexus::collections::publish::publish(
+            &published,
+            &owner,
+            &[owner.recipient(), added.recipient()],
+            &descriptors(),
+            2,
+        )
+        .expect("second signed revision");
+        store
+            .put_revision(&key, first.revision.number, &first.revision.encode())
+            .expect("stores first revision");
+        store
+            .put_revision(&key, second.revision.number, &second.revision.encode())
+            .expect("stores second revision");
+
+        let hydrated = hydrate_membership(&store, &key).expect("hydrates production membership");
+        assert_eq!(hydrated.number, 2);
+        assert!(
+            hydrated
+                .roots
+                .contains(&added.signing.verifying_key().to_bytes())
+        );
+        assert!(
+            !hydrated
+                .roots
+                .contains(&removed.signing.verifying_key().to_bytes())
+        );
+        assert!(hydrated.failure.is_none());
+    }
+
+    #[test]
+    fn persisted_revision_anomalies_are_explicit_hydration_failures() {
+        use crate::nexus::collections::publish::tests::{Person, descriptors, owned};
+
+        let owner = Person::new(24);
+        let initial = owned(&owner);
+        let key = initial.id.0;
+        let (published, first) = crate::nexus::collections::publish::publish(
+            &initial,
+            &owner,
+            &[owner.recipient()],
+            &descriptors(),
+            1,
+        )
+        .expect("first signed revision");
+        let (_, second) = crate::nexus::collections::publish::publish(
+            &published,
+            &owner,
+            &[owner.recipient()],
+            &descriptors(),
+            2,
+        )
+        .expect("second signed revision");
+
+        let check = |name: &str, rows: &[(u64, Vec<u8>)], expected: Status| {
+            let scratch = Scratch::new(name);
+            let store = Store::open(scratch.0.join("portalis.redb")).expect("opens store");
+            for (number, bytes) in rows {
+                store
+                    .put_revision(&key, *number, bytes)
+                    .expect("stores anomaly fixture");
+            }
+            assert_eq!(
+                hydrate_membership(&store, &key)
+                    .expect("hydrates explicit failure")
+                    .failure,
+                Some(expected)
+            );
+        };
+
+        let mut forged = first.revision.encode();
+        *forged.last_mut().expect("signature byte") ^= 1;
+        check(
+            "forged-revision",
+            &[(1, forged)],
+            Status::CannotVerify(crate::nexus::core::events::VerifyFailure::Signature),
+        );
+        check(
+            "rollback-revision",
+            &[(2, first.revision.encode())],
+            Status::CannotVerify(crate::nexus::core::events::VerifyFailure::Rollback),
+        );
+        let mut future = first.revision.encode();
+        future[0] ^= 1;
+        check("future-revision", &[(1, future)], Status::NeedsNewerVersion);
+
+        let mut broken = second.revision.clone();
+        broken.previous_hash = [0x77; portalis_nexus_protocol::REVISION_HASH_BYTES];
+        broken.signature =
+            crate::nexus::collections::publish::Author::sign(&owner, &broken.signing_payload());
+        check(
+            "broken-revision-chain",
+            &[(1, first.revision.encode()), (2, broken.encode())],
+            Status::CannotVerify(crate::nexus::core::events::VerifyFailure::BrokenChain),
+        );
+
+        let mut conflicting = second.revision;
+        conflicting.owner_root_key = [0x66; portalis_nexus_protocol::DEVICE_KEY_BYTES];
+        conflicting.signature = crate::nexus::collections::publish::Author::sign(
+            &owner,
+            &conflicting.signing_payload(),
+        );
+        check(
+            "conflicting-owner-history",
+            &[(1, first.revision.encode()), (2, conflicting.encode())],
+            Status::ConflictingHistory,
+        );
+    }
+
+    #[tokio::test]
+    async fn corrupt_revision_projects_an_explicit_verification_failure() {
+        use crate::nexus::collections::publish::tests::Person;
+
+        let scratch = Scratch::new("corrupt-membership");
+        let nexus = open(&scratch);
+        let collection = nexus
+            .command(&Command::CreateCollection {
+                name: "Damaged archive".to_owned(),
+                files: Vec::new(),
+            })
+            .expect("creates collection")
+            .collection
+            .expect("collection handle");
+        let key = nexus.collection_key(collection).expect("collection key");
+        let stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("stored collection");
+        nexus.close().await;
+        let owner = Person::new(31);
+        let collection_id =
+            <[u8; portalis_nexus_protocol::SHARE_ID_BYTES]>::try_from(key.as_slice())
+                .expect("collection key shape");
+        let signed = crate::nexus::collections::model::Collection {
+            id: crate::nexus::collections::model::CollectionId(collection_id),
+            name: stored.name,
+            role: stored.role,
+            content_key: stored.content_key,
+            revision: None,
+            manifest: portalis_nexus_protocol::Manifest::default(),
+        };
+        let (_, publication) = crate::nexus::collections::publish::publish(
+            &signed,
+            &owner,
+            &[owner.recipient()],
+            &[],
+            1,
+        )
+        .expect("valid signed revision");
+        let mut damaged = publication.revision.encode();
+        damaged.pop();
+        let store = Store::open(scratch.0.join("portalis.redb")).expect("reopens store");
+        store
+            .put_revision(&key, 1, &damaged)
+            .expect("simulates at-rest corruption");
+        drop(store);
+
+        let reopened = open(&scratch);
+        assert_eq!(
+            reopened.state().collections[0].status,
+            Status::CannotVerify(crate::nexus::core::events::VerifyFailure::ContentMismatch)
+        );
+        assert!(reopened.state().collections[0].members.is_empty());
+        reopened.close().await;
     }
 
     /// Creating a share persists references to the originals, not their

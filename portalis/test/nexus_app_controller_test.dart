@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -246,7 +245,7 @@ void main() {
       role: 'Owner',
       revision: BigInt.one,
       status: 'Preparing',
-      members: Uint32List(0),
+      members: const [],
       entries: 2,
       totalBytes: BigInt.from(39),
       onDiskBytes: BigInt.zero,
@@ -401,7 +400,7 @@ void main() {
             role: 'Owner',
             revision: BigInt.one,
             status: 'Downloading',
-            members: Uint32List(0),
+            members: const [],
             entries: 1,
             totalBytes: BigInt.from(100),
             onDiskBytes: BigInt.from(50),
@@ -569,7 +568,7 @@ AppSnapshot _collectionState({String status = 'Available'}) => AppSnapshot(
           role: 'Owner',
           revision: BigInt.one,
           status: status,
-          members: Uint32List(0),
+          members: const [],
           entries: 0,
           totalBytes: BigInt.zero,
           onDiskBytes: BigInt.zero,
@@ -617,7 +616,7 @@ AppSnapshot _torrentState({
           role: 'Owner',
           revision: BigInt.one,
           status: status,
-          members: Uint32List(0),
+          members: const [],
           entries: 2,
           totalBytes: BigInt.from(39),
           onDiskBytes: BigInt.zero,

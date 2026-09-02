@@ -68,6 +68,17 @@ pub struct ContactState {
     pub reachable: Option<Security>,
 }
 
+/// One person authorized by a collection's signed current revision.
+///
+/// The root key is durable signed identity. A contact handle is deliberately
+/// optional and process-local: an authorized person does not cease to exist
+/// merely because this device has not added them as a contact.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemberState {
+    pub root_key: [u8; portalis_nexus_protocol::DEVICE_KEY_BYTES],
+    pub contact: Option<Handle>,
+}
+
 /// Whether this device publishes a collection or reads it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role {
@@ -280,7 +291,7 @@ pub struct CollectionState {
     pub role: Role,
     pub revision: u64,
     pub status: Status,
-    pub members: Vec<Handle>,
+    pub members: Vec<MemberState>,
     pub entries: u32,
     pub total_bytes: u64,
     /// How much of it this device is actually holding.

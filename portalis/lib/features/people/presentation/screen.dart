@@ -78,7 +78,9 @@ class _PeopleScreenState extends State<PeopleScreen> with PollingState {
           contact: contact,
           collections: [
             for (final collection in collections)
-              if (collection.members.contains(contact.id)) collection.name,
+              if (collection.members
+                  .any((member) => member.contact == contact.id))
+                collection.name,
           ],
         ),
     ];

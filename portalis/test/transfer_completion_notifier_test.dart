@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/notifications/transfer_completion_notifier.dart';
 import 'package:portalis/nexus/domain/app_state.dart';
@@ -54,7 +52,7 @@ AppSnapshot _snapshot({required BigInt? completedAt}) => AppSnapshot(
           role: 'Receiver',
           revision: BigInt.one,
           status: completedAt == null ? 'Downloading' : 'Available',
-          members: Uint32List(0),
+          members: const [],
           entries: 1,
           totalBytes: BigInt.from(100),
           onDiskBytes: BigInt.from(100),

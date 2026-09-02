@@ -16,3 +16,4 @@ pub use keys::{
 };
 #[allow(unused_imports)]
 pub use verify::{ChainError, ChainStore, Continuity, MemoryChainStore, verify as verify_revision};
+pub(crate) use verify::{ChainState, position};

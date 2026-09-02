@@ -1214,7 +1214,7 @@ impl SseDecode for crate::portalis_api::AppCollection {
         let mut var_role = <String>::sse_decode(deserializer);
         let mut var_revision = <u64>::sse_decode(deserializer);
         let mut var_status = <String>::sse_decode(deserializer);
-        let mut var_members = <Vec<u32>>::sse_decode(deserializer);
+        let mut var_members = <Vec<crate::portalis_api::AppMember>>::sse_decode(deserializer);
         let mut var_entries = <u32>::sse_decode(deserializer);
         let mut var_totalBytes = <u64>::sse_decode(deserializer);
         let mut var_onDiskBytes = <u64>::sse_decode(deserializer);
@@ -1365,6 +1365,18 @@ impl SseDecode for crate::portalis_api::AppEntry {
             available: var_available,
             downloaded_bytes: var_downloadedBytes,
             path: var_path,
+        };
+    }
+}
+
+impl SseDecode for crate::portalis_api::AppMember {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_fingerprint = <String>::sse_decode(deserializer);
+        let mut var_contact = <Option<u32>>::sse_decode(deserializer);
+        return crate::portalis_api::AppMember {
+            fingerprint: var_fingerprint,
+            contact: var_contact,
         };
     }
 }
@@ -1717,6 +1729,18 @@ impl SseDecode for Vec<crate::portalis_api::AppEntry> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::portalis_api::AppEntry>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::portalis_api::AppMember> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::portalis_api::AppMember>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -2246,6 +2270,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppEntry>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppMember {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.fingerprint.into_into_dart().into_dart(),
+            self.contact.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::portalis_api::AppMember
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppMember>
+    for crate::portalis_api::AppMember
+{
+    fn into_into_dart(self) -> crate::portalis_api::AppMember {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppPeer {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2630,7 +2675,7 @@ impl SseEncode for crate::portalis_api::AppCollection {
         <String>::sse_encode(self.role, serializer);
         <u64>::sse_encode(self.revision, serializer);
         <String>::sse_encode(self.status, serializer);
-        <Vec<u32>>::sse_encode(self.members, serializer);
+        <Vec<crate::portalis_api::AppMember>>::sse_encode(self.members, serializer);
         <u32>::sse_encode(self.entries, serializer);
         <u64>::sse_encode(self.total_bytes, serializer);
         <u64>::sse_encode(self.on_disk_bytes, serializer);
@@ -2714,6 +2759,14 @@ impl SseEncode for crate::portalis_api::AppEntry {
         <bool>::sse_encode(self.available, serializer);
         <u64>::sse_encode(self.downloaded_bytes, serializer);
         <Option<String>>::sse_encode(self.path, serializer);
+    }
+}
+
+impl SseEncode for crate::portalis_api::AppMember {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.fingerprint, serializer);
+        <Option<u32>>::sse_encode(self.contact, serializer);
     }
 }
 
@@ -2940,6 +2993,16 @@ impl SseEncode for Vec<crate::portalis_api::AppEntry> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::portalis_api::AppEntry>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::portalis_api::AppMember> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::portalis_api::AppMember>::sse_encode(item, serializer);
         }
     }
 }

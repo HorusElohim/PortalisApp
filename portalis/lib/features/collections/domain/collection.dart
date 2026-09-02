@@ -63,7 +63,8 @@ class Collection {
   bool get isPreparing => lifecycle == CollectionState.resolvingMetadata;
   bool get isWaitingForSender => lifecycle == CollectionState.waitingForSender;
   bool get hasMetadata => lifecycle == CollectionState.metadataReady;
-  bool get isDownloadRequested => lifecycle == CollectionState.downloadRequested;
+  bool get isDownloadRequested =>
+      lifecycle == CollectionState.downloadRequested;
   bool get isRetryingMetadata => lifecycle == CollectionState.retryingMetadata;
   bool get isSeeding => lifecycle == CollectionState.seeding;
 
@@ -76,8 +77,7 @@ class Collection {
   /// catch up after a restart. Entry count alone is transient during hydration.
   bool get canShareQr => !isDraft && (entryCount > 0 || revision > 0);
 
-  bool get isComplete =>
-      lifecycle == CollectionState.available || isSeeding;
+  bool get isComplete => lifecycle == CollectionState.available || isSeeding;
   bool get isMoving =>
       isDownloading || downBytesPerSecond > 0 || upBytesPerSecond > 0;
 
@@ -115,7 +115,8 @@ class Collection {
   /// the snapshot already carries.
   List<AppContact> get collaborators => [
         for (final member in source.members)
-          for (final contact in contacts.where((item) => item.id == member))
+          for (final contact
+              in contacts.where((item) => item.id == member.contact))
             contact,
       ];
 

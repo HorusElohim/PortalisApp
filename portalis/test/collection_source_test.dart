@@ -62,7 +62,7 @@ AppSnapshot _state({required BigInt? completedAt}) => AppSnapshot(
           role: 'Receiver',
           revision: BigInt.one,
           status: completedAt == null ? 'Downloading' : 'Available',
-          members: Uint32List(0),
+          members: const [],
           entries: 1,
           totalBytes: BigInt.from(4000000),
           onDiskBytes: BigInt.from(4000000),

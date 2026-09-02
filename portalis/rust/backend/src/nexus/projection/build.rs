@@ -66,7 +66,7 @@ pub struct CollectionFacts {
     pub revision: u64,
     pub entries: u32,
     pub total_bytes: u64,
-    pub members: Vec<Vec<u8>>,
+    pub members: Vec<[u8; portalis_nexus_protocol::DEVICE_KEY_BYTES]>,
     /// The newest transfer reading, if anything is moving.
     pub progress: Option<Progress>,
     /// Set when verification refused this collection's latest revision.
@@ -86,7 +86,10 @@ pub fn collection(handles: &mut Handles, facts: &CollectionFacts) -> CollectionS
     let members = facts
         .members
         .iter()
-        .map(|member| handles.of(member))
+        .map(|member| crate::nexus::projection::state::MemberState {
+            root_key: *member,
+            contact: Some(handles.of(member)),
+        })
         .collect();
 
     CollectionState {
@@ -204,7 +207,7 @@ mod tests {
     use super::*;
 
     const COLLECTION: &[u8] = &[1; 16];
-    const MEMBER: &[u8] = &[2; 32];
+    const MEMBER: [u8; 32] = [2; 32];
 
     fn facts() -> CollectionFacts {
         CollectionFacts {
@@ -214,7 +217,7 @@ mod tests {
             revision: 3,
             entries: 12,
             total_bytes: 4_096,
-            members: vec![MEMBER.to_vec()],
+            members: vec![MEMBER],
             progress: None,
             failure: None,
             paused: false,
@@ -262,12 +265,12 @@ mod tests {
 
         let first = handles.of(COLLECTION);
         assert_eq!(handles.of(COLLECTION), first, "the same object, twice");
-        assert_ne!(handles.of(MEMBER), first);
+        assert_ne!(handles.of(&MEMBER), first);
         assert_eq!(handles.len(), 2);
 
         // A fresh process assigns from the beginning again, which is why a
         // handle is meaningless to persist.
-        assert_eq!(Handles::new().of(MEMBER), first);
+        assert_eq!(Handles::new().of(&MEMBER), first);
     }
 
     #[test]
@@ -277,7 +280,8 @@ mod tests {
         let projected = collection(&mut handles, &facts());
 
         assert_eq!(projected.id, handles.of(COLLECTION));
-        assert_eq!(projected.members, vec![handles.of(MEMBER)]);
+        assert_eq!(projected.members[0].root_key, MEMBER);
+        assert_eq!(projected.members[0].contact, Some(handles.of(&MEMBER)));
         assert_eq!(projected.role, Role::Owner);
         assert_eq!(projected.revision, 3);
         assert_eq!(projected.entries, 12);

@@ -254,7 +254,7 @@ pub async fn verify<S: ChainStore>(
 ///
 /// Split out because it is the part with no cryptography in it: given what is
 /// held, a number and a previous hash either follow or they do not.
-fn position(
+pub(crate) fn position(
     revision: &Revision,
     held: Option<&ChainState>,
     continuity: Continuity,
