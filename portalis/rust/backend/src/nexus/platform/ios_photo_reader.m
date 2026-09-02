@@ -7,6 +7,21 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+// Every PhotoKit callback here used DISPATCH_TIME_FOREVER, so a stalled
+// iCloud fetch or a revoked permission prompt could block a Rust worker
+// thread permanently. Bounded instead: each wait has an explicit budget, and
+// a timed-out wait returns a distinct, actionable error rather than hanging.
+static const int64_t kPortalisPhotoKitPermissionTimeoutSeconds = 30;
+static const int64_t kPortalisPhotoKitMetadataTimeoutSeconds = 20;
+static const int64_t kPortalisPhotoKitReadTimeoutSeconds = 60;
+
+// Waits up to `seconds`. Returns YES if the semaphore signalled, NO on
+// timeout — the caller decides what a timeout means for its own request.
+static BOOL PortalisWaitBounded(dispatch_semaphore_t semaphore, int64_t seconds) {
+  dispatch_time_t deadline = dispatch_time(DISPATCH_TIME_NOW, seconds * NSEC_PER_SEC);
+  return dispatch_semaphore_wait(semaphore, deadline) == 0;
+}
+
 int portalis_photo_asset_import(
     const char *path,
     bool video,
@@ -28,7 +43,9 @@ int portalis_photo_asset_import(
           authorization = status;
           dispatch_semaphore_signal(permission);
         }];
-      dispatch_semaphore_wait(permission, DISPATCH_TIME_FOREVER);
+      if (!PortalisWaitBounded(permission, kPortalisPhotoKitPermissionTimeoutSeconds)) {
+        return -6; // The permission prompt never resolved within the budget.
+      }
     }
     if (authorization != PHAuthorizationStatusAuthorized) return -3;
 
@@ -53,7 +70,9 @@ int portalis_photo_asset_import(
       success = didSucceed;
       dispatch_semaphore_signal(completed);
     }];
-    dispatch_semaphore_wait(completed, DISPATCH_TIME_FOREVER);
+    if (!PortalisWaitBounded(completed, kPortalisPhotoKitReadTimeoutSeconds)) {
+      return -7; // The library write never completed within the budget.
+    }
     if (!success || assetIdentifier.length == 0) return -4;
     const char *utf8 = assetIdentifier.UTF8String;
     size_t length = strlen(utf8);
@@ -112,7 +131,11 @@ static NSURL *PortalisDirectAssetURL(PHAsset *asset, NSError **outError) {
       dispatch_semaphore_signal(done);
     }];
   }
-  dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+  if (!PortalisWaitBounded(done, kPortalisPhotoKitMetadataTimeoutSeconds)) {
+    // No direct URL within budget; the caller falls back to the sequential
+    // reader rather than blocking forever on a slow iCloud fetch.
+    return nil;
+  }
   if (url != nil) {
     @synchronized (urls) { urls[asset.localIdentifier] = url; }
   }
@@ -131,6 +154,182 @@ static int PortalisReadDirectURL(NSURL *url, uint64_t offset, uint8_t *buffer, s
   }
   close(descriptor);
   return copied == length ? 0 : -1;
+}
+
+// A sequential, single-pass reader over one asset's PhotoKit resource
+// stream, for assets with no direct file URL (typically iCloud-backed).
+//
+// The old implementation re-issued `requestDataForAssetResource:` from byte
+// zero for every single read call — an O(n^2) restart, worst on exactly the
+// large/iCloud assets ADR-0014 exists for — and waited on a semaphore that
+// could never expire. This type keeps one PhotoKit request alive per asset,
+// buffers only what has not yet been consumed, and is built for the
+// consecutive/forward access pattern torrent piece hashing actually makes:
+// out-of-order or backward reads are refused rather than silently
+// re-fetching (which would reintroduce the same quadratic cost), and a
+// caller that needs random access should route through the direct-URL path.
+@interface PortalisPhotoSequentialReader : NSObject
+@property(nonatomic, strong) NSMutableData *buffer;
+@property(nonatomic, assign) uint64_t consumedOffset;   // Bytes already returned to callers.
+@property(nonatomic, assign) uint64_t bufferedOffset;   // Absolute stream offset `buffer` starts at.
+@property(nonatomic, assign) BOOL finished;
+@property(nonatomic, strong) NSError *error;
+@property(nonatomic, assign) PHAssetResourceDataRequestID requestID;
+@property(nonatomic, strong) dispatch_semaphore_t dataAvailable;
+@property(nonatomic, strong) NSLock *lock;
+@end
+
+@implementation PortalisPhotoSequentialReader
+@end
+
+static NSMutableDictionary<NSString *, PortalisPhotoSequentialReader *> *PortalisSequentialReaders(void) {
+  static NSMutableDictionary<NSString *, PortalisPhotoSequentialReader *> *readers;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ readers = [NSMutableDictionary dictionary]; });
+  return readers;
+}
+
+// Starts (or reuses) the one live sequential request for `identifier`.
+// Cancelled and forgotten once every byte up to `targetEnd` has been
+// buffered, so a completed range never keeps PhotoKit streaming further
+// bytes nobody asked for.
+static PortalisPhotoSequentialReader *PortalisSequentialReaderStart(
+    NSString *identifier, PHAssetResource *resource) {
+  NSMutableDictionary *readers = PortalisSequentialReaders();
+  @synchronized (readers) {
+    PortalisPhotoSequentialReader *existing = readers[identifier];
+    if (existing != nil && !existing.finished && existing.error == nil) return existing;
+
+    PortalisPhotoSequentialReader *reader = [[PortalisPhotoSequentialReader alloc] init];
+    reader.buffer = [NSMutableData data];
+    reader.consumedOffset = 0;
+    reader.bufferedOffset = 0;
+    reader.finished = NO;
+    reader.dataAvailable = dispatch_semaphore_create(0);
+    reader.lock = [[NSLock alloc] init];
+    readers[identifier] = reader;
+
+    PHAssetResourceRequestOptions *options = [[PHAssetResourceRequestOptions alloc] init];
+    options.networkAccessAllowed = YES;
+    __weak PortalisPhotoSequentialReader *weakReader = reader;
+    PHAssetResourceDataRequestID requestID = [[PHAssetResourceManager defaultManager]
+      requestDataForAssetResource:resource
+      options:options
+      dataReceivedHandler:^(NSData *data) {
+        PortalisPhotoSequentialReader *strongReader = weakReader;
+        if (strongReader == nil) return;
+        [strongReader.lock lock];
+        [strongReader.buffer appendData:data];
+        [strongReader.lock unlock];
+        dispatch_semaphore_signal(strongReader.dataAvailable);
+      }
+      completionHandler:^(NSError *error) {
+        PortalisPhotoSequentialReader *strongReader = weakReader;
+        if (strongReader == nil) return;
+        [strongReader.lock lock];
+        strongReader.finished = YES;
+        strongReader.error = error;
+        [strongReader.lock unlock];
+        dispatch_semaphore_signal(strongReader.dataAvailable);
+      }];
+    reader.requestID = requestID;
+    return reader;
+  }
+}
+
+static void PortalisSequentialReaderCancelAndForget(NSString *identifier, PortalisPhotoSequentialReader *reader) {
+  NSMutableDictionary *readers = PortalisSequentialReaders();
+  @synchronized (readers) {
+    if (readers[identifier] == reader) {
+      [readers removeObjectForKey:identifier];
+    }
+  }
+  if (reader.requestID != 0) {
+    [[PHAssetResourceManager defaultManager] cancelDataRequest:reader.requestID];
+  }
+}
+
+// Reads `[offset, offset+length)` sequentially. `offset` must equal the
+// reader's already-consumed position (this asset's next unread byte);
+// anything else is refused rather than restarted from zero, matching the
+// forward-only contract the torrent hasher and piece reader actually use.
+static int PortalisReadSequential(
+    NSString *identifier, PHAssetResource *resource,
+    uint64_t offset, uint8_t *buffer, size_t length) {
+  PortalisPhotoSequentialReader *reader = PortalisSequentialReaderStart(identifier, resource);
+
+  [reader.lock lock];
+  BOOL positionMismatch = offset != reader.consumedOffset;
+  [reader.lock unlock];
+  if (positionMismatch) {
+    // Out-of-order access on the streaming-only path. The caller (Rust) is
+    // expected to serialize reads per asset; refusing here surfaces that
+    // programming error instead of silently paying to re-fetch from zero.
+    return -4;
+  }
+
+  dispatch_time_t deadline = dispatch_time(
+      DISPATCH_TIME_NOW, kPortalisPhotoKitReadTimeoutSeconds * NSEC_PER_SEC);
+  size_t copied = 0;
+  while (copied < length) {
+    [reader.lock lock];
+    uint64_t haveUpTo = reader.bufferedOffset + reader.buffer.length;
+    uint64_t wantUpTo = offset + copied;
+    BOOL finished = reader.finished;
+    NSError *error = reader.error;
+    if (haveUpTo > wantUpTo) {
+      NSUInteger start = (NSUInteger)(wantUpTo - reader.bufferedOffset);
+      NSUInteger available = (NSUInteger)(haveUpTo - wantUpTo);
+      NSUInteger want = length - copied;
+      NSUInteger take = MIN(available, want);
+      memcpy(buffer + copied, ((const uint8_t *)reader.buffer.bytes) + start, take);
+      copied += take;
+      // Drop consumed bytes so the buffer never grows past what one
+      // outstanding request window needs.
+      if (start + take == reader.buffer.length) {
+        reader.bufferedOffset = haveUpTo;
+        [reader.buffer setLength:0];
+      }
+      [reader.lock unlock];
+      continue;
+    }
+    [reader.lock unlock];
+    if (finished) {
+      // Stream ended before satisfying the request: short read or error.
+      if (error != nil) {
+        fprintf(stderr, "Portalis sequential Photos read for %s failed: %s\\n",
+                identifier.UTF8String, error.localizedDescription.UTF8String);
+      }
+      break;
+    }
+    long waited = dispatch_semaphore_wait(reader.dataAvailable, deadline);
+    if (waited != 0) {
+      // Timed out waiting for more bytes.
+      break;
+    }
+  }
+
+  [reader.lock lock];
+  reader.consumedOffset = offset + copied;
+  BOOL doneStreaming = reader.finished;
+  [reader.lock unlock];
+
+  if (copied == length) {
+    // If this read reached (or passed) end of stream, the request has
+    // nothing left to deliver — cancel and forget it now rather than
+    // leaving a finished-but-cached entry that the next asset access would
+    // otherwise have to notice and skip. A completed read that has *not*
+    // reached the end deliberately keeps the request alive for the caller's
+    // next consecutive read.
+    if (doneStreaming) {
+      PortalisSequentialReaderCancelAndForget(identifier, reader);
+    }
+    return 0;
+  }
+  // Short read: cancel this request so a caller that retries starts clean
+  // rather than resuming a broken stream.
+  PortalisSequentialReaderCancelAndForget(identifier, reader);
+  return -3;
 }
 
 bool portalis_photo_asset_available(const char *identifier) {
@@ -165,7 +364,7 @@ int64_t portalis_photo_asset_length(const char *identifier) {
     dispatch_semaphore_t done = dispatch_semaphore_create(0);
     PHAssetResourceRequestOptions *options = [[PHAssetResourceRequestOptions alloc] init];
     options.networkAccessAllowed = YES;
-    [[PHAssetResourceManager defaultManager]
+    PHAssetResourceDataRequestID requestID = [[PHAssetResourceManager defaultManager]
       requestDataForAssetResource:resource
       options:options
       dataReceivedHandler:^(NSData *data) { received += data.length; }
@@ -175,14 +374,19 @@ int64_t portalis_photo_asset_length(const char *identifier) {
         }
         dispatch_semaphore_signal(done);
       }];
-    dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+    if (!PortalisWaitBounded(done, kPortalisPhotoKitReadTimeoutSeconds)) {
+      [[PHAssetResourceManager defaultManager] cancelDataRequest:requestID];
+      return -4; // Length probe timed out; caller should not treat 0/negative as "empty".
+    }
     return received > 0 && received <= INT64_MAX ? (int64_t)received : -3;
   }
 }
 
 // Reads an exact range without materialising the original asset in Portalis'
-// container. PhotoKit delivers a sequential stream, so this discards bytes
-// before the requested offset and copies only the requested range.
+// container. Direct-URL assets get exact, zero-copy pread(2) access; assets
+// with no direct URL are served by the bounded sequential reader above,
+// which streams each byte of the resource at most once rather than
+// restarting PhotoKit's delivery for every call.
 int portalis_photo_asset_read(
     const char *identifier,
     uint64_t offset,
@@ -205,41 +409,6 @@ int portalis_photo_asset_read(
       fprintf(stderr, "Portalis could not access direct Photos URL for %s: %s\\n", identifier, directError.localizedDescription.UTF8String);
     }
 
-    __block uint64_t position = 0;
-    __block size_t copied = 0;
-    __block NSError *requestError = nil;
-    dispatch_semaphore_t done = dispatch_semaphore_create(0);
-    PHAssetResourceRequestOptions *options = [[PHAssetResourceRequestOptions alloc] init];
-    options.networkAccessAllowed = YES;
-    [[PHAssetResourceManager defaultManager]
-      requestDataForAssetResource:resource
-      options:options
-      dataReceivedHandler:^(NSData *data) {
-        uint64_t next = position + data.length;
-        if (next > offset && copied < length) {
-          NSUInteger start = (NSUInteger)MAX((int64_t)0, (int64_t)offset - (int64_t)position);
-          NSUInteger count = MIN(data.length - start, length - copied);
-          memcpy(buffer + copied, ((const uint8_t *)data.bytes) + start, count);
-          copied += count;
-        }
-        position = next;
-      }
-      completionHandler:^(NSError *error) {
-        requestError = error;
-        dispatch_semaphore_signal(done);
-      }];
-    dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
-    if (copied == length) {
-      if (requestError != nil) {
-        fprintf(stderr, "Portalis received the requested Photos range despite completion error: %s\\n", requestError.localizedDescription.UTF8String);
-      }
-      return 0;
-    }
-    if (requestError != nil) {
-      fprintf(stderr, "Portalis could not read Photos asset %s at %llu for %zu bytes: %s\\n", identifier, (unsigned long long)offset, length, requestError.localizedDescription.UTF8String);
-    } else {
-      fprintf(stderr, "Portalis received only %zu of %zu requested bytes from Photos asset %s\\n", copied, length, identifier);
-    }
-    return -3;
+    return PortalisReadSequential(assetId, resource, offset, buffer, length);
   }
 }
