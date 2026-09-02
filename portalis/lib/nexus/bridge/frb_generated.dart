@@ -986,6 +986,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AppActivity dco_decode_app_activity(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return AppActivity(
+      transfers: dco_decode_u_32(arr[0]),
+      downBytesPerSecond: dco_decode_u_32(arr[1]),
+      upBytesPerSecond: dco_decode_u_32(arr[2]),
+      peers: dco_decode_u_32(arr[3]),
+    );
+  }
+
+  @protected
   AppAppRun dco_decode_app_app_run(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1264,14 +1278,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppSnapshot dco_decode_app_snapshot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return AppSnapshot(
       device: dco_decode_app_device(arr[0]),
       connectivity: dco_decode_String(arr[1]),
       contacts: dco_decode_list_app_contact(arr[2]),
       collections: dco_decode_list_app_collection(arr[3]),
       alerts: dco_decode_list_String(arr[4]),
+      activity: dco_decode_app_activity(arr[5]),
     );
   }
 
@@ -1662,6 +1677,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AppActivity sse_decode_app_activity(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_transfers = sse_decode_u_32(deserializer);
+    var var_downBytesPerSecond = sse_decode_u_32(deserializer);
+    var var_upBytesPerSecond = sse_decode_u_32(deserializer);
+    var var_peers = sse_decode_u_32(deserializer);
+    return AppActivity(
+        transfers: var_transfers,
+        downBytesPerSecond: var_downBytesPerSecond,
+        upBytesPerSecond: var_upBytesPerSecond,
+        peers: var_peers);
+  }
+
+  @protected
   AppAppRun sse_decode_app_app_run(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_runId = sse_decode_u_64(deserializer);
@@ -1989,12 +2018,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_contacts = sse_decode_list_app_contact(deserializer);
     var var_collections = sse_decode_list_app_collection(deserializer);
     var var_alerts = sse_decode_list_String(deserializer);
+    var var_activity = sse_decode_app_activity(deserializer);
     return AppSnapshot(
         device: var_device,
         connectivity: var_connectivity,
         contacts: var_contacts,
         collections: var_collections,
-        alerts: var_alerts);
+        alerts: var_alerts,
+        activity: var_activity);
   }
 
   @protected
@@ -2550,6 +2581,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_app_activity(AppActivity self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.transfers, serializer);
+    sse_encode_u_32(self.downBytesPerSecond, serializer);
+    sse_encode_u_32(self.upBytesPerSecond, serializer);
+    sse_encode_u_32(self.peers, serializer);
+  }
+
+  @protected
   void sse_encode_app_app_run(AppAppRun self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_64(self.runId, serializer);
@@ -2764,6 +2804,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_app_contact(self.contacts, serializer);
     sse_encode_list_app_collection(self.collections, serializer);
     sse_encode_list_String(self.alerts, serializer);
+    sse_encode_app_activity(self.activity, serializer);
   }
 
   @protected

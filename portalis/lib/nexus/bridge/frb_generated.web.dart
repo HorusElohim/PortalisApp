@@ -45,6 +45,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppAccepted dco_decode_app_accepted(dynamic raw);
 
   @protected
+  AppActivity dco_decode_app_activity(dynamic raw);
+
+  @protected
   AppAppRun dco_decode_app_app_run(dynamic raw);
 
   @protected
@@ -251,6 +254,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AppAccepted sse_decode_app_accepted(SseDeserializer deserializer);
+
+  @protected
+  AppActivity sse_decode_app_activity(SseDeserializer deserializer);
 
   @protected
   AppAppRun sse_decode_app_app_run(SseDeserializer deserializer);
@@ -476,6 +482,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_app_accepted(AppAccepted self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_activity(AppActivity self, SseSerializer serializer);
 
   @protected
   void sse_encode_app_app_run(AppAppRun self, SseSerializer serializer);

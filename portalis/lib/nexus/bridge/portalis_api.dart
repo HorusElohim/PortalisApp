@@ -6,8 +6,8 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `app_collection_contract`, `app_collection_lifecycle`, `app_run`, `collection_projection`, `detail_projection`, `group_people_peers`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `app_activity`, `app_collection_contract`, `app_collection_lifecycle`, `app_run`, `collection_projection`, `detail_projection`, `group_people_peers`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Opens the local Nexus runtime once. Calling it again is harmless.
 ///
@@ -192,6 +192,43 @@ class AppAccepted {
           id == other.id &&
           collection == other.collection &&
           queued == other.queued;
+}
+
+/// What the engine is doing right now, as one answer, aggregated across
+/// every collection in the snapshot it came from.
+class AppActivity {
+  /// Collections currently moving bytes.
+  final int transfers;
+  final int downBytesPerSecond;
+  final int upBytesPerSecond;
+
+  /// Peers across every collection — what "connected" means to a person,
+  /// who does not think per collection.
+  final int peers;
+
+  const AppActivity({
+    required this.transfers,
+    required this.downBytesPerSecond,
+    required this.upBytesPerSecond,
+    required this.peers,
+  });
+
+  @override
+  int get hashCode =>
+      transfers.hashCode ^
+      downBytesPerSecond.hashCode ^
+      upBytesPerSecond.hashCode ^
+      peers.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppActivity &&
+          runtimeType == other.runtimeType &&
+          transfers == other.transfers &&
+          downBytesPerSecond == other.downBytesPerSecond &&
+          upBytesPerSecond == other.upBytesPerSecond &&
+          peers == other.peers;
 }
 
 /// One bounded recent local backend run.
@@ -942,12 +979,20 @@ class AppSnapshot {
   final List<AppCollection> collections;
   final List<String> alerts;
 
+  /// What the engine is doing right now, aggregated once here rather than
+  /// left for every screen to recompute from `collections` — two Flutter
+  /// call sites disagreeing about how many transfers were active ("1 ACTIVE
+  /// TRANSFER" above a window reading "0 collections") is exactly the
+  /// class of bug one shared derivation exists to make impossible.
+  final AppActivity activity;
+
   const AppSnapshot({
     required this.device,
     required this.connectivity,
     required this.contacts,
     required this.collections,
     required this.alerts,
+    required this.activity,
   });
 
   @override
@@ -956,7 +1001,8 @@ class AppSnapshot {
       connectivity.hashCode ^
       contacts.hashCode ^
       collections.hashCode ^
-      alerts.hashCode;
+      alerts.hashCode ^
+      activity.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -967,7 +1013,8 @@ class AppSnapshot {
           connectivity == other.connectivity &&
           contacts == other.contacts &&
           collections == other.collections &&
-          alerts == other.alerts;
+          alerts == other.alerts &&
+          activity == other.activity;
 }
 
 /// A native source selected by the app without copying its bytes through the

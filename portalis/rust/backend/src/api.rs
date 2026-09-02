@@ -1175,6 +1175,22 @@ impl SseDecode for crate::portalis_api::AppAccepted {
     }
 }
 
+impl SseDecode for crate::portalis_api::AppActivity {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_transfers = <u32>::sse_decode(deserializer);
+        let mut var_downBytesPerSecond = <u32>::sse_decode(deserializer);
+        let mut var_upBytesPerSecond = <u32>::sse_decode(deserializer);
+        let mut var_peers = <u32>::sse_decode(deserializer);
+        return crate::portalis_api::AppActivity {
+            transfers: var_transfers,
+            down_bytes_per_second: var_downBytesPerSecond,
+            up_bytes_per_second: var_upBytesPerSecond,
+            peers: var_peers,
+        };
+    }
+}
+
 impl SseDecode for crate::portalis_api::AppAppRun {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1568,12 +1584,14 @@ impl SseDecode for crate::portalis_api::AppSnapshot {
         let mut var_collections =
             <Vec<crate::portalis_api::AppCollection>>::sse_decode(deserializer);
         let mut var_alerts = <Vec<String>>::sse_decode(deserializer);
+        let mut var_activity = <crate::portalis_api::AppActivity>::sse_decode(deserializer);
         return crate::portalis_api::AppSnapshot {
             device: var_device,
             connectivity: var_connectivity,
             contacts: var_contacts,
             collections: var_collections,
             alerts: var_alerts,
+            activity: var_activity,
         };
     }
 }
@@ -2154,6 +2172,29 @@ impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppAccepted>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppActivity {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.transfers.into_into_dart().into_dart(),
+            self.down_bytes_per_second.into_into_dart().into_dart(),
+            self.up_bytes_per_second.into_into_dart().into_dart(),
+            self.peers.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::portalis_api::AppActivity
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppActivity>
+    for crate::portalis_api::AppActivity
+{
+    fn into_into_dart(self) -> crate::portalis_api::AppActivity {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppAppRun {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2624,6 +2665,7 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppSnapshot {
             self.contacts.into_into_dart().into_dart(),
             self.collections.into_into_dart().into_dart(),
             self.alerts.into_into_dart().into_dart(),
+            self.activity.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2874,6 +2916,16 @@ impl SseEncode for crate::portalis_api::AppAccepted {
         <u64>::sse_encode(self.id, serializer);
         <Option<u32>>::sse_encode(self.collection, serializer);
         <bool>::sse_encode(self.queued, serializer);
+    }
+}
+
+impl SseEncode for crate::portalis_api::AppActivity {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.transfers, serializer);
+        <u32>::sse_encode(self.down_bytes_per_second, serializer);
+        <u32>::sse_encode(self.up_bytes_per_second, serializer);
+        <u32>::sse_encode(self.peers, serializer);
     }
 }
 
@@ -3143,6 +3195,7 @@ impl SseEncode for crate::portalis_api::AppSnapshot {
         <Vec<crate::portalis_api::AppContact>>::sse_encode(self.contacts, serializer);
         <Vec<crate::portalis_api::AppCollection>>::sse_encode(self.collections, serializer);
         <Vec<String>>::sse_encode(self.alerts, serializer);
+        <crate::portalis_api::AppActivity>::sse_encode(self.activity, serializer);
     }
 }
 

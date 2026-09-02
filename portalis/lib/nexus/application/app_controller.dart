@@ -37,31 +37,10 @@ class AppController extends ChangeNotifier {
   AppUserSummary? _debugUserSummary;
   AppSnapshot? get state => _state;
 
-  /// What the engine is doing, derived from the one state this controller
-  /// owns. Every piece of chrome reads this rather than counting for itself
-  /// — see [EngineActivity] for why that matters.
-  EngineActivity get activity {
-    final collections = _state?.collections;
-    if (collections == null || collections.isEmpty) return EngineActivity.idle;
-    var transfers = 0;
-    var down = 0;
-    var up = 0;
-    var peers = 0;
-    for (final collection in collections) {
-      final transfer = collection.transfer;
-      if (transfer == null) continue;
-      transfers++;
-      down += transfer.downBytesPerSecond;
-      up += transfer.upBytesPerSecond;
-      peers += transfer.peers;
-    }
-    return EngineActivity(
-      transfers: transfers,
-      downBytesPerSecond: down,
-      upBytesPerSecond: up,
-      peers: peers,
-    );
-  }
+  /// What the engine is doing, read directly from the current snapshot's own
+  /// aggregation — see [AppActivity] in the generated bridge for why every
+  /// screen must share this one answer rather than recompute it.
+  AppActivity get activity => _state?.activity ?? _idleActivity;
 
   String? lastError;
   bool get started => _starting != null;
@@ -298,4 +277,14 @@ final _emptyUserSummary = AppUserSummary(
   unverifiedContacts: 0,
   connectivity: 'LocalOnly',
   recentRuns: const [],
+);
+
+/// No collection reporting a transfer — the state before the first snapshot
+/// arrives, so [AppController.activity] never has to special-case "no data
+/// yet" separately from "genuinely idle".
+const _idleActivity = AppActivity(
+  transfers: 0,
+  downBytesPerSecond: 0,
+  upBytesPerSecond: 0,
+  peers: 0,
 );

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_controllers.dart';
 import '../../design/design.dart';
 import '../../design/theme.dart';
+import '../../nexus/domain/app_state.dart';
 import 'event_rail.dart';
 import 'identity_chip.dart';
 import 'navigation_action.dart';

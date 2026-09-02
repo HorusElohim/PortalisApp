@@ -243,6 +243,31 @@ AppCollectionLifecycle _testLifecycle(String status) => switch (status) {
         throw ArgumentError.value(status, 'status', 'unknown test lifecycle'),
     };
 
+/// Mirrors Rust's `app_activity` aggregation (portalis_api.rs) so fixtures
+/// built without going through the real bridge stay honest about what the
+/// backend would actually compute — only collections with a transfer
+/// contribute, exactly as production `snapshot()` does.
+AppActivity activityFor(List<AppCollection> collections) {
+  var transfers = 0;
+  var down = 0;
+  var up = 0;
+  var peers = 0;
+  for (final collection in collections) {
+    final transfer = collection.transfer;
+    if (transfer == null) continue;
+    transfers++;
+    down += transfer.downBytesPerSecond;
+    up += transfer.upBytesPerSecond;
+    peers += transfer.peers;
+  }
+  return AppActivity(
+    transfers: transfers,
+    downBytesPerSecond: down,
+    upBytesPerSecond: up,
+    peers: peers,
+  );
+}
+
 AppSnapshot buildNexusState(List<AppCollection> collections) => AppSnapshot(
       device: const AppDevice(
         name: 'Portalis',
@@ -254,6 +279,7 @@ AppSnapshot buildNexusState(List<AppCollection> collections) => AppSnapshot(
       contacts: const [],
       collections: collections,
       alerts: const [],
+      activity: activityFor(collections),
     );
 
 AppAppRun buildAppRun({

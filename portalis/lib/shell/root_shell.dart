@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_controllers.dart';
+import '../nexus/domain/app_state.dart';
 import 'base.dart';
 import 'desktop/pane.dart';
 import 'desktop/layout.dart';

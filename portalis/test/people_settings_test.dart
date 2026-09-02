@@ -41,6 +41,12 @@ void main() {
             ]),
           ],
           alerts: const [],
+          activity: const AppActivity(
+            transfers: 0,
+            downBytesPerSecond: 0,
+            upBytesPerSecond: 0,
+            peers: 0,
+          ),
         ),
       );
       await tester.pump();
