@@ -187,6 +187,16 @@ pub struct AppPending {
     pub queued: bool,
 }
 
+/// A receiver-side transfer's completion, as a typed fact rather than
+/// something Flutter infers from diffing successive snapshots (ADR-0016).
+/// Emitted exactly once per completion by the same poller that records
+/// `completed_at` — see `nexus::core::transfers::follow_transfers`.
+#[derive(Clone, Debug)]
+pub struct AppTransferCompleted {
+    pub collection: u32,
+    pub name: String,
+}
+
 /// The opt-in, expensive projection for the collection currently on screen.
 #[derive(Clone, Debug)]
 pub struct AppDetail {
@@ -280,27 +290,6 @@ pub struct AppSourceFile {
     pub name: String,
     pub path: String,
     pub bytes: u64,
-}
-
-/// A request from the app. `kind` is explicit so this stays a single command
-/// envelope across Dart and Rust without generated union helpers.
-#[derive(Clone, Debug)]
-pub struct AppCommand {
-    pub kind: String,
-    pub name: Option<String>,
-    pub files: Vec<AppSourceFile>,
-    pub collection: Option<u32>,
-    pub label: Option<String>,
-    pub delete_files: Option<bool>,
-    pub entry: Option<u32>,
-    pub source: Option<String>,
-    pub entries: Vec<u32>,
-    pub contact: Option<u32>,
-    pub handle: Option<String>,
-    pub accept: Option<bool>,
-    pub device: Option<u32>,
-    pub active: Option<bool>,
-    pub paused: Option<bool>,
 }
 
 /// The local acceptance result returned before a command performs I/O.
@@ -596,6 +585,60 @@ pub async fn watch_states(sink: StreamSink<AppSnapshot>) -> Result<(), String> {
             return Ok(());
         }
         if states.changed().await.is_err() {
+            return Ok(());
+        }
+    }
+}
+
+/// Streams a typed fact each time a receiver-side transfer completes,
+/// instead of Flutter inferring completion by diffing successive
+/// `AppSnapshot`s itself (ADR-0016). Only `TransferSettled { ok: true }`
+/// durable events are forwarded; the collection's current name is read from
+/// the live state at the moment the event arrives, so a rename shortly
+/// before completion is reflected rather than a stale name captured earlier.
+pub async fn watch_transfer_completions(
+    sink: StreamSink<AppTransferCompleted>,
+) -> Result<(), String> {
+    let (bus, states) = {
+        let runtime = locked_runtime()?;
+        let nexus = runtime
+            .as_ref()
+            .ok_or_else(|| "start Nexus before subscribing to completions".to_owned())?;
+        (nexus.events_bus(), nexus.watch())
+    };
+    let mut events = bus.subscribe().await;
+
+    loop {
+        let Some(event) = events.next().await else {
+            return Ok(());
+        };
+        let crate::nexus::core::events::Event::TransferSettled { collection, ok } = event else {
+            continue;
+        };
+        if !ok {
+            continue;
+        }
+        let handle = Handle(u32::try_from(collection.0).unwrap_or(u32::MAX));
+        let name = states
+            .borrow()
+            .collections
+            .iter()
+            .find(|item| item.id == handle)
+            .map(|item| item.name.clone());
+        let Some(name) = name else {
+            // The collection is gone by the time this event was processed
+            // (deleted between the poller emitting it and this loop turn).
+            // Nothing to notify about — never invent a name.
+            continue;
+        };
+        // A closed sink is how a subscription ends, not a failure to report.
+        if sink
+            .add(AppTransferCompleted {
+                collection: handle.0,
+                name,
+            })
+            .is_err()
+        {
             return Ok(());
         }
     }
@@ -922,16 +965,127 @@ pub async fn storage_breakdown() -> Result<Vec<AppStorageEntry>, String> {
         .collect())
 }
 
-/// Validates and accepts one command without waiting for I/O.
-pub fn send(command: AppCommand) -> Result<AppAccepted, String> {
+/// Creates a private draft from opaque native source references.
+pub fn create_collection(name: String, files: Vec<AppSourceFile>) -> Result<AppAccepted, String> {
+    accept(
+        "createCollection",
+        None,
+        files.len(),
+        Command::CreateCollection {
+            name,
+            files: source_files(files),
+        },
+    )
+}
+
+/// Adds opaque native source references to an existing draft.
+pub fn add_media(
+    collection: u32,
+    label: String,
+    files: Vec<AppSourceFile>,
+) -> Result<AppAccepted, String> {
+    accept(
+        "addMedia",
+        Some(collection),
+        files.len(),
+        Command::AddMedia {
+            collection: Handle(collection),
+            label,
+            files: source_files(files),
+        },
+    )
+}
+
+pub fn rename_collection(collection: u32, name: String) -> Result<AppAccepted, String> {
+    accept(
+        "renameCollection",
+        Some(collection),
+        0,
+        Command::RenameCollection {
+            collection: Handle(collection),
+            name,
+        },
+    )
+}
+
+pub fn delete_collection(collection: u32, delete_files: bool) -> Result<AppAccepted, String> {
+    accept(
+        "deleteCollection",
+        Some(collection),
+        0,
+        Command::DeleteCollection {
+            collection: Handle(collection),
+            delete_files,
+        },
+    )
+}
+
+pub fn set_collection_paused(collection: u32, paused: bool) -> Result<AppAccepted, String> {
+    accept(
+        "setPaused",
+        Some(collection),
+        0,
+        Command::SetPaused {
+            collection: Handle(collection),
+            paused,
+        },
+    )
+}
+
+pub fn publish_draft(collection: u32) -> Result<AppAccepted, String> {
+    accept(
+        "publishDraft",
+        Some(collection),
+        0,
+        Command::PublishDraft {
+            collection: Handle(collection),
+        },
+    )
+}
+
+pub fn import_torrent(source: String) -> Result<AppAccepted, String> {
+    accept("importTorrent", None, 0, Command::ImportTorrent { source })
+}
+
+pub fn download_selection(collection: u32, entries: Vec<u32>) -> Result<AppAccepted, String> {
+    accept(
+        "downloadSelection",
+        Some(collection),
+        entries.len(),
+        Command::DownloadSelection {
+            collection: Handle(collection),
+            entries: entries.into_iter().map(Handle).collect(),
+        },
+    )
+}
+
+fn source_files(files: Vec<AppSourceFile>) -> Vec<LocalFile> {
+    files
+        .into_iter()
+        .map(|file| LocalFile {
+            name: file.name,
+            path: PathBuf::from(file.path),
+            bytes: file.bytes,
+        })
+        .collect()
+}
+
+/// Validates and accepts one already-well-formed command without waiting for
+/// its I/O. Public bridge functions above own the command shape; this helper
+/// owns the one runtime acceptance path.
+fn accept(
+    kind: &'static str,
+    collection: Option<u32>,
+    entries: usize,
+    command: Command,
+) -> Result<AppAccepted, String> {
     crate::nexus::log::clog!(
         "api",
         "send kind={} collection={:?} entries={}",
-        command.kind,
-        command.collection,
-        command.entries.len()
+        kind,
+        collection,
+        entries
     );
-    let command = command.into_core()?;
     let runtime = locked_runtime()?;
     let accepted = runtime
         .as_ref()
@@ -951,109 +1105,6 @@ pub fn send(command: AppCommand) -> Result<AppAccepted, String> {
         accepted.queued
     );
     Ok(accepted)
-}
-
-impl AppCommand {
-    fn into_core(self) -> Result<Command, String> {
-        let handle = |value: Option<u32>, field: &str| {
-            value
-                .map(Handle)
-                .ok_or_else(|| format!("{field} is required for {}", self.kind))
-        };
-        let text = |value: Option<String>, field: &str| {
-            value.ok_or_else(|| format!("{field} is required for {}", self.kind))
-        };
-        let files = || {
-            self.files
-                .into_iter()
-                .map(|file| LocalFile {
-                    name: file.name,
-                    path: PathBuf::from(file.path),
-                    bytes: file.bytes,
-                })
-                .collect()
-        };
-
-        match self.kind.as_str() {
-            "createCollection" => Ok(Command::CreateCollection {
-                name: text(self.name, "name")?,
-                files: files(),
-            }),
-            "addMedia" => Ok(Command::AddMedia {
-                collection: handle(self.collection, "collection")?,
-                label: text(self.label, "label")?,
-                files: files(),
-            }),
-            "renameCollection" => Ok(Command::RenameCollection {
-                collection: handle(self.collection, "collection")?,
-                name: text(self.name, "name")?,
-            }),
-            "deleteCollection" => Ok(Command::DeleteCollection {
-                collection: handle(self.collection, "collection")?,
-                delete_files: self.delete_files.unwrap_or(false),
-            }),
-            "downloadEntry" => Ok(Command::DownloadEntry {
-                collection: handle(self.collection, "collection")?,
-                entry: handle(self.entry, "entry")?,
-            }),
-            "retryTransfer" => Ok(Command::RetryTransfer {
-                collection: handle(self.collection, "collection")?,
-            }),
-            "setPaused" => Ok(Command::SetPaused {
-                collection: handle(self.collection, "collection")?,
-                // Required rather than defaulted: a pause command that
-                // silently means "resume" because a field was missed is the
-                // one mistake this crossing can make invisibly.
-                paused: self
-                    .paused
-                    .ok_or_else(|| "paused is required for setPaused".to_owned())?,
-            }),
-            "publishDraft" => Ok(Command::PublishDraft {
-                collection: handle(self.collection, "collection")?,
-            }),
-            "deleteFiles" => Ok(Command::DeleteFiles {
-                collection: handle(self.collection, "collection")?,
-            }),
-            "importTorrent" => Ok(Command::ImportTorrent {
-                source: text(self.source, "source")?,
-            }),
-            "downloadSelection" => Ok(Command::DownloadSelection {
-                collection: handle(self.collection, "collection")?,
-                entries: self.entries.into_iter().map(Handle).collect(),
-            }),
-            "shareWith" => Ok(Command::ShareWith {
-                collection: handle(self.collection, "collection")?,
-                contact: handle(self.contact, "contact")?,
-            }),
-            "removeMember" => Ok(Command::RemoveMember {
-                collection: handle(self.collection, "collection")?,
-                contact: handle(self.contact, "contact")?,
-            }),
-            "addContact" => Ok(Command::AddContact {
-                handle: text(self.handle, "handle")?,
-            }),
-            "respondToRequest" => Ok(Command::RespondToRequest {
-                contact: handle(self.contact, "contact")?,
-                accept: self.accept.unwrap_or(false),
-            }),
-            "markVerified" => Ok(Command::MarkVerified {
-                contact: handle(self.contact, "contact")?,
-            }),
-            "blockContact" => Ok(Command::BlockContact {
-                contact: handle(self.contact, "contact")?,
-            }),
-            "revokeDevice" => Ok(Command::RevokeDevice {
-                device: handle(self.device, "device")?,
-            }),
-            "setActive" => Ok(Command::SetActive {
-                active: self.active.unwrap_or(false),
-            }),
-            "resolveFork" => {
-                Err("resolveFork needs a revision hash and is not bridged yet".to_owned())
-            }
-            _ => Err(format!("unknown Nexus command: {}", self.kind)),
-        }
-    }
 }
 
 fn snapshot(state: &PortalisState) -> AppSnapshot {
@@ -1304,74 +1355,19 @@ mod tests {
     };
     use crate::nexus::store::records::StoredPeerHistory;
 
-    fn command(kind: &str) -> AppCommand {
-        AppCommand {
-            kind: kind.to_owned(),
-            name: None,
-            files: Vec::new(),
-            collection: None,
-            label: None,
-            delete_files: None,
-            entry: None,
-            source: None,
-            entries: Vec::new(),
-            contact: None,
-            handle: None,
-            accept: None,
-            device: None,
-            active: None,
-            paused: None,
-        }
-    }
-
-    #[test]
-    fn maps_torrent_import_without_a_legacy_type() {
-        let mut command = command("importTorrent");
-        command.source = Some("magnet:?xt=urn:btih:abc".to_owned());
-
-        assert_eq!(
-            command.into_core(),
-            Ok(Command::ImportTorrent {
-                source: "magnet:?xt=urn:btih:abc".to_owned()
-            })
-        );
-    }
-
     #[test]
     fn maps_source_metadata_without_moving_media_through_the_bridge() {
-        let mut command = command("createCollection");
-        command.name = Some("Episodes".to_owned());
-        command.files = vec![AppSourceFile {
-            name: "Episode 1.mp4".to_owned(),
-            path: "phasset://native-identifier".to_owned(),
-            bytes: 42,
-        }];
-
         assert_eq!(
-            command.into_core(),
-            Ok(Command::CreateCollection {
-                name: "Episodes".to_owned(),
-                files: vec![LocalFile {
-                    name: "Episode 1.mp4".to_owned(),
-                    path: PathBuf::from("phasset://native-identifier"),
-                    bytes: 42,
-                }],
-            })
-        );
-    }
-
-    #[test]
-    fn maps_a_torrent_selection_to_core_handles() {
-        let mut command = command("downloadSelection");
-        command.collection = Some(7);
-        command.entries = vec![2, 5];
-
-        assert_eq!(
-            command.into_core(),
-            Ok(Command::DownloadSelection {
-                collection: Handle(7),
-                entries: vec![Handle(2), Handle(5)],
-            })
+            source_files(vec![AppSourceFile {
+                name: "Episode 1.mp4".to_owned(),
+                path: "phasset://native-identifier".to_owned(),
+                bytes: 42,
+            }]),
+            vec![LocalFile {
+                name: "Episode 1.mp4".to_owned(),
+                path: PathBuf::from("phasset://native-identifier"),
+                bytes: 42,
+            }]
         );
     }
 
@@ -1579,13 +1575,5 @@ mod tests {
         assert_eq!(peers[0].peak_down_bytes_per_second, 900_000);
         assert_eq!(peers[0].peak_up_bytes_per_second, 100_000);
         assert_eq!(peers[0].last_seen_at, 2);
-    }
-
-    #[test]
-    fn rejects_an_unknown_command_before_it_reaches_the_core() {
-        assert_eq!(
-            command("explode").into_core(),
-            Err("unknown Nexus command: explode".to_owned())
-        );
     }
 }

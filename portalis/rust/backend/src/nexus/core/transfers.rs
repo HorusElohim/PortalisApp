@@ -98,6 +98,7 @@ pub(crate) async fn follow_transfers(
     mut shutdown: super::supervisor::Shutdown,
     details: super::nexus::DetailSources,
     activity: crate::nexus::activity::DeviceActivityTracker,
+    bus: Arc<super::events::EventBus>,
 ) {
     let mut tick = tokio::time::interval(POLL_INTERVAL);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -261,6 +262,18 @@ pub(crate) async fn follow_transfers(
                 .handle(&key);
             if let Some(projected) = projected {
                 publish(&states, projected, info, rates, paused, local_source);
+                if completed_download {
+                    // A typed fact, not a poll a screen has to notice for
+                    // itself — see ADR-0016. Only the poller ever computes
+                    // `completed_download`, so this is the one and only place
+                    // this event can be emitted, matching the
+                    // one-writer-per-fact rule in `events.rs`.
+                    bus.emit(crate::nexus::core::events::Event::TransferSettled {
+                        collection: crate::nexus::core::events::Handle(projected.0.into()),
+                        ok: true,
+                    })
+                    .await;
+                }
             }
         }
         // A collection that stopped being carried must not keep its last

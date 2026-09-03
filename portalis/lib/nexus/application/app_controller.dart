@@ -57,10 +57,6 @@ class AppController extends ChangeNotifier {
         (state) {
           _state = state;
           lastError = null;
-          final observer = _completionObserver;
-          if (observer != null) {
-            unawaited(observer.observe(state).catchError((_) {}));
-          }
           notifyListeners();
         },
         onError: (Object error, StackTrace _) {
@@ -68,6 +64,7 @@ class AppController extends ChangeNotifier {
           notifyListeners();
         },
       );
+      _completionObserver?.start(_repository.watchTransferCompletions());
     } catch (error) {
       lastError = '$error';
       _starting = null;
@@ -85,7 +82,36 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<AppAccepted> send(EngineCommand command) => _repository.send(command);
+  Future<AppAccepted> createCollection(
+    String name,
+    List<AppSourceFile> files,
+  ) =>
+      _repository.createCollection(name, files);
+
+  Future<AppAccepted> addMedia(
+    int collection,
+    String label,
+    List<AppSourceFile> files,
+  ) =>
+      _repository.addMedia(collection, label, files);
+
+  Future<AppAccepted> renameCollection(int collection, String name) =>
+      _repository.renameCollection(collection, name);
+
+  Future<AppAccepted> deleteCollection(int collection, bool deleteFiles) =>
+      _repository.deleteCollection(collection, deleteFiles);
+
+  Future<AppAccepted> setCollectionPaused(int collection, bool paused) =>
+      _repository.setCollectionPaused(collection, paused);
+
+  Future<AppAccepted> publishDraft(int collection) =>
+      _repository.publishDraft(collection);
+
+  Future<AppAccepted> importTorrent(String source) =>
+      _repository.importTorrent(source);
+
+  Future<AppAccepted> downloadSelection(int collection, List<int> entries) =>
+      _repository.downloadSelection(collection, entries);
 
   Future<String?> shareUri(int collection) => _repository.shareUri(collection);
 
@@ -221,6 +247,7 @@ class AppController extends ChangeNotifier {
     final subscription = _subscription;
     _subscription = null;
     await subscription?.cancel();
+    await _completionObserver?.stop();
     if (!wasStarted) return;
     await _repository.stop();
     _starting = null;

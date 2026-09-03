@@ -423,6 +423,13 @@ async fn acquire(
 
 /// Brings one collection's projected row back in line with its stored facts.
 fn republish(store: &Store, states: &watch::Sender<PortalisState>, handle: Handle, key: &[u8]) {
+    // Native zero-copy seeds share the substrate and therefore still pass
+    // through reconciliation for pause/resume, but they have no torrent
+    // metadata. Treating their empty import-entry table as authoritative used
+    // to erase the real source count and byte total from the live projection.
+    let Ok(Some(_)) = store.torrent_import(key) else {
+        return;
+    };
     let Ok(Some(stored)) = store.collection(key) else {
         return;
     };
@@ -437,7 +444,11 @@ fn republish(store: &Store, states: &watch::Sender<PortalisState>, handle: Handl
         .filter(|entry| entry.selected)
         .map(|entry| entry.bytes)
         .sum();
-    let carried = stored.substrate_handle.is_some();
+    let revision = store
+        .current_revision(key)
+        .ok()
+        .flatten()
+        .map_or(0, |(number, _)| number);
 
     states.send_if_modified(|state| {
         let Some(collection) = state
@@ -450,14 +461,9 @@ fn republish(store: &Store, states: &watch::Sender<PortalisState>, handle: Handl
         // The transfer poller takes over from here with real numbers; this
         // only has to be right about what the store knows.
         let status = crate::nexus::projection::state::status_for(
-            crate::nexus::projection::state::StatusFacts {
-                completed: stored.completed_at.is_some(),
-                carried,
-                publishing: false,
-                importing: true,
-                locally_complete: false,
-                ..crate::nexus::projection::state::StatusFacts::from_lifecycle(stored.lifecycle)
-            },
+            crate::nexus::projection::state::StatusFacts::from_stored(
+                &stored, revision, true, None,
+            ),
         );
         if collection.name == name
             && collection.entries == count
@@ -565,6 +571,76 @@ mod tests {
             )
             .expect("writes");
         store.put_torrent_import(key, source).expect("writes");
+    }
+
+    #[test]
+    fn native_reconcile_does_not_apply_torrent_metadata_to_its_projection() {
+        let (store, dir) = store();
+        store
+            .put_collection(
+                b"native",
+                &StoredCollection {
+                    name: "Episodes".to_owned(),
+                    role: StoredRole::Owner,
+                    content_key: [0; 32],
+                    media_path: String::new(),
+                    sources: vec![crate::nexus::store::records::StoredSourceFile {
+                        label: "episode.mp4".to_owned(),
+                        path: "phasset://native-reference".to_owned(),
+                        bytes: 7,
+                    }],
+                    lifecycle: StoredLifecycle::NativePublished {
+                        activity: crate::nexus::store::records::StoredActivity::Running,
+                    },
+                    on_disk_bytes: 0,
+                    substrate_handle: Some("11".repeat(20)),
+                    started_at: None,
+                    completed_at: None,
+                },
+            )
+            .expect("writes native collection");
+
+        assert!(
+            matches!(
+                pending_work(&store).expect("scans").as_slice(),
+                [Pending::Reconcile { files: None, .. }]
+            ),
+            "native seeds still reconcile pause/resume with the shared substrate"
+        );
+        let projected = crate::nexus::projection::state::CollectionState {
+            id: Handle(1),
+            name: "Episodes".to_owned(),
+            nature: crate::nexus::projection::state::Nature::Native,
+            role: crate::nexus::projection::state::Role::Owner,
+            revision: 1,
+            status: crate::nexus::projection::state::Status::Seeding,
+            members: Vec::new(),
+            entries: 1,
+            total_bytes: 7,
+            on_disk_bytes: 0,
+            uploaded_bytes: 0,
+            started_at: None,
+            completed_at: None,
+            transfer: None,
+            pending: None,
+        };
+        let (states, _) = watch::channel(PortalisState {
+            device: crate::nexus::projection::state::DeviceState {
+                name: "Portalis".to_owned(),
+                handle: None,
+                fingerprint: "test".to_owned(),
+                devices: 1,
+            },
+            connectivity: crate::nexus::projection::state::Connectivity::LocalOnly,
+            contacts: Vec::new(),
+            collections: vec![projected.clone()],
+            alerts: Vec::new(),
+        });
+
+        republish(&store, &states, Handle(1), b"native");
+
+        assert_eq!(states.borrow().collections[0], projected);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// Resolving a source selects every file so the selection screen opens

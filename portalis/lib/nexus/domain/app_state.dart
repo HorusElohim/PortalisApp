@@ -41,6 +41,7 @@ export '../bridge/portalis_api.dart'
         AppSnapshot,
         AppSourceFile,
         AppTransfer,
+        AppTransferCompleted,
         AppUserSummary;
 
 /// The piece map a detail carries, decoded.
@@ -119,71 +120,4 @@ extension EngineActivityPresentation on AppActivity {
 
   /// Everything moving right now, in the unit the engine counts.
   int get totalBytesPerSecond => downBytesPerSecond + upBytesPerSecond;
-}
-
-/// One command envelope, in the shape a caller wants to write.
-///
-/// The one part of the old adapter that was doing real work rather than
-/// copying: `AppCommand` requires `files` and `entries` at every call site and
-/// wants a `Uint32List` where callers hold a `List<int>`. Defaults and that
-/// conversion live here, so asking to pause a collection stays one line.
-class EngineCommand {
-  const EngineCommand({
-    required this.kind,
-    this.name,
-    this.files = const [],
-    this.collection,
-    this.label,
-    this.deleteFiles,
-    this.paused,
-    this.entry,
-    this.source,
-    this.entries = const [],
-    this.contact,
-    this.handle,
-    this.accept,
-    this.device,
-    this.active,
-  });
-
-  const EngineCommand.importTorrent(String source)
-      : this(kind: 'importTorrent', source: source);
-
-  final String kind;
-  final String? name;
-  final List<AppSourceFile> files;
-  final int? collection;
-  final String? label;
-  final bool? deleteFiles;
-
-  /// Required by `setPaused` and ignored otherwise. Optional here because one
-  /// envelope carries every command; the core refuses a pause that does not
-  /// say which way.
-  final bool? paused;
-  final int? entry;
-  final String? source;
-  final List<int> entries;
-  final int? contact;
-  final String? handle;
-  final bool? accept;
-  final int? device;
-  final bool? active;
-
-  AppCommand toBridge() => AppCommand(
-        kind: kind,
-        name: name,
-        files: files,
-        collection: collection,
-        label: label,
-        deleteFiles: deleteFiles,
-        paused: paused,
-        entry: entry,
-        source: source,
-        entries: Uint32List.fromList(entries),
-        contact: contact,
-        handle: handle,
-        accept: accept,
-        device: device,
-        active: active,
-      );
 }

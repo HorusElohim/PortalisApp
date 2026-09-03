@@ -64,7 +64,7 @@ class CollectionLinkReceiver {
     try {
       final collection = await importCollectionLink(
         uri,
-        send: AppControllers.engine.send,
+        import: AppControllers.engine.importTorrent,
       );
       if (collection == null) return;
       _handled = key;

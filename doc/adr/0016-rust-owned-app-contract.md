@@ -1,6 +1,6 @@
 # ADR-0016 — Rust-owned app contract with a thin Flutter renderer
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-09-01
 **Supersedes:** ADR-0006 and ADR-0010
 **Superseded by:** —
@@ -64,12 +64,23 @@ Rust exposes one deliberately app-renderable, typed contract; Flutter renders it
       Flutter's per-collection summing loop is gone.
       `snapshot_activity_aggregates_only_moving_collections` proves only
       collections with a live transfer contribute.
-- [ ] Completion notifications consume a Rust event — not yet migrated;
-      `TransferCompletionObserver` still diffs successive snapshots itself,
-      though it now reads `AppCollectionRole.member` rather than a string.
-- [ ] Invalid command shapes are unrepresentable at the bridge boundary — the
+- [x] Completion notifications consume a Rust event — `Event::TransferSettled`
+      is emitted exactly once by `follow_transfers`, the one place a receiver
+      completion is decided, and streamed to Flutter as typed
+      `AppTransferCompleted { collection, name }` via
+      `watch_transfer_completions()`. `TransferCompletionObserver` no longer
+      diffs snapshots at all; it forwards the typed stream directly.
+      `a_completed_transfer_emits_a_typed_settled_event` proves the event
+      against the real `follow_transfers` production path (confirmed to fail
+      when the emit call is removed).
+- [x] Invalid command shapes are unrepresentable at the bridge boundary — the
       string-`kind`-plus-optional-fields `AppCommand`/`EngineCommand` envelope
-      is unchanged.
+      is gone. `AppCommand` is now a generated enum with one variant per
+      command, each carrying exactly its own required fields (no `Option`
+      fields a caller could leave unset for the wrong command, no runtime
+      `"unknown Nexus command"` string match). Flutter calls narrow typed
+      bridge functions (`createCollection`, `setCollectionPaused`,
+      `downloadSelection`, etc.) instead of building an envelope.
 - [x] Summary/detail/history/event cadence remains tiered — untouched by this
       slice.
 - [x] Wrapper deletion reduces code without weakening widget test seams —
@@ -78,12 +89,14 @@ Rust exposes one deliberately app-renderable, typed contract; Flutter renders it
       replaced by typedefs onto the generated enums plus one presentation
       `label()` extension; all existing widget test seams (`buildCollection`,
       `_FixedSource`, etc.) still compile and pass unchanged in shape.
+      `EngineCommand`'s string-kind envelope is likewise gone from Dart.
 - [x] Generated bridge round-trip and full Flutter/Rust suites pass —
-      284/284 backend tests (0 failed, 1 ignored), clippy `-D warnings` clean,
-      `cargo fmt --check` clean; 180/180 Flutter tests, `flutter analyze`
-      clean; FRB regenerated via `tool/frb_build.sh --codegen-only --force-frb`.
+      275/275 backend tests (0 failed, 1 ignored — count dropped from 285
+      because ADR-0017 deleted the duplicate `projection/build.rs` path and
+      its own test suite), clippy `-D warnings` clean, `cargo fmt --check`
+      clean; 180/180 Flutter tests, `flutter analyze` clean; FRB regenerated
+      via `tool/frb_build.sh --codegen-only --force-frb`.
 
-This ADR's typed lifecycle/nature/role/capabilities/facts slice is complete
-and verified. Aggregate activity, typed completion events, and a typed
-command envelope remain open follow-up work before this ADR can be marked
-`accepted`; status stays `proposed`.
+This ADR is complete: typed lifecycle/nature/role/capabilities/facts,
+aggregate activity, typed completion events, and a typed command envelope are
+all landed and verified. Status moves to `accepted`.

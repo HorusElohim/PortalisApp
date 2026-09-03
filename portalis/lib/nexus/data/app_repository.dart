@@ -34,7 +34,18 @@ abstract interface class AppRepository {
   Future<List<AppCollectionPeer>> peers();
   Future<List<AppPeoplePeer>> peoplePeers();
   Future<List<AppPeerHistory>> peerHistory(int collection);
-  Future<AppAccepted> send(EngineCommand command);
+  Future<AppAccepted> createCollection(String name, List<AppSourceFile> files);
+  Future<AppAccepted> addMedia(
+    int collection,
+    String label,
+    List<AppSourceFile> files,
+  );
+  Future<AppAccepted> renameCollection(int collection, String name);
+  Future<AppAccepted> deleteCollection(int collection, bool deleteFiles);
+  Future<AppAccepted> setCollectionPaused(int collection, bool paused);
+  Future<AppAccepted> publishDraft(int collection);
+  Future<AppAccepted> importTorrent(String source);
+  Future<AppAccepted> downloadSelection(int collection, List<int> entries);
 
   /// The local diagnostics log — see `rust/backend/src/nexus/diagnostics.rs`.
   /// Never transmitted anywhere on its own; a person's own choice to share
@@ -56,6 +67,11 @@ abstract interface class AppRepository {
   /// Renames this device. Updates the persisted identity and the live
   /// [AppSnapshot.device] together — see ADR-0011 decision #11.
   Future<void> renameDevice(String nickname);
+
+  /// A typed fact each time a receiver-side transfer completes — see
+  /// [AppTransferCompleted] for why this replaces diffing successive
+  /// snapshots (ADR-0016).
+  Stream<AppTransferCompleted> watchTransferCompletions();
 }
 
 class FrbAppRepository implements AppRepository {
@@ -96,8 +112,46 @@ class FrbAppRepository implements AppRepository {
       bridge.peerHistory(collection: collection);
 
   @override
-  Future<AppAccepted> send(EngineCommand command) =>
-      bridge.send(command: command.toBridge());
+  Future<AppAccepted> createCollection(
+    String name,
+    List<AppSourceFile> files,
+  ) =>
+      bridge.createCollection(name: name, files: files);
+
+  @override
+  Future<AppAccepted> addMedia(
+    int collection,
+    String label,
+    List<AppSourceFile> files,
+  ) =>
+      bridge.addMedia(collection: collection, label: label, files: files);
+
+  @override
+  Future<AppAccepted> renameCollection(int collection, String name) =>
+      bridge.renameCollection(collection: collection, name: name);
+
+  @override
+  Future<AppAccepted> deleteCollection(int collection, bool deleteFiles) =>
+      bridge.deleteCollection(
+        collection: collection,
+        deleteFiles: deleteFiles,
+      );
+
+  @override
+  Future<AppAccepted> setCollectionPaused(int collection, bool paused) =>
+      bridge.setCollectionPaused(collection: collection, paused: paused);
+
+  @override
+  Future<AppAccepted> publishDraft(int collection) =>
+      bridge.publishDraft(collection: collection);
+
+  @override
+  Future<AppAccepted> importTorrent(String source) =>
+      bridge.importTorrent(source: source);
+
+  @override
+  Future<AppAccepted> downloadSelection(int collection, List<int> entries) =>
+      bridge.downloadSelection(collection: collection, entries: entries);
 
   @override
   Future<String> diagnosticsLog() => bridge.diagnosticsLog();
@@ -121,4 +175,8 @@ class FrbAppRepository implements AppRepository {
   @override
   Future<void> renameDevice(String nickname) =>
       bridge.renameDevice(nickname: nickname);
+
+  @override
+  Stream<AppTransferCompleted> watchTransferCompletions() =>
+      bridge.watchTransferCompletions();
 }

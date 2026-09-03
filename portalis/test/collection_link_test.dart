@@ -34,38 +34,37 @@ void main() {
     });
 
     test('imports only a validated collection link', () async {
-      final commands = <EngineCommand>[];
+      final sources = <String>[];
       final imported = await importCollectionLink(
         Uri.parse(collectionShareLink(magnet)),
-        send: (command) async {
-          commands.add(command);
+        import: (source) async {
+          sources.add(source);
           return AppAccepted(id: BigInt.one, collection: 7, queued: false);
         },
       );
 
       expect(imported, 7);
-      expect(commands, hasLength(1));
-      expect(commands.single.kind, 'importTorrent');
-      expect(commands.single.source, magnet);
+      expect(sources, [magnet]);
     });
 
     test('a collection link starts downloading its resolved selection',
         () async {
-      final commands = <EngineCommand>[];
+      final sources = <String>[];
+      final selections = <(int, List<int>)>[];
       final details = StreamController<AppDetail?>();
       addTearDown(details.close);
 
       final imported = await importCollectionLink(
         Uri.parse(collectionShareLink(magnet)),
-        send: (command) async {
-          commands.add(command);
+        import: (source) async {
+          sources.add(source);
           return AppAccepted(id: BigInt.one, collection: 7, queued: false);
         },
       );
       final starting = startCollectionLinkDownload(
         imported!,
-        send: (command) async {
-          commands.add(command);
+        download: (collection, entries) async {
+          selections.add((collection, entries));
           return AppAccepted(
               id: BigInt.from(2), collection: null, queued: false);
         },
@@ -89,12 +88,10 @@ void main() {
       ));
       await starting;
 
-      expect(commands.map((command) => command.kind),
-          ['importTorrent', 'downloadSelection']);
-      expect(commands.last.collection, 7);
-      expect(commands.last.entries, [4]);
-      expect(commands.map((command) => command.kind),
-          isNot(contains('publishDraft')));
+      expect(sources, [magnet]);
+      expect(selections, hasLength(1));
+      expect(selections.single.$1, 7);
+      expect(selections.single.$2, [4]);
     });
   });
 }
