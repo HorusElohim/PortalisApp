@@ -30,7 +30,7 @@ runs:
         echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
         echo "run_date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
     - name: Setup Java
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: temurin
         java-version: '17'
@@ -78,7 +78,7 @@ runs:
       run: rm -f android/app/portalis-release.jks android/key.properties
 
     - name: Upload apk
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: Portalis-${{ steps.setup.outputs.backend-version }}-Android-${{ steps.setup.outputs.app-version }}-${{ steps.meta.outputs.short_sha }}-release
         path: ${{ inputs.working-dir }}/build/app/outputs/flutter-apk/app-release.apk

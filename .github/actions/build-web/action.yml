@@ -40,7 +40,7 @@ runs:
       run: flutter build web --release
 
     - name: Upload web artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: Portalis-${{ steps.setup.outputs.backend-version }}-Web-${{ steps.setup.outputs.app-version }}-${{ steps.meta.outputs.short_sha }}-release
         path: ${{ inputs.working-dir }}/build/web
