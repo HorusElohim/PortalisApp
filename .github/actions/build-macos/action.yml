@@ -133,7 +133,7 @@ runs:
         rm -rf "$HOME/.appstoreconnect"
 
     - name: Upload macOS app
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: >-
           Portalis-${{ steps.setup.outputs.backend-version }}-macOS-${{ steps.setup.outputs.app-version }}-${{ steps.meta.outputs.short_sha }}-release${{ steps.signing.outputs.has_cert == 'true' && '-notarized' || '-unsigned' }}

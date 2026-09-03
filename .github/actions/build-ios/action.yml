@@ -116,7 +116,7 @@ runs:
 
     - name: Upload Runner.app (device build unsigned)
       if: ${{ steps.signing.outputs.has_key != 'true' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: Portalis-${{ steps.setup.outputs.backend-version }}-iOS-${{ steps.setup.outputs.app-version }}-${{ steps.meta.outputs.short_sha }}-release-unsigned
         path: ${{ inputs.working-dir }}/build/ios/iphoneos/Runner.app
@@ -124,7 +124,7 @@ runs:
 
     - name: Upload signed .ipa
       if: ${{ steps.signing.outputs.has_key == 'true' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: Portalis-${{ steps.setup.outputs.backend-version }}-iOS-${{ steps.setup.outputs.app-version }}-${{ steps.meta.outputs.short_sha }}-release-testflight
         path: ${{ inputs.working-dir }}/build/ios/ipa/*.ipa
