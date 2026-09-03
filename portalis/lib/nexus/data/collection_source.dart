@@ -23,10 +23,7 @@ Future<void> sendSetPaused(
   int collectionId, {
   required bool paused,
 }) =>
-    controller.send(
-      EngineCommand(
-          kind: 'setPaused', collection: collectionId, paused: paused),
-    );
+    controller.setCollectionPaused(collectionId, paused);
 
 /// Deletes one collection, optionally taking its downloaded files with it.
 Future<void> sendDeleteCollection(
@@ -34,13 +31,7 @@ Future<void> sendDeleteCollection(
   int collectionId, {
   required bool deleteFiles,
 }) =>
-    controller.send(
-      EngineCommand(
-        kind: 'deleteCollection',
-        collection: collectionId,
-        deleteFiles: deleteFiles,
-      ),
-    );
+    controller.deleteCollection(collectionId, deleteFiles);
 
 /// Feeds [CollectionDetail] from the Nexus core instead of the legacy
 /// collections controller.
@@ -153,20 +144,17 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
 
   @override
   Future<void> addMedia(String id, String label, List<PickedFile> files) =>
-      controller.send(
-        EngineCommand(
-          kind: 'addMedia',
-          collection: collectionId,
-          label: label,
-          files: [
-            for (final file in files)
-              AppSourceFile(
-                name: file.name,
-                path: file.path,
-                bytes: BigInt.from(file.lengthBytes),
-              ),
-          ],
-        ),
+      controller.addMedia(
+        collectionId,
+        label,
+        [
+          for (final file in files)
+            AppSourceFile(
+              name: file.name,
+              path: file.path,
+              bytes: BigInt.from(file.lengthBytes),
+            ),
+        ],
       );
 
   /// Restart resumes — the same thing it meant against the legacy backend's
@@ -180,18 +168,11 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
       sendSetPaused(controller, collectionId, paused: true);
 
   @override
-  Future<void> rename(String id, String name) => controller.send(
-        EngineCommand(
-          kind: 'renameCollection',
-          collection: collectionId,
-          name: name,
-        ),
-      );
+  Future<void> rename(String id, String name) =>
+      controller.renameCollection(collectionId, name);
 
   @override
-  Future<void> publishDraft(String id) => controller.send(
-        EngineCommand(kind: 'publishDraft', collection: collectionId),
-      );
+  Future<void> publishDraft(String id) => controller.publishDraft(collectionId);
 
   @override
   Future<String?> shareUri(String id) => controller.shareUri(collectionId);
@@ -205,13 +186,8 @@ class EngineCollectionSource extends CollectionSource with ChangeNotifier {
   /// records the choice and its worker states it to the engine — beginning a
   /// download the first time, revising a running one afterwards.
   @override
-  Future<void> setSelection(String id, Set<int> entries) => controller.send(
-        EngineCommand(
-          kind: 'downloadSelection',
-          collection: collectionId,
-          entries: entries.toList()..sort(),
-        ),
-      );
+  Future<void> setSelection(String id, Set<int> entries) =>
+      controller.downloadSelection(collectionId, entries.toList()..sort());
 
   @override
   Future<void> delete(String id) =>

@@ -242,7 +242,7 @@ pub struct StatusFacts<'a> {
     pub live: Option<&'a crate::nexus::torrent::TorrentInfo>,
 }
 
-impl StatusFacts<'_> {
+impl<'a> StatusFacts<'a> {
     /// Begins with durable intent and no engine observation. Callers fill the
     /// observed fields they actually know using struct update syntax.
     #[must_use]
@@ -255,6 +255,28 @@ impl StatusFacts<'_> {
             importing: false,
             locally_complete: false,
             live: None,
+        }
+    }
+
+    /// Builds the persisted half of the status facts identically for startup,
+    /// command refreshes, and torrent metadata updates. A live engine reading
+    /// may refine the answer, but no production path gets to reinterpret the
+    /// durable lifecycle or source ownership for itself (ADR-0017).
+    #[must_use]
+    pub fn from_stored(
+        stored: &crate::nexus::store::records::StoredCollection,
+        revision: u64,
+        importing: bool,
+        live: Option<&'a crate::nexus::torrent::TorrentInfo>,
+    ) -> Self {
+        Self {
+            lifecycle: stored.lifecycle,
+            completed: stored.completed_at.is_some(),
+            carried: stored.substrate_handle.is_some(),
+            publishing: !stored.sources.is_empty() && revision == 0,
+            importing,
+            locally_complete: !stored.sources.is_empty() && stored.substrate_handle.is_some(),
+            live,
         }
     }
 }

@@ -123,6 +123,13 @@ impl Supervisor {
         &self.bus
     }
 
+    /// The same bus, as a cloneable handle a component can hold for its
+    /// entire lifetime rather than borrowing it for one call.
+    #[must_use]
+    pub fn bus_arc(&self) -> &Arc<EventBus> {
+        &self.bus
+    }
+
     /// Starts a component from a synchronous acceptance boundary.
     ///
     /// The task still belongs to this supervisor and emits the same lifecycle

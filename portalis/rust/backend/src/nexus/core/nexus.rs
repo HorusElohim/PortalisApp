@@ -35,7 +35,8 @@ use crate::nexus::projection::state::{
     DeviceState, Friendship, Handle, LocalFile, MemberState, Nature, PortalisState, Role, Status,
 };
 use crate::nexus::store::records::{
-    Role as StoredRole, StoredActivity, StoredCollection, StoredLifecycle, StoredSourceFile,
+    Role as StoredRole, StoredActivity, StoredCollection, StoredImportEntry, StoredLifecycle,
+    StoredSourceFile,
 };
 use crate::nexus::store::{Store, StoreError};
 
@@ -196,10 +197,19 @@ impl DetailSources {
             // This device's own files, referenced where they already are. The
             // path is known without asking the substrate anything — it is the
             // source the person picked — so an owner sees previews whether or
-            // not anything is currently seeding.
+            // not anything is currently seeding. `available` still checks the
+            // reference resolves: a moved, renamed, or unmounted original must
+            // not be presented as a verified, ready-to-share file.
             local_sources
                 .into_iter()
-                .map(|entry| (entry.label, entry.bytes, true, true, Some(entry.path)))
+                .map(|entry| {
+                    let available =
+                        crate::nexus::content_location::ContentLocation::from_source_path(
+                            &entry.path,
+                        )
+                        .is_ok_and(|location| location.length(Some(entry.bytes)).is_ok());
+                    (entry.label, entry.bytes, true, available, Some(entry.path))
+                })
                 .collect()
         };
         Some(Detail {
@@ -449,6 +459,72 @@ fn hydrate_membership(
     })
 }
 
+/// The one constructor for a collection entering the production projection.
+///
+/// Startup hydration, native draft creation, and torrent import all enter
+/// through here. Later workers only refine fields for which they have newer
+/// evidence (metadata or a live transfer); they do not rebuild lifecycle,
+/// role, nature, or persisted byte/count facts independently (ADR-0017).
+fn project_stored_collection(
+    handle: Handle,
+    stored: StoredCollection,
+    revision: u64,
+    members: Vec<MemberState>,
+    imported_entries: &[StoredImportEntry],
+    importing: bool,
+    failure: Option<Status>,
+) -> CollectionState {
+    let status = failure.unwrap_or_else(|| {
+        crate::nexus::projection::state::status_for(
+            crate::nexus::projection::state::StatusFacts::from_stored(
+                &stored, revision, importing, None,
+            ),
+        )
+    });
+    let (entries, total_bytes) = if stored.sources.is_empty() {
+        (
+            imported_entries.len(),
+            // Selected only — the same denominator the engine counts progress
+            // against. See `torrents::republish`.
+            imported_entries
+                .iter()
+                .filter(|entry| entry.selected)
+                .map(|entry| entry.bytes)
+                .sum(),
+        )
+    } else {
+        (
+            stored.sources.len(),
+            stored.sources.iter().map(|entry| entry.bytes).sum(),
+        )
+    };
+
+    CollectionState {
+        started_at: stored.started_at,
+        completed_at: stored.completed_at,
+        id: handle,
+        name: stored.name,
+        nature: if importing {
+            Nature::Torrent
+        } else {
+            Nature::Native
+        },
+        role: match stored.role {
+            StoredRole::Owner => Role::Owner,
+            StoredRole::Member => Role::Member,
+        },
+        revision,
+        status,
+        members,
+        entries: u32::try_from(entries).unwrap_or(u32::MAX),
+        total_bytes,
+        on_disk_bytes: stored.on_disk_bytes,
+        uploaded_bytes: 0,
+        transfer: None,
+        pending: None,
+    }
+}
+
 impl LocalCollections {
     fn hydrate(
         store: &Store,
@@ -465,7 +541,6 @@ impl LocalCollections {
         let mut projected = Vec::new();
         for (key, stored) in store.collections()? {
             let imported_entries = store.torrent_import_entries(&key)?;
-            let local_sources = &stored.sources;
             let handle = local.assign(key.clone());
             let membership = hydrate_membership(store, &key, local_owner_root)?;
             let revision = membership.number;
@@ -475,65 +550,16 @@ impl LocalCollections {
                 .map(|root| contacts.member(store, root))
                 .collect::<Result<Vec<_>, _>>()?;
             let torrent_import = store.torrent_import(&key)?;
-            let lifecycle = stored.lifecycle;
             let torrent_import = torrent_import.is_some();
-            // No live reading yet: hydration happens at open, before the
-            // first poll. `status_for` knows that, and the poller refines it
-            // within a second.
-            let status = membership.failure.unwrap_or_else(|| {
-                crate::nexus::projection::state::status_for(
-                    crate::nexus::projection::state::StatusFacts {
-                        completed: stored.completed_at.is_some(),
-                        carried: stored.substrate_handle.is_some(),
-                        publishing: !local_sources.is_empty() && revision == 0,
-                        importing: torrent_import,
-                        locally_complete: !local_sources.is_empty()
-                            && stored.substrate_handle.is_some(),
-                        ..crate::nexus::projection::state::StatusFacts::from_lifecycle(lifecycle)
-                    },
-                )
-            });
-            let (entries, total_bytes) = if local_sources.is_empty() {
-                (
-                    imported_entries.len(),
-                    // Selected only — the same denominator the engine counts
-                    // progress against. See `torrents::republish`.
-                    imported_entries
-                        .iter()
-                        .filter(|entry| entry.selected)
-                        .map(|entry| entry.bytes)
-                        .sum(),
-                )
-            } else {
-                (
-                    local_sources.len(),
-                    local_sources.iter().map(|entry| entry.bytes).sum(),
-                )
-            };
-            projected.push(CollectionState {
-                started_at: stored.started_at,
-                completed_at: stored.completed_at,
-                id: handle,
-                name: stored.name,
-                nature: if torrent_import {
-                    Nature::Torrent
-                } else {
-                    Nature::Native
-                },
-                role: match stored.role {
-                    StoredRole::Owner => Role::Owner,
-                    StoredRole::Member => Role::Member,
-                },
+            projected.push(project_stored_collection(
+                handle,
+                stored,
                 revision,
-                status,
                 members,
-                entries: u32::try_from(entries).unwrap_or(u32::MAX),
-                total_bytes,
-                on_disk_bytes: stored.on_disk_bytes,
-                uploaded_bytes: 0,
-                transfer: None,
-                pending: None,
-            });
+                &imported_entries,
+                torrent_import,
+                membership.failure,
+            ));
         }
         Ok((local, contacts.states, projected))
     }
@@ -664,6 +690,7 @@ impl Nexus {
             let holdings = holdings.clone();
             let sources_for_transfers = sources.clone();
             let activity_for_transfers = activity.clone();
+            let bus = Arc::clone(supervisor.bus_arc());
             move |shutdown| {
                 super::transfers::follow_transfers(
                     store,
@@ -674,6 +701,7 @@ impl Nexus {
                     shutdown,
                     sources_for_transfers,
                     activity_for_transfers,
+                    bus,
                 )
             }
         });
@@ -788,6 +816,15 @@ impl Nexus {
     #[must_use]
     pub fn watch(&self) -> watch::Receiver<PortalisState> {
         self.states.subscribe()
+    }
+
+    /// This device's durable event bus, as a cloneable handle — see
+    /// `nexus::core::events` for the guarantees it carries. Cloning is cheap
+    /// (an `Arc` clone); subscribing is a separate async step so a caller
+    /// can drop any lock it holds on the runtime before awaiting it.
+    #[must_use]
+    pub fn events_bus(&self) -> Arc<crate::nexus::core::events::EventBus> {
+        Arc::clone(self.supervisor.bus_arc())
     }
 
     /// Subscribes to one collection's detail, or unsubscribes with `None`.
@@ -1078,7 +1115,6 @@ impl Nexus {
             .torrent_import(key)
             .map_err(persistence)?
             .is_some();
-        let lifecycle = stored.lifecycle;
         let revision = self
             .store
             .current_revision(key)
@@ -1086,15 +1122,12 @@ impl Nexus {
             .map_or(0, |(number, _)| number);
         let held = self.holdings.get(key);
         let status = crate::nexus::projection::state::status_for(
-            crate::nexus::projection::state::StatusFacts {
-                completed: stored.completed_at.is_some(),
-                carried: stored.substrate_handle.is_some(),
-                publishing: !stored.sources.is_empty() && revision == 0,
+            crate::nexus::projection::state::StatusFacts::from_stored(
+                &stored,
+                revision,
                 importing,
-                locally_complete: !stored.sources.is_empty() && stored.substrate_handle.is_some(),
-                live: held.as_ref(),
-                ..crate::nexus::projection::state::StatusFacts::from_lifecycle(lifecycle)
-            },
+                held.as_ref(),
+            ),
         );
         self.update_collection(handle, |collection| collection.status = status)
     }
@@ -1144,26 +1177,15 @@ impl Nexus {
             .map_err(|_| CommandError::Persistence("the collection index was poisoned".to_owned()))?
             .assign(id.as_bytes().to_vec());
         let mut state = self.state();
-        state.collections.push(CollectionState {
-            started_at: None,
-            completed_at: None,
-            id: handle,
-            name: stored.name,
-            nature: Nature::Native,
-            role: Role::Owner,
-            revision: 0,
-            // Created, not shared. The publisher is waiting on the person.
-            status: Status::Draft,
-            members: Vec::new(),
-            entries: u32::try_from(sources.len()).unwrap_or(u32::MAX),
-            total_bytes: sources.iter().map(|source| source.bytes).sum(),
-            // Nothing has been fetched: these are the person's own files,
-            // referenced where they already are rather than copied.
-            on_disk_bytes: 0,
-            uploaded_bytes: 0,
-            transfer: None,
-            pending: None,
-        });
+        state.collections.push(project_stored_collection(
+            handle,
+            stored,
+            0,
+            Vec::new(),
+            &[],
+            false,
+            None,
+        ));
         self.states.send_replace(state);
         Ok(handle)
     }
@@ -1244,29 +1266,15 @@ impl Nexus {
             .map_err(|_| CommandError::Persistence("the collection index was poisoned".to_owned()))?
             .assign(id.as_bytes().to_vec());
         let mut state = self.state();
-        state.collections.push(CollectionState {
-            started_at: None,
-            completed_at: None,
-            id: handle,
-            name: stored.name,
-            nature: Nature::Torrent,
-            role: Role::Owner,
-            revision: 0,
-            // Metadata resolution is active preparation, but not acquisition.
-            // Once the file list exists the lifecycle becomes AwaitingSelection
-            // and projects as Draft until the person presses Download.
-            status: Status::ResolvingMetadata,
-            members: Vec::new(),
-            // Nothing is known about the contents until the worker has
-            // resolved the source. Zero here is honest rather than a guess:
-            // the interface shows "resolving" for exactly this.
-            entries: 0,
-            total_bytes: 0,
-            on_disk_bytes: 0,
-            uploaded_bytes: 0,
-            transfer: None,
-            pending: None,
-        });
+        state.collections.push(project_stored_collection(
+            handle,
+            stored,
+            0,
+            Vec::new(),
+            &[],
+            true,
+            None,
+        ));
         self.states.send_replace(state);
         // The import worker resolves the durable source asynchronously.
         self.torrents.notify_one();
@@ -1814,19 +1822,10 @@ async fn publish_pending_collections(
                     // is paused on purpose, and declaring it Available here
                     // made the interface offer Pause on something stopped.
                     let status = store.collection(&key).ok().flatten().map(|stored| {
-                        let lifecycle = stored.lifecycle;
                         crate::nexus::projection::state::status_for(
-                            crate::nexus::projection::state::StatusFacts {
-                                completed: stored.completed_at.is_some(),
-                                carried: stored.substrate_handle.is_some(),
-                                publishing: false,
-                                importing: false,
-                                locally_complete: !stored.sources.is_empty()
-                                    && stored.substrate_handle.is_some(),
-                                ..crate::nexus::projection::state::StatusFacts::from_lifecycle(
-                                    lifecycle,
-                                )
-                            },
+                            crate::nexus::projection::state::StatusFacts::from_stored(
+                                &stored, revision, false, None,
+                            ),
                         )
                     });
                     if let Some(handle) = handle {
@@ -3497,6 +3496,74 @@ mod tests {
         reopened.close().await;
     }
 
+    /// ADR-0017 restart matrix: an owner's original zero-copy source can be
+    /// gone by the time this device restarts (moved, renamed, the removable
+    /// volume unmounted). Startup hydration must not panic or silently
+    /// invent an available byte count for a file it cannot see — the detail
+    /// projection reports it as unavailable, exactly like the live substrate
+    /// path in `build` already does.
+    #[tokio::test]
+    async fn a_reopened_owner_collection_with_a_missing_zero_copy_source_hydrates_as_unavailable() {
+        let scratch = Scratch::new("reopened-owner-missing-source");
+        let source = scratch.0.join("episode.mp4");
+        std::fs::write(&source, b"episode").expect("writes source");
+        let nexus = open(&scratch);
+
+        let collection = nexus
+            .command(&Command::CreateCollection {
+                name: "Episodes".to_owned(),
+                files: vec![LocalFile {
+                    name: "episode.mp4".to_owned(),
+                    path: source.clone(),
+                    bytes: 7,
+                }],
+            })
+            .expect("creates the local collection")
+            .collection
+            .expect("names the collection");
+        let key = nexus.collection_key(collection).expect("collection key");
+        let stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("collection exists");
+        nexus
+            .store
+            .put_collection(
+                &key,
+                &StoredCollection {
+                    lifecycle: StoredLifecycle::NativePublished {
+                        activity: StoredActivity::Running,
+                    },
+                    substrate_handle: Some("55".repeat(20)),
+                    ..stored
+                },
+            )
+            .expect("records a published owner collection");
+        nexus.close().await;
+
+        // The original file is gone by the time this device restarts.
+        std::fs::remove_file(&source).expect("removes the original source");
+
+        let reopened = open(&scratch);
+        // Hydration must not panic reading a source it cannot stat, and the
+        // durable entry/byte facts it already recorded remain the answer —
+        // they are what this device promised to seed, not a live disk probe.
+        assert_eq!(reopened.state().collections[0].entries, 1);
+        assert_eq!(reopened.state().collections[0].total_bytes, 7);
+        let handle = reopened.state().collections[0].id;
+        let detail = reopened
+            .watch_detail(Some(handle))
+            .borrow()
+            .clone()
+            .expect("projects local files even when one is missing");
+        assert!(
+            !detail.entries[0].available,
+            "a missing zero-copy source must not be reported as available"
+        );
+        reopened.close().await;
+    }
+
     #[tokio::test]
     async fn a_native_collection_publishes_through_the_injected_zero_copy_substrate() {
         let _state = crate::nexus::paths::redirect_to_temp();
@@ -3527,6 +3594,8 @@ mod tests {
             Status::Draft,
             "a new collection waits to be confirmed"
         );
+        assert_eq!(states.borrow().collections[0].entries, 1);
+        assert_eq!(states.borrow().collections[0].total_bytes, 7);
         // Read out before the call, not inside its arguments. A `borrow()`
         // temporary lives to the end of the enclosing statement, so passing
         // one as an argument holds the watch's read lock for the whole
@@ -3535,7 +3604,7 @@ mod tests {
         nexus
             .command(&Command::PublishDraft { collection })
             .expect("confirms the draft");
-        tokio::time::timeout(Duration::from_secs(2), async {
+        let settled = tokio::time::timeout(Duration::from_secs(2), async {
             loop {
                 // Copied out before awaiting. `borrow()` holds the watch's
                 // read lock, and a lock held across an await blocks the
@@ -3549,7 +3618,10 @@ mod tests {
                     .collections
                     .first()
                     .is_some_and(|collection| {
-                        collection.status == Status::DownloadRequested && collection.revision == 1
+                        collection.status == Status::Seeding
+                            && collection.revision == 1
+                            && collection.entries == 1
+                            && collection.total_bytes == 7
                     });
                 if settled {
                     break;
@@ -3557,8 +3629,12 @@ mod tests {
                 states.changed().await.expect("runtime remains open");
             }
         })
-        .await
-        .expect("publisher settles");
+        .await;
+        assert!(
+            settled.is_ok(),
+            "publisher settles; final projection: {:?}",
+            states.borrow().collections
+        );
 
         assert_eq!(
             substrate
@@ -4263,9 +4339,10 @@ mod tests {
             let store = Arc::clone(&store);
             let holdings = holdings.clone();
             let activity = activity.clone();
+            let bus = Arc::new(crate::nexus::core::events::EventBus::new());
             async move {
                 transfers::follow_transfers(
-                    store, states, local, substrate, holdings, shutdown, sources, activity,
+                    store, states, local, substrate, holdings, shutdown, sources, activity, bus,
                 )
                 .await
             }
@@ -4329,6 +4406,122 @@ mod tests {
             !released.iter().any(|handle| handle == "a1b2"),
             "a claimed collection is never released"
         );
+    }
+
+    /// ADR-0016: a receiver-side completion is a typed durable event, not
+    /// something Flutter has to infer from diffing two snapshots. Only the
+    /// poller ever computes `completed_download`, so this is the one and
+    /// only place `TransferSettled` can come from — proven here against the
+    /// real `follow_transfers` production path, not a hand-rolled double.
+    #[tokio::test]
+    async fn a_completed_transfer_emits_a_typed_settled_event() {
+        let scratch = Scratch::new("transfer-settled-event");
+        let store = Arc::new(Store::open(scratch.0.join("portalis.redb")).expect("opens store"));
+        store
+            .put_collection(
+                b"key",
+                &StoredCollection {
+                    name: "Iceland".to_owned(),
+                    role: StoredRole::Member,
+                    content_key: [0; 32],
+                    media_path: scratch.0.join("media").to_string_lossy().into_owned(),
+                    sources: Vec::new(),
+                    lifecycle: StoredLifecycle::TorrentRequested {
+                        activity: StoredActivity::Running,
+                    },
+                    on_disk_bytes: 0,
+                    substrate_handle: Some("a1b2".to_owned()),
+                    started_at: None,
+                    completed_at: None,
+                },
+            )
+            .expect("writes the collection");
+
+        let local = Arc::new(Mutex::new(LocalCollections::test_with_collection(b"key")));
+        let handle = local
+            .lock()
+            .expect("local collections")
+            .handle(b"key")
+            .expect("the one collection");
+
+        let mut initial = state(vec![collection("Iceland")]);
+        initial.collections[0].id = handle;
+        let (states, _watcher) = watch::channel(initial);
+
+        fn reading(progress: u64, finished: bool) -> crate::nexus::torrent::TorrentInfo {
+            crate::nexus::torrent::TorrentInfo {
+                id: 1,
+                info_hash: "a1b2".to_owned(),
+                name: "Iceland".to_owned(),
+                state: "live".to_owned(),
+                progress_bytes: progress,
+                source_check_bytes: None,
+                fetched_bytes: progress,
+                total_bytes: 100,
+                uploaded_bytes: 0,
+                finished,
+                error: None,
+                files: Vec::new(),
+                live_peers: 1,
+                live_peer_addrs: vec![crate::nexus::torrent::PeerLink {
+                    address: "10.0.0.1:6881".to_owned(),
+                    fetched_bytes: 0,
+                    uploaded_bytes: 0,
+                    client: None,
+                }],
+            }
+        }
+        let substrate = Arc::new(crate::nexus::substrate::Recorded::reading(vec![
+            vec![reading(10, false)],
+            vec![reading(100, true)],
+        ]));
+
+        let holdings = Holdings::default();
+        let activity = crate::nexus::activity::DeviceActivityTracker::start(
+            Arc::clone(&store),
+            unix_time_ns(),
+        )
+        .expect("starts activity ledger");
+        let sources = super::DetailSources {
+            store: Arc::clone(&store),
+            collections: Arc::clone(&local),
+            holdings: holdings.clone(),
+            senders: Arc::new(Mutex::new(HashMap::new())),
+        };
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let shutdown = Shutdown::from_signal(shutdown_rx);
+        let bus = Arc::new(crate::nexus::core::events::EventBus::new());
+        let mut settled = bus.subscribe().await;
+
+        let poller = tokio::spawn({
+            let states = states.clone();
+            let local = Arc::clone(&local);
+            let sources = sources.clone();
+            let store = Arc::clone(&store);
+            let holdings = holdings.clone();
+            let bus = Arc::clone(&bus);
+            async move {
+                transfers::follow_transfers(
+                    store, states, local, substrate, holdings, shutdown, sources, activity, bus,
+                )
+                .await
+            }
+        });
+
+        let event = tokio::time::timeout(Duration::from_secs(10), settled.next())
+            .await
+            .expect("the poller emits the event before the deadline")
+            .expect("the bus is still open");
+        assert_eq!(
+            event,
+            crate::nexus::core::events::Event::TransferSettled {
+                collection: crate::nexus::core::events::Handle(u64::from(handle.0)),
+                ok: true,
+            }
+        );
+
+        shutdown_tx.send(true).expect("asks the poller to stop");
+        poller.await.expect("the poller winds up");
     }
 
     /// A peer that connects, sends bytes, and disconnects before the
@@ -4434,9 +4627,10 @@ mod tests {
             let store = Arc::clone(&store);
             let holdings = holdings.clone();
             let activity = activity.clone();
+            let bus = Arc::new(crate::nexus::core::events::EventBus::new());
             async move {
                 transfers::follow_transfers(
-                    store, states, local, substrate, holdings, shutdown, sources, activity,
+                    store, states, local, substrate, holdings, shutdown, sources, activity, bus,
                 )
                 .await
             }

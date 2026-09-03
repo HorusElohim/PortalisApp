@@ -6,7 +6,7 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `app_activity`, `app_collection_contract`, `app_collection_lifecycle`, `app_run`, `collection_projection`, `detail_projection`, `group_people_peers`, `into_core`, `locked_runtime`, `runtime`, `snapshot`
+// These functions are ignored because they are not marked as `pub`: `accept`, `app_activity`, `app_collection_contract`, `app_collection_lifecycle`, `app_run`, `collection_projection`, `detail_projection`, `group_people_peers`, `locked_runtime`, `runtime`, `snapshot`, `source_files`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Opens the local Nexus runtime once. Calling it again is harmless.
@@ -101,6 +101,15 @@ Future<void> clearUserActivity() =>
 Stream<AppSnapshot> watchStates() =>
     RustLib.instance.api.cratePortalisApiWatchStates();
 
+/// Streams a typed fact each time a receiver-side transfer completes,
+/// instead of Flutter inferring completion by diffing successive
+/// `AppSnapshot`s itself (ADR-0016). Only `TransferSettled { ok: true }`
+/// durable events are forwarded; the collection's current name is read from
+/// the live state at the moment the event arrives, so a rename shortly
+/// before completion is reflected rather than a stale name captured earlier.
+Stream<AppTransferCompleted> watchTransferCompletions() =>
+    RustLib.instance.api.cratePortalisApiWatchTransferCompletions();
+
 /// Streams the detail tier for one collection, or `None` after unsubscribing.
 Stream<AppDetail?> watchDetail({int? collection}) =>
     RustLib.instance.api.cratePortalisApiWatchDetail(collection: collection);
@@ -165,9 +174,45 @@ Stream<Uint8List> watchHistory({required int collection}) =>
 Future<List<AppStorageEntry>> storageBreakdown() =>
     RustLib.instance.api.cratePortalisApiStorageBreakdown();
 
-/// Validates and accepts one command without waiting for I/O.
-Future<AppAccepted> send({required AppCommand command}) =>
-    RustLib.instance.api.cratePortalisApiSend(command: command);
+/// Creates a private draft from opaque native source references.
+Future<AppAccepted> createCollection(
+        {required String name, required List<AppSourceFile> files}) =>
+    RustLib.instance.api
+        .cratePortalisApiCreateCollection(name: name, files: files);
+
+/// Adds opaque native source references to an existing draft.
+Future<AppAccepted> addMedia(
+        {required int collection,
+        required String label,
+        required List<AppSourceFile> files}) =>
+    RustLib.instance.api.cratePortalisApiAddMedia(
+        collection: collection, label: label, files: files);
+
+Future<AppAccepted> renameCollection(
+        {required int collection, required String name}) =>
+    RustLib.instance.api
+        .cratePortalisApiRenameCollection(collection: collection, name: name);
+
+Future<AppAccepted> deleteCollection(
+        {required int collection, required bool deleteFiles}) =>
+    RustLib.instance.api.cratePortalisApiDeleteCollection(
+        collection: collection, deleteFiles: deleteFiles);
+
+Future<AppAccepted> setCollectionPaused(
+        {required int collection, required bool paused}) =>
+    RustLib.instance.api.cratePortalisApiSetCollectionPaused(
+        collection: collection, paused: paused);
+
+Future<AppAccepted> publishDraft({required int collection}) =>
+    RustLib.instance.api.cratePortalisApiPublishDraft(collection: collection);
+
+Future<AppAccepted> importTorrent({required String source}) =>
+    RustLib.instance.api.cratePortalisApiImportTorrent(source: source);
+
+Future<AppAccepted> downloadSelection(
+        {required int collection, required List<int> entries}) =>
+    RustLib.instance.api.cratePortalisApiDownloadSelection(
+        collection: collection, entries: entries);
 
 /// The local acceptance result returned before a command performs I/O.
 class AppAccepted {
@@ -540,83 +585,6 @@ enum AppCollectionRole {
   owner,
   member,
   ;
-}
-
-/// A request from the app. `kind` is explicit so this stays a single command
-/// envelope across Dart and Rust without generated union helpers.
-class AppCommand {
-  final String kind;
-  final String? name;
-  final List<AppSourceFile> files;
-  final int? collection;
-  final String? label;
-  final bool? deleteFiles;
-  final int? entry;
-  final String? source;
-  final Uint32List entries;
-  final int? contact;
-  final String? handle;
-  final bool? accept;
-  final int? device;
-  final bool? active;
-  final bool? paused;
-
-  const AppCommand({
-    required this.kind,
-    this.name,
-    required this.files,
-    this.collection,
-    this.label,
-    this.deleteFiles,
-    this.entry,
-    this.source,
-    required this.entries,
-    this.contact,
-    this.handle,
-    this.accept,
-    this.device,
-    this.active,
-    this.paused,
-  });
-
-  @override
-  int get hashCode =>
-      kind.hashCode ^
-      name.hashCode ^
-      files.hashCode ^
-      collection.hashCode ^
-      label.hashCode ^
-      deleteFiles.hashCode ^
-      entry.hashCode ^
-      source.hashCode ^
-      entries.hashCode ^
-      contact.hashCode ^
-      handle.hashCode ^
-      accept.hashCode ^
-      device.hashCode ^
-      active.hashCode ^
-      paused.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is AppCommand &&
-          runtimeType == other.runtimeType &&
-          kind == other.kind &&
-          name == other.name &&
-          files == other.files &&
-          collection == other.collection &&
-          label == other.label &&
-          deleteFiles == other.deleteFiles &&
-          entry == other.entry &&
-          source == other.source &&
-          entries == other.entries &&
-          contact == other.contact &&
-          handle == other.handle &&
-          accept == other.accept &&
-          device == other.device &&
-          active == other.active &&
-          paused == other.paused;
 }
 
 /// A contact and the trust information needed to render it.
@@ -1121,6 +1089,31 @@ class AppTransfer {
           upBytesPerSecond == other.upBytesPerSecond &&
           peers == other.peers &&
           etaSecs == other.etaSecs;
+}
+
+/// A receiver-side transfer's completion, as a typed fact rather than
+/// something Flutter infers from diffing successive snapshots (ADR-0016).
+/// Emitted exactly once per completion by the same poller that records
+/// `completed_at` — see `nexus::core::transfers::follow_transfers`.
+class AppTransferCompleted {
+  final int collection;
+  final String name;
+
+  const AppTransferCompleted({
+    required this.collection,
+    required this.name,
+  });
+
+  @override
+  int get hashCode => collection.hashCode ^ name.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppTransferCompleted &&
+          runtimeType == other.runtimeType &&
+          collection == other.collection &&
+          name == other.name;
 }
 
 /// This device's own locally measured activity. Never leaves the device on

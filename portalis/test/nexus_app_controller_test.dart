@@ -617,13 +617,31 @@ AppSnapshot _torrentState({
   );
 }
 
+class _RecordedCommand {
+  const _RecordedCommand(
+    this.kind, {
+    this.collection,
+    this.name,
+    this.entries = const [],
+    this.deleteFiles,
+    this.paused,
+  });
+
+  final String kind;
+  final int? collection;
+  final String? name;
+  final List<int> entries;
+  final bool? deleteFiles;
+  final bool? paused;
+}
+
 class _Repository implements AppRepository {
   final states = StreamController<AppSnapshot>.broadcast();
   final details = StreamController<AppDetail?>.broadcast();
   final history = StreamController<Uint8List>.broadcast();
   final active = <bool>[];
   final detailCollections = <int?>[];
-  final commands = <EngineCommand>[];
+  final commands = <_RecordedCommand>[];
   final renamedTo = <String>[];
   var starts = 0;
   var stops = 0;
@@ -660,11 +678,73 @@ class _Repository implements AppRepository {
     renamedTo.add(nickname);
   }
 
-  @override
-  Future<AppAccepted> send(EngineCommand command) async {
+  Future<AppAccepted> _record(_RecordedCommand command) async {
     commands.add(command);
     return AppAccepted(id: BigInt.zero, collection: null, queued: false);
   }
+
+  @override
+  Future<AppAccepted> createCollection(
+    String name,
+    List<AppSourceFile> files,
+  ) =>
+      _record(_RecordedCommand('createCollection', name: name));
+
+  @override
+  Future<AppAccepted> addMedia(
+    int collection,
+    String label,
+    List<AppSourceFile> files,
+  ) =>
+      _record(_RecordedCommand('addMedia', collection: collection));
+
+  @override
+  Future<AppAccepted> renameCollection(int collection, String name) => _record(
+        _RecordedCommand(
+          'renameCollection',
+          collection: collection,
+          name: name,
+        ),
+      );
+
+  @override
+  Future<AppAccepted> deleteCollection(int collection, bool deleteFiles) =>
+      _record(
+        _RecordedCommand(
+          'deleteCollection',
+          collection: collection,
+          deleteFiles: deleteFiles,
+        ),
+      );
+
+  @override
+  Future<AppAccepted> setCollectionPaused(int collection, bool paused) =>
+      _record(
+        _RecordedCommand(
+          'setPaused',
+          collection: collection,
+          paused: paused,
+        ),
+      );
+
+  @override
+  Future<AppAccepted> publishDraft(int collection) => _record(
+        _RecordedCommand('publishDraft', collection: collection),
+      );
+
+  @override
+  Future<AppAccepted> importTorrent(String source) =>
+      _record(const _RecordedCommand('importTorrent'));
+
+  @override
+  Future<AppAccepted> downloadSelection(int collection, List<int> entries) =>
+      _record(
+        _RecordedCommand(
+          'downloadSelection',
+          collection: collection,
+          entries: entries,
+        ),
+      );
 
   @override
   Future<String?> shareUri(int collection) async => null;
@@ -694,6 +774,10 @@ class _Repository implements AppRepository {
 
   @override
   Stream<AppSnapshot> watchStates() => states.stream;
+
+  @override
+  Stream<AppTransferCompleted> watchTransferCompletions() =>
+      const Stream.empty();
 }
 
 AppUserSummary _fakeUserSummary() => AppUserSummary(

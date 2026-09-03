@@ -77,7 +77,6 @@ AppSnapshot _state({required BigInt? completedAt}) => AppSnapshot(
     );
 
 class _Repository implements AppRepository {
-  final commands = <EngineCommand>[];
   List<List<AppPeerHistory>> peerHistoryAnswers = const [];
   int peerHistoryCalls = 0;
 
@@ -92,6 +91,10 @@ class _Repository implements AppRepository {
 
   @override
   Stream<AppSnapshot> watchStates() => const Stream.empty();
+
+  @override
+  Stream<AppTransferCompleted> watchTransferCompletions() =>
+      const Stream.empty();
 
   @override
   Stream<AppDetail?> watchDetail(int? collection) => const Stream.empty();
@@ -138,11 +141,51 @@ class _Repository implements AppRepository {
   @override
   Future<void> renameDevice(String nickname) async {}
 
+  AppAccepted get _accepted =>
+      AppAccepted(id: BigInt.one, collection: null, queued: true);
+
   @override
-  Future<AppAccepted> send(EngineCommand command) async {
-    commands.add(command);
-    return AppAccepted(id: BigInt.one, collection: null, queued: true);
-  }
+  Future<AppAccepted> createCollection(
+    String name,
+    List<AppSourceFile> files,
+  ) async =>
+      _accepted;
+
+  @override
+  Future<AppAccepted> addMedia(
+    int collection,
+    String label,
+    List<AppSourceFile> files,
+  ) async =>
+      _accepted;
+
+  @override
+  Future<AppAccepted> renameCollection(int collection, String name) async =>
+      _accepted;
+
+  @override
+  Future<AppAccepted> deleteCollection(
+    int collection,
+    bool deleteFiles,
+  ) async =>
+      _accepted;
+
+  @override
+  Future<AppAccepted> setCollectionPaused(int collection, bool paused) async =>
+      _accepted;
+
+  @override
+  Future<AppAccepted> publishDraft(int collection) async => _accepted;
+
+  @override
+  Future<AppAccepted> importTorrent(String source) async => _accepted;
+
+  @override
+  Future<AppAccepted> downloadSelection(
+    int collection,
+    List<int> entries,
+  ) async =>
+      _accepted;
 }
 
 AppUserSummary _fakeUserSummary() => AppUserSummary(

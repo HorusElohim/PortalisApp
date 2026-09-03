@@ -3,8 +3,10 @@ import 'package:flutter/foundation.dart';
 import '../features/collections/domain/paste.dart';
 import '../nexus/domain/app_state.dart';
 
-typedef CollectionCommandSender = Future<AppAccepted> Function(
-  EngineCommand command,
+typedef CollectionImporter = Future<AppAccepted> Function(String source);
+typedef CollectionSelectionDownloader = Future<AppAccepted> Function(
+  int collection,
+  List<int> entries,
 );
 
 typedef CollectionDetailWatcher = Stream<AppDetail?> Function(int collection);
@@ -37,14 +39,14 @@ String? collectionMagnetFromLink(Uri uri) {
 /// the backend when the incoming URI is not a Portalis collection link.
 Future<int?> importCollectionLink(
   Uri uri, {
-  required CollectionCommandSender send,
+  required CollectionImporter import,
 }) async {
   final magnet = collectionMagnetFromLink(uri);
   if (magnet == null) return null;
   debugPrint(
     '[collection-link] import start source_len=${magnet.length}',
   );
-  final accepted = await send(EngineCommand.importTorrent(magnet));
+  final accepted = await import(magnet);
   debugPrint(
     '[collection-link] import result collection=${accepted.collection}',
   );
@@ -59,7 +61,7 @@ Future<int?> importCollectionLink(
 /// reserved for local files this device owns.
 Future<void> startCollectionLinkDownload(
   int collection, {
-  required CollectionCommandSender send,
+  required CollectionSelectionDownloader download,
   required CollectionDetailWatcher watchDetail,
 }) async {
   debugPrint('[collection-link] download start collection=$collection');
@@ -76,11 +78,7 @@ Future<void> startCollectionLinkDownload(
   debugPrint(
     '[collection-link] download selection collection=$collection entries=$entries',
   );
-  await send(EngineCommand(
-    kind: 'downloadSelection',
-    collection: collection,
-    entries: entries,
-  ));
+  await download(collection, entries);
   debugPrint(
       '[collection-link] download command accepted collection=$collection');
 }

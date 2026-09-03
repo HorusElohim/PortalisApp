@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- Completed ADR-0016 and ADR-0017; both move from `proposed` to `accepted`.
+- Typed receiver-completion events replace Flutter's snapshot diffing (third
+  slice of ADR-0016). Rust emits `Event::TransferSettled` exactly once, at
+  the moment `follow_transfers` records a completion — the one place this
+  fact is decided — and streams it to Flutter as `AppTransferCompleted`
+  (`watch_transfer_completions()`). `TransferCompletionObserver` no longer
+  infers completion by comparing successive `AppSnapshot`s or tracking a
+  startup baseline; it forwards the typed event directly.
+- Replaced the string-`kind`-plus-optional-fields `AppCommand`/`EngineCommand`
+  command envelope with a generated typed command per bridge function
+  (final slice of ADR-0016). `AppCommand` is now a Rust enum with one variant
+  per command, each carrying exactly its required fields — a pause without a
+  direction, or an add without a collection, is no longer constructible.
+  Flutter calls narrow functions (`createCollection`, `setCollectionPaused`,
+  `downloadSelection`, etc.) instead of building an envelope; `EngineCommand`
+  is deleted.
+- Unified collection projection into one production path (ADR-0017). Deleted
+  `nexus/projection/build.rs`, a parallel `CollectionFacts`/`collection()`
+  constructor with its own test suite that production never called. Startup
+  hydration, `create_collection`, and `import_torrent` now build their
+  initial projection through one shared function
+  (`project_stored_collection`), and every `status_for` call site builds its
+  persisted-facts argument through one shared constructor
+  (`StatusFacts::from_stored`) instead of four separately-drifting inline
+  literals. Fixed a real bug this unification surfaced: `torrents::republish`
+  was overwriting a native (non-torrent) collection's live entry count and
+  byte total with the empty torrent-import table, and a native zero-copy
+  source's availability was reported unconditionally `true` even after the
+  original file was moved, renamed, or unmounted — restart hydration now
+  actually stats the source and reports it unavailable when it cannot.
 - Moved aggregate engine activity ("N transfers, X down/up, Y peers") into
   Rust (second slice of ADR-0016). A generated `AppActivity` struct is now
   computed once per snapshot (`app_activity()` in `portalis_api.rs`) instead

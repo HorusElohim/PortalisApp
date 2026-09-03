@@ -75,19 +75,16 @@ class _HomeState extends State<Home> {
   }
 
   Future<int?> _createDraft(List<PickedFile> files) async {
-    final accepted = await AppControllers.engine.send(
-      EngineCommand(
-        kind: 'createCollection',
-        name: randomDraftName(),
-        files: [
-          for (final file in files)
-            AppSourceFile(
-              name: file.name,
-              path: file.path,
-              bytes: BigInt.from(file.lengthBytes),
-            ),
-        ],
-      ),
+    final accepted = await AppControllers.engine.createCollection(
+      randomDraftName(),
+      [
+        for (final file in files)
+          AppSourceFile(
+            name: file.name,
+            path: file.path,
+            bytes: BigInt.from(file.lengthBytes),
+          ),
+      ],
     );
     return accepted.collection;
   }
@@ -205,9 +202,7 @@ class _HomeState extends State<Home> {
 
   Future<int?> _importTorrent(String source) async {
     debugPrint('[home] import torrent start source_len=${source.length}');
-    final accepted = await AppControllers.engine.send(
-      EngineCommand.importTorrent(source),
-    );
+    final accepted = await AppControllers.engine.importTorrent(source);
     debugPrint(
         '[home] import torrent result collection=${accepted.collection}');
     final collection = accepted.collection;

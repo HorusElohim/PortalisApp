@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../nexus/domain/app_state.dart';
 
 /// Delivers a native alert after a receiver-side transfer finishes.
@@ -5,44 +7,42 @@ abstract interface class TransferCompletionNotifier {
   Future<void> showCompleted({required int id, required String name});
 }
 
-/// Observes complete engine snapshots without replaying historical completions.
+/// Forwards Rust's own completion events to a platform notification.
 ///
-/// A completion timestamp is durable, so the first state after startup is a
-/// baseline, not a new event. Later changes are the engine's exact completion
-/// edge and are the only ones that may notify a person.
+/// Rust owns the completion edge — see `AppTransferCompleted` and
+/// `nexus::core::transfers::follow_transfers`, the one place a completion is
+/// ever decided. This observer used to infer completion itself by diffing
+/// successive `AppSnapshot`s (comparing `completedAt` against what it saw
+/// last time, and treating the first snapshot after startup as a baseline
+/// rather than a new event so a restart did not replay every historical
+/// completion). That entire baseline/diff mechanism is gone: the backend
+/// only ever emits the event at the moment a transfer actually finishes, so
+/// there is nothing left here to infer.
 class TransferCompletionObserver {
   TransferCompletionObserver(this._notifier);
 
   final TransferCompletionNotifier _notifier;
-  Map<int, BigInt> _completed = const {};
-  bool _seeded = false;
-  Future<void> _tail = Future.value();
+  StreamSubscription<AppTransferCompleted>? _subscription;
 
-  Future<void> observe(AppSnapshot snapshot) {
-    final next = _tail.then((_) => _observe(snapshot));
-    // A platform notification failure must not prevent a later completion
-    // from being observed, nor interfere with the engine state subscription.
-    _tail = next.catchError((_) {});
-    return next;
+  /// Starts forwarding completions from [completions] until [stop] is
+  /// called. Safe to call once; a second call is a no-op rather than a
+  /// second subscription.
+  void start(Stream<AppTransferCompleted> completions) {
+    _subscription ??= completions.listen(
+      (event) => unawaited(
+        _notifier
+            .showCompleted(id: event.collection, name: event.name)
+            .catchError((_) {}),
+      ),
+      // A stream failure must not crash the app; the next successful
+      // reconnect (if the underlying bridge stream retries) resumes
+      // notifying normally.
+      onError: (_) {},
+    );
   }
 
-  Future<void> _observe(AppSnapshot snapshot) async {
-    final current = <int, BigInt>{
-      for (final collection in snapshot.collections)
-        if (collection.role == AppCollectionRole.member &&
-            collection.completedAt != null)
-          collection.id: collection.completedAt!,
-    };
-    if (_seeded) {
-      for (final collection in snapshot.collections) {
-        final completedAt = current[collection.id];
-        if (completedAt != null && _completed[collection.id] != completedAt) {
-          await _notifier.showCompleted(
-              id: collection.id, name: collection.name);
-        }
-      }
-    }
-    _completed = current;
-    _seeded = true;
+  Future<void> stop() async {
+    await _subscription?.cancel();
+    _subscription = null;
   }
 }
