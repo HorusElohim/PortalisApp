@@ -2985,6 +2985,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_command_is_accepted_and_named_so_it_can_be_matched_later() {
+        let _state = crate::nexus::paths::redirect_to_temp();
         let scratch = Scratch::new("command");
         let nexus = open(&scratch);
 
