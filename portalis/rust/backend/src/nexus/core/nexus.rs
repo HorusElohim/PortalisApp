@@ -24,6 +24,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use thiserror::Error;
 use tokio::sync::{Notify, watch};
@@ -1745,6 +1746,25 @@ impl Nexus {
     }
 }
 
+/// A failed publish (most often a Photos asset PhotoKit could not stream —
+/// a stalled iCloud fetch, a revoked permission, a transient read timeout)
+/// remains durable work. Same backoff ladder `follow_torrent_imports` uses
+/// for the receiver side, so a transient hiccup recovers on its own instead
+/// of leaving a collection in `ResolvingMetadata` forever with no retry and
+/// no visible error.
+const PUBLISH_RETRY_DELAYS: [std::time::Duration; 4] = [
+    std::time::Duration::from_secs(5),
+    std::time::Duration::from_secs(15),
+    std::time::Duration::from_secs(30),
+    std::time::Duration::from_secs(60),
+];
+
+fn publish_retry_delay(failures: u32) -> std::time::Duration {
+    PUBLISH_RETRY_DELAYS[usize::try_from(failures.saturating_sub(1))
+        .unwrap_or(3)
+        .min(3)]
+}
+
 async fn publish_pending_collections(
     store: Arc<Store>,
     states: watch::Sender<PortalisState>,
@@ -1753,10 +1773,18 @@ async fn publish_pending_collections(
     wake: Arc<Notify>,
     mut shutdown: super::supervisor::Shutdown,
 ) {
+    let mut failures: HashMap<Vec<u8>, u32> = HashMap::new();
+    let mut retry_deadlines: HashMap<Vec<u8>, Instant> = HashMap::new();
     loop {
+        let next_retry = retry_deadlines.values().min().copied();
         tokio::select! {
             () = shutdown.requested() => return,
             _ = wake.notified() => {}
+            () = async {
+                if let Some(deadline) = next_retry {
+                    tokio::time::sleep_until(deadline.into()).await;
+                }
+            }, if next_retry.is_some() => {}
         }
 
         let pending = match store.collections() {
@@ -1778,8 +1806,17 @@ async fn publish_pending_collections(
                 continue;
             }
         };
+        let now = Instant::now();
+        let due = pending
+            .into_iter()
+            .filter(|(key, _)| {
+                retry_deadlines
+                    .get(key)
+                    .is_none_or(|deadline| *deadline <= now)
+            })
+            .collect::<Vec<_>>();
 
-        for (key, collection) in pending {
+        for (key, collection) in due {
             let total = collection.sources.iter().map(|source| source.bytes).sum();
             crate::nexus::log::clog!(
                 "nexus",
@@ -1813,6 +1850,8 @@ async fn publish_pending_collections(
                         key,
                         collection.name
                     );
+                    failures.remove(&key);
+                    retry_deadlines.remove(&key);
                     let handle = collections
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1844,12 +1883,44 @@ async fn publish_pending_collections(
                     }
                 }
                 Err(error) => {
+                    let count = failures
+                        .entry(key.clone())
+                        .and_modify(|count| *count += 1)
+                        .or_insert(1);
+                    let delay = publish_retry_delay(*count);
+                    retry_deadlines.insert(key.clone(), Instant::now() + delay);
                     crate::nexus::log::clog!(
                         "nexus",
-                        "publisher failed collection key={:?} name={:?}: {error:#}",
+                        "publisher failed collection key={:?} name={:?} failure={} retry_after={}s: {error:#}",
                         key,
-                        collection.name
-                    )
+                        collection.name,
+                        *count,
+                        delay.as_secs()
+                    );
+                    // Surface the stall instead of leaving the interface
+                    // showing "resolving metadata" forever with no sign
+                    // anything went wrong or is being retried.
+                    if let Some(handle) = collections
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .handle(&key)
+                    {
+                        states.send_if_modified(|state| {
+                            let Some(projected) =
+                                state.collections.iter_mut().find(|item| item.id == handle)
+                            else {
+                                return false;
+                            };
+                            if projected.status
+                                == crate::nexus::projection::state::Status::RetryingMetadata
+                            {
+                                return false;
+                            }
+                            projected.status =
+                                crate::nexus::projection::state::Status::RetryingMetadata;
+                            true
+                        });
+                    }
                 }
             }
         }
@@ -2519,6 +2590,68 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(2), nexus.close())
             .await
             .expect("a waiting retry never delays shutdown");
+    }
+
+    /// A local-media publish that keeps failing (the real trigger: PhotoKit
+    /// could not stream an iCloud-only asset) must not leave the collection
+    /// silently stuck in `ResolvingMetadata` forever. It surfaces as
+    /// `RetryingMetadata` and keeps retrying on a backoff, exactly like the
+    /// receiver-side metadata resolver already does — regression coverage
+    /// for the publisher previously only logging the failure and giving up.
+    #[tokio::test]
+    async fn a_stalled_publish_is_visible_and_keeps_retrying() {
+        let scratch = Scratch::new("publish-stalled");
+        // `Recorded::default()` has no configured publication, so every
+        // `publish()` call fails — standing in for PhotoKit repeatedly
+        // refusing to stream the selected asset.
+        let nexus = open(&scratch);
+        std::fs::write(scratch.0.join("clip.mp4"), b"data").expect("writes source file");
+
+        let accepted = nexus
+            .command(&Command::CreateCollection {
+                name: "clip".to_owned(),
+                files: vec![LocalFile {
+                    name: "clip.mp4".to_owned(),
+                    path: scratch.0.join("clip.mp4"),
+                    bytes: 4,
+                }],
+            })
+            .expect("accepts the local selection");
+        let collection = accepted.collection.expect("names its collection");
+        // A draft's files are never hashed until the person confirms sharing
+        // — matches the real Flutter flow (createCollection, then
+        // publishDraft) that actually wakes this worker.
+        nexus
+            .command(&Command::PublishDraft { collection })
+            .expect("confirms the draft for sharing");
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while nexus
+                .state()
+                .collections
+                .iter()
+                .find(|item| item.id == collection)
+                .is_some_and(|item| item.status != Status::RetryingMetadata)
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("the failed publish reaches the projection instead of hanging silently");
+        assert_eq!(
+            nexus
+                .state()
+                .collections
+                .iter()
+                .find(|item| item.id == collection)
+                .expect("collection remains durable")
+                .status,
+            Status::RetryingMetadata
+        );
+
+        tokio::time::timeout(Duration::from_secs(2), nexus.close())
+            .await
+            .expect("a waiting publish retry never delays shutdown");
     }
 
     /// Pausing has to reach the engine, not just the store.
