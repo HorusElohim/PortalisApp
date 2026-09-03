@@ -729,6 +729,15 @@ impl Nexus {
                 )
             }
         });
+        // Checks every owned collection's zero-copy sources still exist on
+        // disk, and converts one that has lost any of them into an ordinary
+        // download of its own published content — see `watch_source_sanity`
+        // for why that conversion, rather than a new status, is the fix.
+        supervisor.start_now("source sanity", {
+            let store = Arc::clone(&store);
+            let torrents = Arc::clone(&torrents);
+            move |shutdown| watch_source_sanity(store, torrents, shutdown)
+        });
         // One coalesced wake each is enough: both workers scan durable
         // collection state, so restart recovery does not depend on an
         // in-memory job.
@@ -2020,6 +2029,206 @@ async fn publish_collection_sources(
         )
         .context("recording the collection's substrate handle")?;
     Ok(publication.revision.number)
+}
+
+/// How often an owner's zero-copy sources are checked for still existing.
+///
+/// Independent of [`super::transfers::POLL_INTERVAL`]: that poller only
+/// hears from the substrate about torrents it is actively carrying, and
+/// tells nothing about whether the *files themselves* moved, were renamed,
+/// or were deleted underneath the app. Only a filesystem stat answers that.
+const SOURCE_SANITY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Watches every collection this device owns for a source that has gone
+/// missing on disk, and — the moment one has — folds it back into the
+/// ordinary receiver download path instead of leaving it silently unseedable.
+///
+/// No new status exists for this. A missing source simply means this device
+/// can no longer act as this collection's seed, which is exactly what a
+/// receiver's collection already looks like: known content, no local bytes,
+/// waiting on the swarm. So the fix is not a new lifecycle branch — it is
+/// converting the row to look like any other unfinished download, of its own
+/// published content, and letting `follow_torrent_imports` (the worker that
+/// already knows how to resolve and acquire a torrent) take it from there.
+///
+/// Every use case this covers, and why each needs no special handling beyond
+/// this one conversion:
+/// - **One of several sources deleted.** Detected the same way as all of
+///   them missing — presence is checked per collection, not per file, since
+///   a torrent generated from a partial local set is not the same torrent
+///   any peer already holds; the receiver path re-fetches the whole thing
+///   from whoever else has it, exactly as it would for a magnet found on
+///   another device first.
+/// - **A source renamed or moved rather than deleted.** Indistinguishable
+///   from "deleted" by a stat call, and correctly so: this device no longer
+///   has the referenced bytes at the path it promised, whatever the reason.
+/// - **The collection is paused when its source disappears.** Left alone
+///   until pause is lifted — a paused collection is a person's decision, and
+///   converting it to "waiting to redownload" while they intended it to sit
+///   idle would silently start recovering something they explicitly stopped.
+///   The next tick after they resume catches it.
+/// - **A draft's source disappears before it is ever shared.** Also left
+///   alone: nothing has been published, nobody else may hold a copy, and
+///   converting a draft to a download would ask the swarm for content that
+///   was never offered to it. The draft still holds a stale reference; the
+///   person notices reopening it, same as any other broken pick.
+/// - **The receiver side (a collection this device is downloading, not
+///   seeding).** Entirely out of scope: `stored.sources` is empty for a
+///   torrent import, so nothing here ever matches one. Nothing to convert —
+///   the ordinary download path already owns its lifecycle.
+/// - **This device is both a peer's only seed and its source vanishes.**
+///   Handled the same as any other missing source: the local row converts,
+///   this device stops being available to publish/seed until re-added, and
+///   any peer already relying on it experiences exactly what a seed going
+///   permanently offline looks like — nothing this app can paper over from
+///   one side of the connection.
+async fn watch_source_sanity(
+    store: Arc<Store>,
+    torrents: Arc<Notify>,
+    mut shutdown: super::supervisor::Shutdown,
+) {
+    let mut tick = tokio::time::interval(SOURCE_SANITY_INTERVAL);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tokio::select! {
+            () = shutdown.requested() => return,
+            _ = tick.tick() => {}
+        }
+
+        let collections = match store.collections() {
+            Ok(collections) => collections,
+            Err(error) => {
+                crate::nexus::log::clog!(
+                    "nexus",
+                    "could not scan collections for source sanity: {error}"
+                );
+                continue;
+            }
+        };
+
+        let mut converted = false;
+        for (key, stored) in collections {
+            // Only an owner with a substrate handle can have lost a source
+            // out from under an active seed. A draft has offered nothing to
+            // anyone yet (see the doc comment above), and an empty source
+            // list is a receiver's own download, never this worker's case.
+            if stored.sources.is_empty() || stored.substrate_handle.is_none() {
+                continue;
+            }
+            if stored
+                .lifecycle
+                .activity()
+                .is_some_and(crate::nexus::store::records::StoredActivity::is_paused)
+            {
+                continue;
+            }
+            let all_present = stored.sources.iter().all(|source| {
+                crate::nexus::content_location::ContentLocation::from_source_path(&source.path)
+                    .is_ok_and(|location| location.length(Some(source.bytes)).is_ok())
+            });
+            if all_present {
+                continue;
+            }
+
+            let missing = stored
+                .sources
+                .iter()
+                .filter(|source| {
+                    !crate::nexus::content_location::ContentLocation::from_source_path(&source.path)
+                        .is_ok_and(|location| location.length(Some(source.bytes)).is_ok())
+                })
+                .map(|source| source.path.as_str())
+                .collect::<Vec<_>>();
+            crate::nexus::log::clog!(
+                "nexus",
+                "source sanity: collection key={:?} name={:?} lost {} of {} sources ({:?}); converting to a download of its own content",
+                key,
+                stored.name,
+                missing.len(),
+                stored.sources.len(),
+                missing
+            );
+
+            let Some(handle) = stored.substrate_handle.clone() else {
+                continue;
+            };
+            let magnet = format!("magnet:?xt=urn:btih:{handle}");
+            let entries = crate::nexus::linked_source_store::sources_for(&handle)
+                .ok()
+                .flatten()
+                .map(|sources| {
+                    sources
+                        .into_iter()
+                        .map(|source| StoredImportEntry {
+                            label: source.name,
+                            bytes: source.length_bytes.unwrap_or_default(),
+                            selected: true,
+                            native_location: None,
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let descriptor = crate::nexus::linked_source_store::descriptor_for(&handle).ok();
+
+            if let Err(error) = store.put_collection(
+                &key,
+                &StoredCollection {
+                    sources: Vec::new(),
+                    substrate_handle: None,
+                    lifecycle: if entries.is_empty() {
+                        StoredLifecycle::TorrentResolving
+                    } else {
+                        StoredLifecycle::TorrentRequested {
+                            activity: StoredActivity::Running,
+                        }
+                    },
+                    ..stored
+                },
+            ) {
+                crate::nexus::log::clog!(
+                    "nexus",
+                    "source sanity: could not convert collection key={:?} to a download: {error}",
+                    key
+                );
+                continue;
+            }
+            if let Err(error) = store.put_torrent_import(&key, &magnet) {
+                crate::nexus::log::clog!(
+                    "nexus",
+                    "source sanity: could not record the import source for key={:?}: {error}",
+                    key
+                );
+                continue;
+            }
+            if !entries.is_empty()
+                && let Err(error) = store.put_torrent_import_entries(&key, &entries)
+            {
+                crate::nexus::log::clog!(
+                    "nexus",
+                    "source sanity: could not record file entries for key={:?}: {error}",
+                    key
+                );
+            }
+            if let Some(descriptor) = descriptor
+                && let Err(error) = store.put_torrent_import_descriptor(&key, &descriptor)
+            {
+                crate::nexus::log::clog!(
+                    "nexus",
+                    "source sanity: could not persist the descriptor for key={:?}: {error}",
+                    key
+                );
+            }
+            let _ = crate::nexus::linked_source_store::remove(&handle);
+            converted = true;
+        }
+        if converted {
+            // Either worker can now pick this collection up: with entries
+            // already known it goes straight to acquiring, otherwise the
+            // torrent worker resolves the magnet first exactly as it would
+            // for any freshly imported one.
+            torrents.notify_one();
+        }
+    }
 }
 
 /// One collection's transfer history, packed for the bridge.
@@ -3696,6 +3905,253 @@ mod tests {
             "a missing zero-copy source must not be reported as available"
         );
         reopened.close().await;
+    }
+
+    /// The user-facing bug this guards: a collection created from local
+    /// media whose source file is later deleted, moved, or renamed must not
+    /// stay silently unseedable forever. Once this device can no longer read
+    /// its own copy, the collection converts into an ordinary receiver
+    /// download of the exact content it had already published — the same
+    /// path any other unfinished torrent import takes, not a new state.
+    #[tokio::test]
+    async fn a_deleted_local_source_converts_its_collection_into_a_normal_download() {
+        let scratch = Scratch::new("source-sanity-deleted");
+        let source = scratch.0.join("episode.mp4");
+        std::fs::write(&source, b"episode").expect("writes source");
+        let nexus = open(&scratch);
+
+        let collection = nexus
+            .command(&Command::CreateCollection {
+                name: "Episodes".to_owned(),
+                files: vec![LocalFile {
+                    name: "episode.mp4".to_owned(),
+                    path: source.clone(),
+                    bytes: 7,
+                }],
+            })
+            .expect("creates the local collection")
+            .collection
+            .expect("names the collection");
+        let key = nexus.collection_key(collection).expect("collection key");
+        let stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("collection exists");
+        // Simulate a collection that already finished publishing and is
+        // actively seeding — the state a real one reaches once the
+        // publisher's own worker (tested separately) succeeds.
+        nexus
+            .store
+            .put_collection(
+                &key,
+                &StoredCollection {
+                    lifecycle: StoredLifecycle::NativePublished {
+                        activity: StoredActivity::Running,
+                    },
+                    substrate_handle: Some("66".repeat(20)),
+                    ..stored
+                },
+            )
+            .expect("records a published, seeding owner collection");
+
+        std::fs::remove_file(&source).expect("the source disappears underneath the app");
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let stored = nexus
+                    .store
+                    .collection(&key)
+                    .ok()
+                    .flatten()
+                    .expect("collection remains durable");
+                if stored.sources.is_empty() && stored.substrate_handle.is_none() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("the sanity worker converts the collection instead of leaving it stuck");
+
+        let converted = nexus
+            .store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("collection exists");
+        assert!(
+            !matches!(converted.lifecycle, StoredLifecycle::NativeDraft),
+            "a converted collection is being downloaded back, never a private draft nobody has seen"
+        );
+        assert_eq!(
+            nexus.store.torrent_import(&key).expect("reads import"),
+            Some(format!("magnet:?xt=urn:btih:{}", "66".repeat(20))),
+            "the exact content already published becomes what is downloaded back"
+        );
+
+        nexus.close().await;
+    }
+
+    /// Same conversion, but with the collection's own resolved file list
+    /// already known (the durable record publishing itself wrote) — this is
+    /// what most real owner collections look like, so the converted row
+    /// goes straight to acquiring rather than re-resolving a magnet it
+    /// already has every answer for.
+    #[tokio::test]
+    async fn a_deleted_local_source_with_a_known_file_list_skips_straight_to_acquiring() {
+        let _state = crate::nexus::paths::redirect_to_temp();
+        let scratch = Scratch::new("source-sanity-deleted-known-files");
+        let source = scratch.0.join("episode.mp4");
+        std::fs::write(&source, b"episode").expect("writes source");
+        let nexus = open(&scratch);
+
+        let collection = nexus
+            .command(&Command::CreateCollection {
+                name: "Episodes".to_owned(),
+                files: vec![LocalFile {
+                    name: "episode.mp4".to_owned(),
+                    path: source.clone(),
+                    bytes: 7,
+                }],
+            })
+            .expect("creates the local collection")
+            .collection
+            .expect("names the collection");
+        let key = nexus.collection_key(collection).expect("collection key");
+        let stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("collection exists");
+        let handle = "88".repeat(20);
+        nexus
+            .store
+            .put_collection(
+                &key,
+                &StoredCollection {
+                    lifecycle: StoredLifecycle::NativePublished {
+                        activity: StoredActivity::Running,
+                    },
+                    substrate_handle: Some(handle.clone()),
+                    ..stored
+                },
+            )
+            .expect("records a published, seeding owner collection");
+        // What `publish_collection_sources` itself would have already
+        // written: the exact file list and descriptor this device offered.
+        crate::nexus::linked_source_store::upsert(
+            crate::nexus::linked_source_store::LinkedSourceRecord {
+                info_hash: handle.clone(),
+                torrent_bytes: b"torrent descriptor".to_vec(),
+                sources: vec![crate::nexus::torrent::SourceFile {
+                    name: "episode.mp4".to_owned(),
+                    path: source.to_string_lossy().into_owned(),
+                    length_bytes: Some(7),
+                }],
+                allow_missing_files: false,
+            },
+        )
+        .expect("records the published sources");
+
+        std::fs::remove_file(&source).expect("the source disappears underneath the app");
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if !nexus
+                    .store
+                    .torrent_import_entries(&key)
+                    .unwrap_or_default()
+                    .is_empty()
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("the sanity worker records the already-known file list, not just the magnet");
+
+        let entries = nexus
+            .store
+            .torrent_import_entries(&key)
+            .expect("reads entries");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].label, "episode.mp4");
+        assert!(
+            entries[0].selected,
+            "the whole known collection is wanted back"
+        );
+        assert_eq!(
+            nexus
+                .store
+                .torrent_import_descriptor(&key)
+                .expect("reads descriptor"),
+            Some(b"torrent descriptor".to_vec()),
+            "the exact descriptor already published carries over rather than needing a fresh inspect"
+        );
+
+        nexus.close().await;
+    }
+
+    #[tokio::test]
+    async fn a_paused_owner_collection_with_a_missing_source_is_left_alone() {
+        let scratch = Scratch::new("source-sanity-paused");
+        let source = scratch.0.join("episode.mp4");
+        std::fs::write(&source, b"episode").expect("writes source");
+        let nexus = open(&scratch);
+
+        let collection = nexus
+            .command(&Command::CreateCollection {
+                name: "Episodes".to_owned(),
+                files: vec![LocalFile {
+                    name: "episode.mp4".to_owned(),
+                    path: source.clone(),
+                    bytes: 7,
+                }],
+            })
+            .expect("creates the local collection")
+            .collection
+            .expect("names the collection");
+        let key = nexus.collection_key(collection).expect("collection key");
+        let stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("collection exists");
+        nexus
+            .store
+            .put_collection(
+                &key,
+                &StoredCollection {
+                    lifecycle: StoredLifecycle::NativePublished {
+                        activity: StoredActivity::Paused,
+                    },
+                    substrate_handle: Some("77".repeat(20)),
+                    ..stored
+                },
+            )
+            .expect("records a paused, seeding owner collection");
+
+        std::fs::remove_file(&source).expect("the source disappears underneath the app");
+
+        // A person's pause is a decision, not a stall to fix. Give the
+        // sanity worker several ticks to (not) act, rather than asserting
+        // on its very first pass — a false pass on tick one would still be
+        // wrong the moment a later tick converted it regardless.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let untouched = nexus
+            .store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("collection exists");
+        assert!(
+            !untouched.sources.is_empty(),
+            "a paused collection's own decision must not be overridden by a missing source"
+        );
+        assert_eq!(untouched.substrate_handle, Some("77".repeat(20)));
+
+        nexus.close().await;
     }
 
     #[tokio::test]
