@@ -243,21 +243,6 @@ pub struct StatusFacts<'a> {
 }
 
 impl<'a> StatusFacts<'a> {
-    /// Begins with durable intent and no engine observation. Callers fill the
-    /// observed fields they actually know using struct update syntax.
-    #[must_use]
-    pub const fn from_lifecycle(lifecycle: crate::nexus::core::lifecycle::Lifecycle) -> Self {
-        Self {
-            lifecycle,
-            completed: false,
-            carried: false,
-            publishing: false,
-            importing: false,
-            locally_complete: false,
-            live: None,
-        }
-    }
-
     /// Builds the persisted half of the status facts identically for startup,
     /// command refreshes, and torrent metadata updates. A live engine reading
     /// may refine the answer, but no production path gets to reinterpret the

@@ -80,4 +80,17 @@ mod tests {
 
         assert_eq!(identity.device_id(), restored.device_id());
     }
+
+    /// Debug and Display both render the same identity distinguishably —
+    /// Debug as a short, typed prefix for logs, Display as the full hex a
+    /// person compares against another device's.
+    #[test]
+    fn debug_and_display_both_render_the_hex_device_id() {
+        let identity = DeviceIdentity::from_bytes(&[7_u8; 32]);
+        let id = identity.device_id();
+        let hex = id.to_hex();
+
+        assert_eq!(format!("{id}"), hex);
+        assert_eq!(format!("{id:?}"), format!("DeviceId({}…)", &hex[..8]));
+    }
 }
