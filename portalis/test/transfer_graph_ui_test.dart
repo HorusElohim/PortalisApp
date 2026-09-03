@@ -353,4 +353,83 @@ void main() {
     expect(find.text('SEEDING'), findsOneWidget);
     expect(find.text('RECEIVING SPEED'), findsNothing);
   });
+
+  group('compressedPositions', () {
+    test('a long idle gap does not dominate the axis', () {
+      final start = DateTime(2026, 9, 2, 21, 52, 51);
+      // A short burst of samples half a second apart, then the app is
+      // reopened twelve hours later for one more sample — exactly the
+      // reported "closed overnight" shape.
+      final points = [
+        TransferPoint(
+          at: start,
+          downBytesPerSecond: 1000000,
+          upBytesPerSecond: 0,
+        ),
+        TransferPoint(
+          at: start.add(const Duration(milliseconds: 500)),
+          downBytesPerSecond: 30000000,
+          upBytesPerSecond: 0,
+        ),
+        TransferPoint(
+          at: start.add(const Duration(seconds: 1)),
+          downBytesPerSecond: 5000000,
+          upBytesPerSecond: 0,
+        ),
+        TransferPoint(
+          at: start.add(const Duration(hours: 12)),
+          downBytesPerSecond: 1000,
+          upBytesPerSecond: 0,
+        ),
+      ];
+
+      final positions = compressedPositions(points);
+
+      expect(positions, hasLength(4));
+      expect(positions.first, 0.0);
+      expect(positions.last, 1.0);
+      // The burst (points 0-2, one real second) must occupy a readable
+      // fraction of the axis, not the ~1/43200 a linear twelve-hour axis
+      // would give it.
+      expect(positions[2], greaterThan(0.3));
+    });
+
+    test('gaps under the cap remain linear, matching the uncompressed axis',
+        () {
+      final start = DateTime(2026, 1, 1);
+      final points = [
+        TransferPoint(at: start, downBytesPerSecond: 1, upBytesPerSecond: 0),
+        TransferPoint(
+          at: start.add(const Duration(seconds: 30)),
+          downBytesPerSecond: 1,
+          upBytesPerSecond: 0,
+        ),
+        TransferPoint(
+          at: start.add(const Duration(seconds: 60)),
+          downBytesPerSecond: 1,
+          upBytesPerSecond: 0,
+        ),
+      ];
+
+      final positions = compressedPositions(points);
+
+      expect(positions, [0.0, 0.5, 1.0]);
+    });
+
+    test('a single point sits at the right edge', () {
+      final points = [
+        TransferPoint(
+          at: DateTime(2026, 1, 1),
+          downBytesPerSecond: 1,
+          upBytesPerSecond: 0,
+        ),
+      ];
+
+      expect(compressedPositions(points), [1.0]);
+    });
+
+    test('no points produces no positions', () {
+      expect(compressedPositions(const []), isEmpty);
+    });
+  });
 }

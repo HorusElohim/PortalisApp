@@ -4,6 +4,64 @@ import 'package:flutter/material.dart';
 import 'package:portalis/design/formatters.dart';
 import 'package:portalis/design/theme.dart';
 
+/// The x-axis position (0 to 1) for each point in [points], compressing any
+/// gap between consecutive samples that is disproportionately larger than
+/// the collection's typical sample spacing.
+///
+/// A collection recorded actively for a while and then sat paused or
+/// disconnected for hours — closing and reopening the app the next day is
+/// the common case — before another burst of real activity. The receive
+/// history spans that whole wall-clock range, but a purely linear time axis
+/// then squeezes every meaningful sample from an active burst into a sliver
+/// of pixels beside a mostly-empty multi-hour idle band, which is exactly
+/// what makes the chart unreadable.
+///
+/// The cap is relative rather than a fixed duration, because "normal"
+/// spacing differs by an order of magnitude between a live poll (roughly
+/// half a second) and history that has already been aggregated. A gap more
+/// than [capMultiplier] times the median gap in this exact history is
+/// treated as idle and compressed down to that multiple; everything else
+/// — including a session with uniformly wide but genuinely regular spacing
+/// — is left exactly linear.
+List<double> compressedPositions(
+  List<TransferPoint> points, {
+  double capMultiplier = 2,
+}) {
+  if (points.isEmpty) return const [];
+  if (points.length == 1) return const [1.0];
+  final gaps = <int>[
+    for (var index = 1; index < points.length; index++)
+      math.max(
+        0,
+        points[index].at.difference(points[index - 1].at).inMicroseconds,
+      ),
+  ];
+  final sorted = [...gaps]..sort();
+  final mid = sorted.length ~/ 2;
+  final median = sorted.length.isOdd
+      ? sorted[mid]
+      : ((sorted[mid - 1] + sorted[mid]) / 2).round();
+  // A median of zero means most samples landed together in time (or this is
+  // too short a history to have a meaningful "typical" spacing) — nothing
+  // to compress relative to, so every gap passes through unchanged.
+  final threshold =
+      median > 0 ? (median * capMultiplier).round() : double.maxFinite.toInt();
+  final effective = <int>[0];
+  for (final gap in gaps) {
+    effective.add(effective.last + math.min(gap, threshold));
+  }
+  final total = effective.last;
+  if (total <= 0) {
+    // Every sample landed at (or before) the same instant: spread them
+    // evenly rather than dividing by zero.
+    return [
+      for (var index = 0; index < points.length; index++)
+        index / (points.length - 1),
+    ];
+  }
+  return [for (final value in effective) value / total];
+}
+
 /// A point in the transfer history shown by [TransferGraph].
 class TransferPoint {
   const TransferPoint({
@@ -577,22 +635,18 @@ class _InteractiveTransferChartState extends State<_InteractiveTransferChart> {
   void _selectAt(double dx, double width) {
     final points = widget.points;
     if (points.isEmpty || width <= 0) return;
-    final span = widget.endedAt.difference(widget.startedAt).inMicroseconds;
+    final positions = compressedPositions(points);
     final fraction = (dx / width).clamp(0.0, 1.0);
-    final target = span <= 0
-        ? widget.startedAt
-        : widget.startedAt
-            .add(Duration(microseconds: (span * fraction).round()));
-    var nearest = points.first;
-    var nearestGap = (nearest.at.difference(target)).abs();
-    for (final point in points.skip(1)) {
-      final gap = (point.at.difference(target)).abs();
+    var nearestIndex = 0;
+    var nearestGap = (positions[0] - fraction).abs();
+    for (var index = 1; index < positions.length; index++) {
+      final gap = (positions[index] - fraction).abs();
       if (gap < nearestGap) {
-        nearest = point;
+        nearestIndex = index;
         nearestGap = gap;
       }
     }
-    setState(() => _selected = nearest);
+    setState(() => _selected = points[nearestIndex]);
   }
 
   void _clear() => setState(() => _selected = null);
@@ -704,17 +758,15 @@ class _TransferGraphPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
     }
 
-    final duration = endedAt.difference(startedAt).inMicroseconds;
-    final span = duration <= 0 ? 1 : duration;
+    final positions = compressedPositions(history);
 
     if (history.any((point) => point.downBytesPerSecond > 0)) {
       _drawSeries(
         canvas,
         size,
         history,
+        positions,
         maxRate,
-        span,
-        startedAt,
         top,
         bottom,
         color,
@@ -727,9 +779,8 @@ class _TransferGraphPainter extends CustomPainter {
         canvas,
         size,
         history,
+        positions,
         maxRate,
-        span,
-        startedAt,
         top,
         bottom,
         AppColors.signalSoft,
@@ -742,9 +793,8 @@ class _TransferGraphPainter extends CustomPainter {
     Canvas canvas,
     Size size,
     List<TransferPoint> points,
+    List<double> positions,
     int scale,
-    int span,
-    DateTime start,
     double top,
     double bottom,
     Color color,
@@ -755,10 +805,7 @@ class _TransferGraphPainter extends CustomPainter {
     final offsets = <Offset>[];
     for (var index = 0; index < points.length; index++) {
       final point = points[index];
-      final elapsed = point.at.difference(start).inMicroseconds;
-      final x = points.length == 1
-          ? size.width
-          : (size.width * elapsed / span).clamp(0.0, size.width);
+      final x = (size.width * positions[index]).clamp(0.0, size.width);
       final normalized = _logarithmicRate(
         rate(point),
         maxRate: scale,
@@ -806,10 +853,7 @@ class _TransferGraphPainter extends CustomPainter {
     canvas.drawPath(path, paint);
 
     final last = points.last;
-    final lastElapsed = last.at.difference(start).inMicroseconds;
-    final lastX = points.length == 1
-        ? size.width
-        : (size.width * lastElapsed / span).clamp(0.0, size.width);
+    final lastX = (size.width * positions.last).clamp(0.0, size.width);
     final lastRate = _logarithmicRate(
       rate(last),
       maxRate: scale,
