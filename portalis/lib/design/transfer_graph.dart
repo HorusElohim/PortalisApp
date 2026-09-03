@@ -26,9 +26,30 @@ import 'package:portalis/design/theme.dart';
 List<double> compressedPositions(
   List<TransferPoint> points, {
   double capMultiplier = 2,
+}) =>
+    _compressedAxis(points, capMultiplier: capMultiplier).positions;
+
+class _CompressedAxis {
+  const _CompressedAxis({required this.positions, required this.idleAfter});
+
+  /// The x-axis position (0 to 1) for each input point, in order.
+  final List<double> positions;
+
+  /// Whether the gap between point `i` and point `i + 1` was classified as
+  /// idle (and therefore compressed). One entry shorter than [positions].
+  final List<bool> idleAfter;
+}
+
+_CompressedAxis _compressedAxis(
+  List<TransferPoint> points, {
+  double capMultiplier = 2,
 }) {
-  if (points.isEmpty) return const [];
-  if (points.length == 1) return const [1.0];
+  if (points.isEmpty) {
+    return const _CompressedAxis(positions: [], idleAfter: []);
+  }
+  if (points.length == 1) {
+    return const _CompressedAxis(positions: [1.0], idleAfter: []);
+  }
   final gaps = <int>[
     for (var index = 1; index < points.length; index++)
       math.max(
@@ -43,23 +64,104 @@ List<double> compressedPositions(
       : ((sorted[mid - 1] + sorted[mid]) / 2).round();
   // A median of zero means most samples landed together in time (or this is
   // too short a history to have a meaningful "typical" spacing) — nothing
-  // to compress relative to, so every gap passes through unchanged.
-  final threshold =
-      median > 0 ? (median * capMultiplier).round() : double.maxFinite.toInt();
+  // to compress relative to, so every gap passes through unchanged and none
+  // is classified idle.
+  final threshold = median > 0 ? (median * capMultiplier).round() : null;
+  final idleAfter = <bool>[
+    for (final gap in gaps) threshold != null && gap > threshold,
+  ];
   final effective = <int>[0];
   for (final gap in gaps) {
-    effective.add(effective.last + math.min(gap, threshold));
+    final capped = threshold == null ? gap : math.min(gap, threshold);
+    effective.add(effective.last + capped);
   }
   final total = effective.last;
   if (total <= 0) {
     // Every sample landed at (or before) the same instant: spread them
     // evenly rather than dividing by zero.
-    return [
-      for (var index = 0; index < points.length; index++)
-        index / (points.length - 1),
-    ];
+    return _CompressedAxis(
+      positions: [
+        for (var index = 0; index < points.length; index++)
+          index / (points.length - 1),
+      ],
+      idleAfter: idleAfter,
+    );
   }
-  return [for (final value in effective) value / total];
+  return _CompressedAxis(
+    positions: [for (final value in effective) value / total],
+    idleAfter: idleAfter,
+  );
+}
+
+/// Whether an inserted zero-rate marker denotes the real moment on either
+/// side of a compressed idle gap where activity actually stopped or
+/// resumed. A real recorded sample always carries [none].
+enum TransferIdleBoundary { none, stopped, resumed }
+
+/// The exact points and axis positions a chart should draw and let a
+/// person select — [points] plus an explicit zero-rate marker spliced in on
+/// each side of every compressed idle gap.
+class TransferChartSeries {
+  const TransferChartSeries({required this.points, required this.positions});
+
+  final List<TransferPoint> points;
+  final List<double> positions;
+}
+
+/// Builds [TransferChartSeries] for [points].
+///
+/// [compressedPositions] alone shrinks an idle gap's width on the axis, but
+/// the line between the two real samples bounding it is still a straight
+/// interpolation between whatever rates they happened to record — so a
+/// receive burst that trails off and later resumes reads as one continuous
+/// decline-then-incline, with no way to tell where activity actually
+/// stopped from where it merely looks that way on a compressed axis.
+/// Splicing an explicit zero-rate sample at each real boundary timestamp
+/// turns that into a visible notch: the line drops straight to zero at the
+/// real "last real reading" instant, stays there across the (compressed)
+/// idle span, then rises straight back up at the real "next real reading"
+/// instant — and because each marker keeps its own genuine timestamp,
+/// pressing anywhere on the flat span answers exactly when it stopped and
+/// when it resumed, instead of leaving that guessed from pixel position in
+/// a multi-hour gap.
+TransferChartSeries transferChartSeries(
+  List<TransferPoint> points, {
+  double capMultiplier = 2,
+}) {
+  final axis = _compressedAxis(points, capMultiplier: capMultiplier);
+  if (points.length < 2) {
+    return TransferChartSeries(points: points, positions: axis.positions);
+  }
+  final expandedPoints = <TransferPoint>[points.first];
+  final expandedPositions = <double>[axis.positions.first];
+  for (var index = 1; index < points.length; index++) {
+    if (axis.idleAfter[index - 1]) {
+      expandedPoints.add(
+        TransferPoint(
+          at: points[index - 1].at,
+          downBytesPerSecond: 0,
+          upBytesPerSecond: 0,
+          idleBoundary: TransferIdleBoundary.stopped,
+        ),
+      );
+      expandedPositions.add(axis.positions[index - 1]);
+      expandedPoints.add(
+        TransferPoint(
+          at: points[index].at,
+          downBytesPerSecond: 0,
+          upBytesPerSecond: 0,
+          idleBoundary: TransferIdleBoundary.resumed,
+        ),
+      );
+      expandedPositions.add(axis.positions[index]);
+    }
+    expandedPoints.add(points[index]);
+    expandedPositions.add(axis.positions[index]);
+  }
+  return TransferChartSeries(
+    points: expandedPoints,
+    positions: expandedPositions,
+  );
 }
 
 /// A point in the transfer history shown by [TransferGraph].
@@ -68,11 +170,16 @@ class TransferPoint {
     required this.at,
     required this.downBytesPerSecond,
     required this.upBytesPerSecond,
+    this.idleBoundary = TransferIdleBoundary.none,
   });
 
   final DateTime at;
   final int downBytesPerSecond;
   final int upBytesPerSecond;
+
+  /// [TransferIdleBoundary.none] for every real recorded sample. Only a
+  /// marker spliced in by [transferChartSeries] carries a different value.
+  final TransferIdleBoundary idleBoundary;
 }
 
 String _formatTransferDateTime(DateTime value) =>
@@ -633,9 +740,10 @@ class _InteractiveTransferChartState extends State<_InteractiveTransferChart> {
   TransferPoint? _selected;
 
   void _selectAt(double dx, double width) {
-    final points = widget.points;
+    final series = transferChartSeries(widget.points);
+    final points = series.points;
     if (points.isEmpty || width <= 0) return;
-    final positions = compressedPositions(points);
+    final positions = series.positions;
     final fraction = (dx / width).clamp(0.0, 1.0);
     var nearestIndex = 0;
     var nearestGap = (positions[0] - fraction).abs();
@@ -717,8 +825,13 @@ class _TransferGraphTooltip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              '${formatRate(point.downBytesPerSecond)} down'
-              '${point.upBytesPerSecond > 0 ? ' · ${formatRate(point.upBytesPerSecond)} up' : ''}',
+              switch (point.idleBoundary) {
+                TransferIdleBoundary.stopped => 'STOPPED',
+                TransferIdleBoundary.resumed => 'RESUMED',
+                TransferIdleBoundary.none =>
+                  '${formatRate(point.downBytesPerSecond)} down'
+                      '${point.upBytesPerSecond > 0 ? ' · ${formatRate(point.upBytesPerSecond)} up' : ''}',
+              },
               style: monoLabel(size: 10, color: color, letterSpacing: 0),
             ),
             Text(
@@ -758,13 +871,15 @@ class _TransferGraphPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
     }
 
-    final positions = compressedPositions(history);
+    final series = transferChartSeries(history);
+    final points = series.points;
+    final positions = series.positions;
 
     if (history.any((point) => point.downBytesPerSecond > 0)) {
       _drawSeries(
         canvas,
         size,
-        history,
+        points,
         positions,
         maxRate,
         top,
@@ -778,7 +893,7 @@ class _TransferGraphPainter extends CustomPainter {
       _drawSeries(
         canvas,
         size,
-        history,
+        points,
         positions,
         maxRate,
         top,

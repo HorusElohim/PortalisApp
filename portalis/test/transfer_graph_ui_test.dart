@@ -432,4 +432,103 @@ void main() {
       expect(compressedPositions(const []), isEmpty);
     });
   });
+
+  group('transferChartSeries', () {
+    test('splices a stopped/resumed marker pair across an idle gap', () {
+      final start = DateTime(2026, 9, 2, 21, 52, 51);
+      final lastReal = start.add(const Duration(seconds: 1));
+      final resumedAt = start.add(const Duration(hours: 12));
+      final points = [
+        TransferPoint(
+          at: start,
+          downBytesPerSecond: 1000000,
+          upBytesPerSecond: 0,
+        ),
+        TransferPoint(
+          at: start.add(const Duration(milliseconds: 500)),
+          downBytesPerSecond: 30000000,
+          upBytesPerSecond: 0,
+        ),
+        TransferPoint(
+          at: lastReal,
+          downBytesPerSecond: 5000000,
+          upBytesPerSecond: 0,
+        ),
+        TransferPoint(
+          at: resumedAt,
+          downBytesPerSecond: 1000,
+          upBytesPerSecond: 0,
+        ),
+      ];
+
+      final series = transferChartSeries(points);
+
+      // Two zero-rate markers inserted between the burst and the reopened
+      // session: one at the real last-active timestamp, one at the real
+      // resumed timestamp.
+      expect(series.points, hasLength(points.length + 2));
+      expect(series.positions, hasLength(series.points.length));
+
+      final stopped = series.points[3];
+      expect(stopped.idleBoundary, TransferIdleBoundary.stopped);
+      expect(stopped.at, lastReal);
+      expect(stopped.downBytesPerSecond, 0);
+      expect(stopped.upBytesPerSecond, 0);
+
+      final resumed = series.points[4];
+      expect(resumed.idleBoundary, TransferIdleBoundary.resumed);
+      expect(resumed.at, resumedAt);
+      expect(resumed.downBytesPerSecond, 0);
+      expect(resumed.upBytesPerSecond, 0);
+
+      // The real samples keep their real rates and carry no boundary flag.
+      expect(series.points[2].idleBoundary, TransferIdleBoundary.none);
+      expect(series.points[2].downBytesPerSecond, 5000000);
+      expect(series.points[5].idleBoundary, TransferIdleBoundary.none);
+      expect(series.points[5].downBytesPerSecond, 1000);
+
+      // Both markers sit at their real axis positions — the stopped marker
+      // matches the last real sample's compressed x, the resumed marker
+      // matches the next real sample's.
+      expect(series.positions[3], series.positions[2]);
+      expect(series.positions[4], series.positions[5]);
+    });
+
+    test('uniformly spaced history gets no markers at all', () {
+      final start = DateTime(2026, 1, 1);
+      final points = [
+        TransferPoint(at: start, downBytesPerSecond: 1, upBytesPerSecond: 0),
+        TransferPoint(
+          at: start.add(const Duration(seconds: 30)),
+          downBytesPerSecond: 1,
+          upBytesPerSecond: 0,
+        ),
+        TransferPoint(
+          at: start.add(const Duration(seconds: 60)),
+          downBytesPerSecond: 1,
+          upBytesPerSecond: 0,
+        ),
+      ];
+
+      final series = transferChartSeries(points);
+
+      expect(series.points, points);
+      expect(series.positions, [0.0, 0.5, 1.0]);
+    });
+
+    test('a single point produces no markers', () {
+      final points = [
+        TransferPoint(
+          at: DateTime(2026, 1, 1),
+          downBytesPerSecond: 1,
+          upBytesPerSecond: 0,
+        ),
+      ];
+
+      final series = transferChartSeries(points);
+
+      expect(series.points, points);
+      expect(series.positions, [1.0]);
+    });
+  });
 }
