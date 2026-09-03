@@ -118,6 +118,31 @@ app is signed but not notarized — still shows a one-time Gatekeeper warning
 (right-click → Open bypasses it) but is otherwise usable. Signing alone is
 worth having even before notarization is wired up.
 
+### Extracting the macOS artifact — important
+
+The CI artifact is a `.zip` file **containing another zip
+(`portalis-macos.zip`)** — GitHub always wraps whatever you upload in its
+own outer zip, so an `.app` bundle downloaded from the Actions UI needs two
+extraction steps, not one.
+
+**Do not** drag `portalis-macos.zip` to the Desktop and just double-click
+it if Finder auto-extracted the outer GitHub zip into a bare `Contents/`
+folder already — that flattening is exactly the earlier bug (framework
+symlinks turned into duplicate real files, causing the `objc[...]: Class X
+is implemented in both A and B` crash). Instead:
+
+1. Download the artifact zip from the Actions run page.
+2. Double-click it once in Finder (or `unzip`) — this produces
+   `portalis-macos.zip`, not `portalis.app` directly.
+3. Double-click `portalis-macos.zip` **once more** — *this* extraction step
+   is the one `ditto` created, and Finder's Archive Utility preserves the
+   framework symlinks correctly. This one produces the real `portalis.app`.
+4. Run `portalis.app` from wherever it landed — do not run it from inside
+   `Contents/MacOS/portalis` directly by path (as in
+   `/Users/you/Downloads/Contents/MacOS/portalis`); that path shape is the
+   tell that step 3 above did not happen and you are looking at a
+   flattened, broken extraction.
+
 ## Linux / Windows
 
 Both already build unsigned artifacts in CI (`linux`/`windows` jobs) — no

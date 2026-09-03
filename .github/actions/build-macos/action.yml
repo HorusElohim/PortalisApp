@@ -132,10 +132,37 @@ runs:
         [[ -n "${{ steps.signing.outputs.keychain }}" ]] && security delete-keychain "${{ steps.signing.outputs.keychain }}" || true
         rm -rf "$HOME/.appstoreconnect"
 
+    - name: Package the .app as a single ditto-created zip
+      id: package
+      shell: bash
+      working-directory: ${{ inputs.working-dir }}
+      # A .app is a directory full of symlinks — every framework inside
+      # Contents/Frameworks carries a `Versions/Current -> A` symlink and a
+      # top-level binary symlink into it (mpv.framework has both). Handing
+      # the raw directory to actions/upload-artifact lets its own archiver
+      # zip it, which does not reliably preserve those symlinks: on
+      # download a symlink can come back as a second, independent copy of
+      # the real file it pointed at. dyld then loads the framework's
+      # binary twice under two different paths, registers every Objective-C
+      # class in it twice ("Class X is implemented in both A and B"), and
+      # the resulting undefined behavior is exactly the shadow-config
+      # assertion crash reported when actually running the artifact.
+      # `ditto -c -k --keepParent` is Apple's own tool for this exact job —
+      # it is what Xcode itself uses to zip a .app for notarization/export —
+      # and correctly preserves symlinks, resource forks, and code
+      # signatures. Zipping ourselves and uploading one file, rather than a
+      # directory tree, is the fix.
+      run: |
+        set -euo pipefail
+        app="build/macos/Build/Products/Release/portalis.app"
+        zip_name="portalis-macos.zip"
+        ditto -c -k --keepParent "$app" "$zip_name"
+        echo "zip_path=${{ inputs.working-dir }}/$zip_name" >> "$GITHUB_OUTPUT"
+
     - name: Upload macOS app
       uses: actions/upload-artifact@v6
       with:
         name: >-
           Portalis-${{ steps.setup.outputs.backend-version }}-macOS-${{ steps.setup.outputs.app-version }}-${{ steps.meta.outputs.short_sha }}-release${{ steps.signing.outputs.has_cert == 'true' && '-notarized' || '-unsigned' }}
-        path: ${{ inputs.working-dir }}/build/macos/Build/Products/Release/portalis.app
+        path: ${{ steps.package.outputs.zip_path }}
         retention-days: 1
