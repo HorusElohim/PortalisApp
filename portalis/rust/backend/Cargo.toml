@@ -43,6 +43,19 @@ portalis-nexus-protocol = { path = "crates/protocol" }
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
+# Not tuned before this point — Cargo's defaults were codegen-units=16 (fast,
+# less-optimized compiles) and no LTO/stripping, which cost the shipped
+# native library both size and runtime speed for no compile-time benefit CI
+# actually needs. `panic = "abort"` is deliberately NOT set here: flutter_rust
+# _bridge's generated handler (frb_generated_default_handler!()) relies on
+# Rust's unwind-based panic catching to turn a panic inside any bridge call
+# into a catchable Dart-side error. Aborting on panic would take down the
+# whole native process instead of failing one operation.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
 [workspace.lints.clippy]
 all = "warn"
 pedantic = "warn"
