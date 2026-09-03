@@ -875,6 +875,10 @@ class _TransferGraphPainter extends CustomPainter {
     final points = series.points;
     final positions = series.positions;
 
+    // Draw idle-band labels (centered in each compressed gap) before the
+    // series so they sit behind the flat line.
+    _drawIdleBandLabels(canvas, size, points, positions, top, bottom);
+
     if (history.any((point) => point.downBytesPerSecond > 0)) {
       _drawSeries(
         canvas,
@@ -901,6 +905,56 @@ class _TransferGraphPainter extends CustomPainter {
         AppColors.signalSoft,
         (point) => point.upBytesPerSecond,
       );
+    }
+  }
+
+  void _drawIdleBandLabels(
+    Canvas canvas,
+    Size size,
+    List<TransferPoint> points,
+    List<double> positions,
+    double top,
+    double bottom,
+  ) {
+    // Find compressed gaps: a stopped marker followed by a resumed marker.
+    // They always come in pairs with the same x-position span.
+    for (var index = 1; index < points.length; index++) {
+      if (points[index - 1].idleBoundary == TransferIdleBoundary.stopped &&
+          points[index].idleBoundary == TransferIdleBoundary.resumed) {
+        final startX = (size.width * positions[index - 1]).clamp(0.0, size.width);
+        final endX = (size.width * positions[index]).clamp(0.0, size.width);
+        final gapWidth = endX - startX;
+        // Only label gaps wide enough to be readable.
+        if (gapWidth < 40) continue;
+
+        final duration = points[index].at.difference(points[index - 1].at);
+        final label = _durationLabel(duration);
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: 'IDLE $label',
+            style: TextStyle(
+              fontSize: 9,
+              color: AppColors.textGhost,
+              fontFamily: 'monospace',
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        textPainter.layout();
+        final labelX = startX + (gapWidth - textPainter.width) / 2;
+        final labelY = (top + bottom) / 2 - textPainter.height / 2;
+        // Semi-transparent background for contrast over the grid.
+        canvas.drawRect(
+          Rect.fromLTWH(
+            labelX - 4,
+            labelY - 2,
+            textPainter.width + 8,
+            textPainter.height + 4,
+          ),
+          Paint()..color = AppColors.surface.withValues(alpha: 0.7),
+        );
+        textPainter.paint(canvas, Offset(labelX, labelY));
+      }
     }
   }
 
