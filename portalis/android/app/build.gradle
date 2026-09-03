@@ -58,6 +58,15 @@ android {
             // present; otherwise signs with the debug keys so `flutter build
             // apk --release` and `flutter run --release` still work.
             signingConfig = hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
+            // Unset before this point: the release APK shipped every class
+            // and every resource from every dependency verbatim, unshrunk.
+            // shrinkResources requires minifyEnabled — see proguard-rules.pro
+            // for what's kept beyond R8's own defaults (JNI native methods,
+            // and every plugin's own bundled consumer-rules.pro, are already
+            // covered automatically and don't need duplicating here).
+            minifyEnabled = true
+            shrinkResources = true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
 }
