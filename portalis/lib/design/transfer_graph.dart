@@ -921,7 +921,8 @@ class _TransferGraphPainter extends CustomPainter {
     for (var index = 1; index < points.length; index++) {
       if (points[index - 1].idleBoundary == TransferIdleBoundary.stopped &&
           points[index].idleBoundary == TransferIdleBoundary.resumed) {
-        final startX = (size.width * positions[index - 1]).clamp(0.0, size.width);
+        final startX =
+            (size.width * positions[index - 1]).clamp(0.0, size.width);
         final endX = (size.width * positions[index]).clamp(0.0, size.width);
         final gapWidth = endX - startX;
         // Only label gaps wide enough to be readable.
