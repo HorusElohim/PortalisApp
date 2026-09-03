@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Export options for an App Store Connect (TestFlight) archive upload.
+  destination: upload — hands the .ipa straight to App Store Connect during
+  `xcodebuild -exportArchive` rather than only writing it to disk, so no
+  separate altool/Transporter step is needed.
+-->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>teamID</key>
+	<string>BLJKHVH3A8</string>
+	<key>destination</key>
+	<string>upload</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>uploadBitcode</key>
+	<false/>
+</dict>
+</plist>

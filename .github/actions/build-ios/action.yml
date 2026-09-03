@@ -1,10 +1,27 @@
 name: Build iOS (Portalis)
-description: Build iOS Runner.app (device, unsigned) and upload artifact
+description: >-
+  Build, sign, and upload a Runner.app/.ipa to TestFlight. Falls back to an
+  unsigned device build when no App Store Connect API key is configured, so
+  this action stays useful on forks/PRs that cannot see repo secrets.
 inputs:
   working-dir:
     description: Path to Flutter project
     required: false
     default: portalis
+  asc-api-key-base64:
+    description: >-
+      Base64-encoded App Store Connect API key (.p8). Empty skips signing
+      and TestFlight upload, producing only the unsigned device artifact.
+    required: false
+    default: ''
+  asc-api-key-id:
+    description: App Store Connect API key ID
+    required: false
+    default: ''
+  asc-api-issuer-id:
+    description: App Store Connect API issuer ID (UUID)
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -28,14 +45,107 @@ runs:
       working-directory: ${{ inputs.working-dir }}
       run: bash ios/Runner/build_rust_ios.sh
 
-    - name: Flutter build iOS (device, no codesign)
+    - name: Install App Store Connect API key
+      id: signing
+      if: ${{ inputs.asc-api-key-base64 != '' }}
       shell: bash
       working-directory: ${{ inputs.working-dir }}
+      run: |
+        set -euo pipefail
+        # xcodebuild's -authenticationKeyPath/-authenticationKeyID/
+        # -authenticationKeyIssuerID flags (Xcode 13+) let -allowProvisioningUpdates
+        # create/download the distribution cert and provisioning profile itself,
+        # with no manually-exported .p12/.mobileprovision needed.
+        key_dir="$HOME/.appstoreconnect/private_keys"
+        mkdir -p "$key_dir"
+        echo "${{ inputs.asc-api-key-base64 }}" | base64 -d > "$key_dir/AuthKey_${{ inputs.asc-api-key-id }}.p8"
+        echo "has_key=true" >> "$GITHUB_OUTPUT"
+
+    - name: Prepare Dart/Flutter build artifacts (signed path)
+      if: ${{ steps.signing.outputs.has_key == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working-dir }}
+      # Compiles the Dart AOT snapshot and assembles Flutter.framework/App.framework
+      # without invoking codesign, matching what `flutter build ipa` does internally
+      # before its own (unextendable) xcodebuild archive call. `xcodebuild archive`
+      # below picks these up and does the real, authenticated signing itself.
       run: flutter build ios --release --no-codesign
 
+    - name: Archive and export (signed, authenticated by API key)
+      if: ${{ steps.signing.outputs.has_key == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working-dir }}
+      # `flutter build ipa` cannot forward extra flags into its internal
+      # `xcodebuild archive` call, so -allowProvisioningUpdates and the API-key
+      # auth flags (the only way to let xcodebuild create/download the
+      # distribution cert and profile itself, headless) require calling
+      # xcodebuild directly — the standard pattern for headless iOS CI signing.
+      run: |
+        set -euo pipefail
+        auth_args=(
+          -allowProvisioningUpdates
+          -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${{ inputs.asc-api-key-id }}.p8"
+          -authenticationKeyID "${{ inputs.asc-api-key-id }}"
+          -authenticationKeyIssuerID "${{ inputs.asc-api-issuer-id }}"
+        )
+        xcodebuild archive \
+          -workspace ios/Runner.xcworkspace \
+          -scheme Runner \
+          -configuration Release \
+          -archivePath build/ios/archive/Runner.xcarchive \
+          -destination 'generic/platform=iOS' \
+          "${auth_args[@]}"
+        xcodebuild -exportArchive \
+          -archivePath build/ios/archive/Runner.xcarchive \
+          -exportPath build/ios/ipa \
+          -exportOptionsPlist ios/ExportOptions.plist \
+          "${auth_args[@]}"
+
+    - name: Flutter build iOS (device, no codesign — unsigned fallback)
+      if: ${{ steps.signing.outputs.has_key != 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working-dir }}
+      run: |
+        echo "::notice::No App Store Connect API key configured (asc-api-key-base64 secret) — building an unsigned device artifact. See DISTRIBUTION.md to enable a signed TestFlight upload."
+        flutter build ios --release --no-codesign
+
+    - name: Remove App Store Connect API key
+      if: always()
+      shell: bash
+      run: rm -rf "$HOME/.appstoreconnect"
+
     - name: Upload Runner.app (device build unsigned)
+      if: ${{ steps.signing.outputs.has_key != 'true' }}
       uses: actions/upload-artifact@v4
       with:
         name: Portalis-${{ steps.setup.outputs.backend-version }}-iOS-${{ steps.setup.outputs.app-version }}-${{ steps.meta.outputs.short_sha }}-release-unsigned
         path: ${{ inputs.working-dir }}/build/ios/iphoneos/Runner.app
         retention-days: 1
+
+    - name: Upload signed .ipa
+      if: ${{ steps.signing.outputs.has_key == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: Portalis-${{ steps.setup.outputs.backend-version }}-iOS-${{ steps.setup.outputs.app-version }}-${{ steps.meta.outputs.short_sha }}-release-testflight
+        path: ${{ inputs.working-dir }}/build/ios/ipa/*.ipa
+        retention-days: 14
+
+    - name: Upload signed .ipa to TestFlight
+      if: ${{ steps.signing.outputs.has_key == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working-dir }}
+      # ExportOptions.plist's destination=upload already asks -exportArchive
+      # to hand the .ipa to App Store Connect itself, so this step is the
+      # explicit fallback/retry path in case that step-level upload silently
+      # no-ops (a known xcodebuild quirk on some Xcode versions).
+      run: |
+        set -euo pipefail
+        ipa=$(find build/ios/ipa -maxdepth 1 -name '*.ipa' | head -1)
+        if [[ -z "$ipa" ]]; then
+          echo "::error::No .ipa found in build/ios/ipa" >&2
+          exit 1
+        fi
+        xcrun altool --upload-app -f "$ipa" -t ios \
+          --apiKey "${{ inputs.asc-api-key-id }}" \
+          --apiIssuer "${{ inputs.asc-api-issuer-id }}" \
+          || echo "::warning::altool upload failed or the archive step already uploaded it — check TestFlight before retrying."
