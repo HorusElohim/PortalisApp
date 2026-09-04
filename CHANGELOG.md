@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Hardened Android APK signer verification to capture the complete
+  `apksigner` output and report its non-secret diagnostics when no certificate
+  digest is found in CI.
 - Made Android CI release signing fail closed: CI now requires the keystore
   and release signing configuration to be loaded before assembling the APK,
   preventing silent fallback to an unsigned artifact.
