@@ -2666,6 +2666,9 @@ mod tests {
             detail.borrow().as_ref().map(|value| value.id),
             Some(collection)
         );
+        let sources = nexus.detail_sources();
+        assert_eq!(sources.watched(), vec![collection]);
+        sources.refresh(collection);
         assert!(format!("{nexus:?}").contains("Nexus"));
         assert!(format!("{:?}", nexus.detail_sources()).contains("DetailSources"));
         nexus.publish(&nexus.state(), None, Duration::ZERO);
