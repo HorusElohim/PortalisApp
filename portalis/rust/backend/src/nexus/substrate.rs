@@ -41,7 +41,7 @@ pub struct Inspected {
 }
 
 #[async_trait]
-pub trait Substrate: Send + Sync + std::fmt::Debug {
+pub trait Substrate: Send + Sync {
     /// Make these files available, and answer with the handle others fetch by.
     async fn publish(
         &self,
@@ -116,7 +116,6 @@ pub trait Substrate: Send + Sync + std::fmt::Debug {
 }
 
 /// The real one.
-#[derive(Debug)]
 pub struct Torrents;
 
 /// Validated, bounded peer addresses supplied by a discovery/bootstrap source.
@@ -364,7 +363,7 @@ pub(crate) fn current() -> Arc<dyn Substrate> {
 /// two paths that decide *what* to move, which is where the bugs have been —
 /// nothing here pretends to move anything.
 #[cfg(test)]
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub(crate) struct Recorded {
     pub(crate) held: Mutex<Vec<String>>,
     pub(crate) released: Mutex<Vec<String>>,
