@@ -850,6 +850,93 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[tokio::test]
+    async fn resolving_metadata_persists_the_selection_descriptor() {
+        let (store, dir) = store();
+        collection(&store, b"a", "magnet:?xt=urn:btih:abc");
+        let substrate =
+            crate::nexus::substrate::Recorded::inspecting(crate::nexus::substrate::Inspected {
+                info_hash: "abc".to_owned(),
+                name: "Resolved".to_owned(),
+                files: vec![crate::nexus::torrent::TorrentMetadataFile {
+                    label: "one.mkv".to_owned(),
+                    bytes: 10,
+                }],
+                descriptor: b"descriptor".to_vec(),
+            });
+
+        resolve(&store, &substrate, b"a", "magnet:?xt=urn:btih:abc")
+            .await
+            .expect("resolves metadata");
+
+        let entries = store.torrent_import_entries(b"a").expect("reads entries");
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].selected);
+        assert_eq!(
+            store
+                .torrent_import_descriptor(b"a")
+                .expect("reads descriptor"),
+            Some(b"descriptor".to_vec())
+        );
+        assert_eq!(
+            store
+                .collection(b"a")
+                .expect("reads collection")
+                .expect("collection exists")
+                .lifecycle,
+            StoredLifecycle::TorrentAwaitingSelection
+        );
+        assert_eq!(
+            substrate.inspected.lock().unwrap().as_slice(),
+            ["magnet:?xt=urn:btih:abc"]
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn acquiring_selection_passes_the_persisted_descriptor_and_records_handle() {
+        let (store, dir) = store();
+        collection_with_draft(&store, b"a", "magnet:?xt=urn:btih:abc", false);
+        store
+            .put_torrent_import_descriptor(b"a", b"descriptor")
+            .expect("writes descriptor");
+        let substrate =
+            crate::nexus::substrate::Recorded::inspecting(crate::nexus::substrate::Inspected {
+                info_hash: "abc".to_owned(),
+                name: "Resolved".to_owned(),
+                files: Vec::new(),
+                descriptor: b"descriptor".to_vec(),
+            });
+
+        acquire(&store, &substrate, b"a", "magnet:?xt=urn:btih:abc", &[1, 3])
+            .await
+            .expect("starts acquisition");
+
+        assert_eq!(
+            substrate.acquisition_descriptors.lock().unwrap().as_slice(),
+            [Some(b"descriptor".to_vec())]
+        );
+        assert_eq!(
+            substrate.selections.lock().unwrap().as_slice(),
+            [(
+                "magnet:?xt=urn:btih:abc".to_owned(),
+                vec![1, 3],
+                crate::nexus::torrent::download_dir()
+            )]
+        );
+        assert_eq!(
+            store
+                .collection(b"a")
+                .expect("reads collection")
+                .expect("collection exists")
+                .substrate_handle,
+            Some("abc".to_owned())
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// A collection with no torrent source is somebody else's business —
     /// this worker must not touch a published collection.
     #[test]

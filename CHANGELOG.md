@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added backend regression coverage for torrent metadata resolution and
+  selection acquisition, including persisted descriptors, selected indices,
+  lifecycle transitions, and substrate handles.
 - Rotated the Android upload key after the previous keystore was lost. GitHub
   Actions and local release builds now use the replacement `portalis` key;
   existing installations signed with the lost key require one uninstall and
