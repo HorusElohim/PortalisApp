@@ -67,7 +67,6 @@ pub enum OpenError {
 }
 
 /// The running core.
-#[derive(Debug)]
 pub struct Nexus {
     supervisor: Supervisor,
     states: watch::Sender<PortalisState>,
@@ -108,6 +107,20 @@ pub struct Nexus {
     /// guard is dropped (not the identity remembered) when the function
     /// returns either way.
     importing: Arc<Mutex<()>>,
+}
+
+impl std::fmt::Debug for Nexus {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // `substrate` is `dyn Substrate`, which does not implement `Debug`
+        // (the trait covers both the production librqbit-backed
+        // implementation and the test double, and requiring `Debug` there
+        // just to satisfy a derive here is not worth the churn) — every
+        // other field is printed as before.
+        formatter
+            .debug_struct("Nexus")
+            .field("active", &self.active)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Everything the detail tier is assembled from.
