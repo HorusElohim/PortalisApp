@@ -7,17 +7,25 @@ it can hand a build to a real tester rather than only a CI artifact.
 
 `ANDROID_RELEASE_KEYSTORE_BASE64` / `ANDROID_RELEASE_KEYSTORE_PASSWORD` are
 set as repo secrets. Every CI run on `android` now produces a **stably
-signed** release APK — the same signing key every time, so testers can
-install an update over an existing install rather than needing to uninstall
-first.
+signed** release APK — the same signing key every time.
 
-**The keystore itself lives at `~/secrets-portalis/portalis-release.jks` on
-Atlas (192.168.1.20), and nowhere else.** Back it up now, somewhere durable
+The original upload key was lost and was rotated on 2026-09-04. Existing APKs
+signed with the lost key cannot be updated in place; testers must uninstall
+those builds and install the first APK signed by the replacement key. From
+that point onward, all releases must use the replacement keystore below.
+
+**The replacement keystore itself lives at
+`~/secrets-portalis/portalis-release.jks` on Atlas (192.168.1.20), and nowhere
+else.** Back it up now, somewhere durable
 (password manager attachment, encrypted archive, etc.) — if it is lost,
 every future Android release has to ship as a *new* app: existing installs
 cannot update, and every tester loses their data on reinstall. There is no
 recovery path Google or anyone else can offer; only what you back up.
 Password: stored alongside the keystore file, also needs backing up.
+
+Alias: `portalis`
+Replacement certificate SHA-256:
+`BDE4495A828AB76463F5ABEC3114593B918282596A240EE861F854D7D179E6EB`
 
 To hand someone the APK directly (outside the Play Store): download the
 `Portalis-*-Android-*-release` artifact from the `android` job of a CI run,
