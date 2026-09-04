@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 PORTALIS_DIR="$ROOT_DIR/portalis"
+source "$PORTALIS_DIR/tool/parallelism.sh"
 if [[ ! -d $PORTALIS_DIR ]]; then
   echo "[ERROR] Portalis project not found at $PORTALIS_DIR" >&2
   exit 1
@@ -23,7 +24,7 @@ echo "==> flutter analyze"
 flutter analyze
 
 echo "==> flutter test --no-pub ${*:+${*}}"
-flutter test --no-pub "$@"
+flutter test --no-pub --concurrency "$PORTALIS_FLUTTER_TEST_CONCURRENCY" "$@"
 
 echo "==> FRB generated drift check"
 ./tool/frb_build.sh --codegen-only --force-frb --ai

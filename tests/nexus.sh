@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$ROOT_DIR/portalis/rust/backend"
+source "$ROOT_DIR/portalis/tool/parallelism.sh"
 
 if ! command -v cargo >/dev/null 2>&1; then
   echo "[ERROR] cargo not found on PATH" >&2
@@ -30,5 +31,5 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo audit
 cargo deny check advisories bans licenses sources
-cargo test --workspace --all-targets --all-features "$@"
+cargo test --workspace --all-targets --all-features "$@" -- --test-threads="$PORTALIS_TEST_THREADS"
 ./scripts/coverage.sh

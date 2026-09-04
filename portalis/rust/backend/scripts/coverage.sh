@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../../../tool/parallelism.sh"
+
 # Excluded as platform adapters:
 #   apps/server/src/main.rs      process bootstrap
 #   apps/server/src/quic.rs      QUIC plumbing driven by covered decisions
@@ -121,7 +124,7 @@ cargo llvm-cov \
   --all-features \
   --ignore-filename-regex "$ignore" \
   --json --output-path "$report" \
-  -- --skip two_instances_sync
+  -- --skip two_instances_sync --test-threads="$PORTALIS_TEST_THREADS"
 
 python3 "$(dirname "${BASH_SOURCE[0]}")/coverage_report.py" "$report" \
   --min-functions 95 \

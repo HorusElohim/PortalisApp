@@ -7,6 +7,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CRATE_DIR="$ROOT_DIR/rust/backend"
 APP_DIR="$ROOT_DIR/android/app"
 JNILIBS_DIR="$APP_DIR/src/main/jniLibs"
+source "$ROOT_DIR/tool/parallelism.sh"
 
 # Detect build profile; default to release for smaller libs
 BUILD_PROFILE="${1:-release}"

@@ -79,6 +79,17 @@ runs:
       shell: bash
       run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
+    - name: Configure host parallelism
+      shell: bash
+      run: |
+        set -euo pipefail
+        cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc)"
+        echo "CARGO_BUILD_JOBS=$cores" >> "$GITHUB_ENV"
+        echo "PORTALIS_TEST_THREADS=$cores" >> "$GITHUB_ENV"
+        echo "FLUTTER_TEST_CONCURRENCY=$cores" >> "$GITHUB_ENV"
+        echo "GRADLE_OPTS=${GRADLE_OPTS:-} -Dorg.gradle.workers.max=$cores" >> "$GITHUB_ENV"
+        echo "Configured parallelism for $cores CPUs"
+
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:

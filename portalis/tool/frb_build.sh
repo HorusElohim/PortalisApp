@@ -13,6 +13,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CRATE="$ROOT_DIR/rust/backend"
 STAMP_DIR="$ROOT_DIR/.dart_tool/portalis"
 FRB_STAMP="$STAMP_DIR/frb-inputs.sha256"
+source "$SCRIPT_DIR/parallelism.sh"
 
 PLATFORM="macos"
 CODEGEN_ONLY=0
