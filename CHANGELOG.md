@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Rotated the Android upload key after the previous keystore was lost. GitHub
+  Actions and local release builds now use the replacement `portalis` key;
+  existing installations signed with the lost key require one uninstall and
+  reinstall before receiving updates.
 - Fixed native Android/local collection projections so adding media updates
   the live entry count and total byte count immediately, not only after a
   restart or later worker refresh.
