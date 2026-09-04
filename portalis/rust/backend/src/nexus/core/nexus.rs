@@ -2661,6 +2661,14 @@ mod tests {
         assert!(nexus.peers().is_empty());
         assert!(nexus.peer_history(collection).is_empty());
         assert!(nexus.watch_detail(None).borrow().is_none());
+        let detail = nexus.watch_detail(Some(collection));
+        assert_eq!(
+            detail.borrow().as_ref().map(|value| value.id),
+            Some(collection)
+        );
+        assert!(format!("{nexus:?}").contains("Nexus"));
+        assert!(format!("{:?}", nexus.detail_sources()).contains("DetailSources"));
+        nexus.publish(&nexus.state(), None, Duration::ZERO);
 
         nexus
             .command(&Command::AddMedia {
