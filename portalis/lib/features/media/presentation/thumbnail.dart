@@ -95,6 +95,17 @@ class MediaThumbnail extends StatelessWidget {
     // image-kind file is decodable. Native image formats use a bounded
     // platform decode and remain byte-for-byte unchanged on disk.
     final format = MediaFormats.resolve(media.label);
+    if (media.isReady &&
+        media.localPath!.startsWith('phasset://') &&
+        (format.preview == PreviewSupport.image ||
+            format.preview == PreviewSupport.nativeImage ||
+            format.preview == PreviewSupport.player)) {
+      return _NativeImageThumbnail(
+        media: media,
+        borderRadius: borderRadius,
+        decodeSize: decodeSize,
+      );
+    }
     if (media.isReady && format.preview == PreviewSupport.nativeImage) {
       return _NativeImageThumbnail(
         media: media,

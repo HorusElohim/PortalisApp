@@ -333,11 +333,28 @@ final class HeicPreview {
       completion(nil)
       return
     }
+    let side = CGFloat(max(64, min(maxPixelSize, 2048)))
+    if asset.mediaType == .video {
+      let videoOptions = PHVideoRequestOptions()
+      videoOptions.isNetworkAccessAllowed = true
+      PHImageManager.default().requestAVAsset(forVideo: asset, options: videoOptions) { avAsset, _, _ in
+        guard let avAsset else {
+          completion(nil)
+          return
+        }
+        let generator = AVAssetImageGenerator(asset: avAsset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: side, height: side)
+        let time = CMTime(seconds: 0.1, preferredTimescale: 600)
+        let image = try? generator.copyCGImage(at: time, actualTime: nil)
+        completion(image.flatMap { UIImage(cgImage: $0).jpegData(compressionQuality: 0.9) })
+      }
+      return
+    }
     let options = PHImageRequestOptions()
     options.isNetworkAccessAllowed = true
     options.deliveryMode = .fastFormat
     options.resizeMode = .fast
-    let side = CGFloat(max(64, min(maxPixelSize, 2048)))
     PHImageManager.default().requestImage(
       for: asset,
       targetSize: CGSize(width: side, height: side),

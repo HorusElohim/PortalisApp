@@ -219,7 +219,20 @@ impl DetailSources {
                 .torrent_import_entries(&key)
                 .ok()?
                 .into_iter()
-                .map(|entry| (entry.label, entry.bytes, entry.selected, false, None))
+                .map(|entry| {
+                    let native_path = entry.native_location;
+                    let available = native_path.as_deref().is_some_and(|path| {
+                        crate::nexus::content_location::ContentLocation::from_source_path(path)
+                            .is_ok_and(|location| location.length(Some(entry.bytes)).is_ok())
+                    });
+                    (
+                        entry.label,
+                        entry.bytes,
+                        entry.selected,
+                        available,
+                        native_path,
+                    )
+                })
                 .collect::<Vec<_>>()
         } else {
             // This device's own files, referenced where they already are. The
