@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added backend coverage for default-store initialization and displayable
+  unknown-collection errors.
 - Hardened Android CI signing by using an absolute keystore path and
   validating the decoded keystore, alias, password, and signing properties
   before the release build starts.
