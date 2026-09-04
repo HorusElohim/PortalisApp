@@ -366,6 +366,11 @@ pub(crate) struct Recorded {
     pub(crate) reselected: Mutex<Vec<(String, Vec<usize>)>>,
     publication: Mutex<Option<(String, Vec<u8>)>>,
     inspection: Mutex<Option<Inspected>>,
+    /// When set, `publish` reports "hashing" and then waits on this before
+    /// advancing to "seeding" — lets a test hold a publication open exactly
+    /// as long as it needs to observe the projection's progress ticker,
+    /// with no sleep and no race on wall-clock timing.
+    hold_while_hashing: Mutex<Option<Arc<tokio::sync::Notify>>>,
 }
 
 #[cfg(test)]
@@ -374,6 +379,26 @@ impl Recorded {
         Self {
             publication: Mutex::new(Some((info_hash, descriptor))),
             ..Self::default()
+        }
+    }
+
+    /// Like [`Self::publishing`], but stays in the "hashing" stage until a
+    /// test calls [`Self::release_publish`] — lets a test observe the
+    /// projection's progress ticker fire mid-publish with no sleep and no
+    /// timing race.
+    pub(crate) fn publishing_held(info_hash: String, descriptor: Vec<u8>) -> Self {
+        Self {
+            publication: Mutex::new(Some((info_hash, descriptor))),
+            hold_while_hashing: Mutex::new(Some(Arc::new(tokio::sync::Notify::new()))),
+            ..Self::default()
+        }
+    }
+
+    /// Releases a publication started with [`Self::publishing_held`],
+    /// letting it advance from "hashing" to "seeding" and complete.
+    pub(crate) fn release_publish(&self) {
+        if let Some(notify) = self.hold_while_hashing.lock().unwrap().as_ref() {
+            notify.notify_one();
         }
     }
 
@@ -420,6 +445,10 @@ impl Substrate for Recorded {
         // that never advanced the stage made that ticker unobservable, so
         // tests could not see it write — or fail to stop writing.
         progress.set_stage("hashing");
+        let hold = self.hold_while_hashing.lock().unwrap().clone();
+        if let Some(notify) = hold {
+            notify.notified().await;
+        }
         progress.set_stage("seeding");
         Ok(Published {
             info: held_torrent(&info_hash),

@@ -97,12 +97,15 @@ uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 x25519-dalek = { version = "3", features = ["static_secrets"] }
+# start_paused test runtime — lets tests fast-forward through the projection's
+# 500ms progress-ticker interval instead of sleeping in wall-clock time.
+tokio = { version = "1", features = ["test-util"] }
 
 # librqbit (BitTorrent engine) needs real OS sockets (via tokio/mio), which
 # don't exist on wasm32 — Web is a viewer, not a swarm participant, so it's
 # excluded there rather than gated behind a feature no wasm code path uses.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-librqbit = { path = "../vendor/librqbit", features = ["default-tls"] }
+librqbit = { path = "../vendor/librqbit", default-features = false, features = ["rust-tls"] }
 bencode = { package = "librqbit-bencode", version = "9.0.1", default-features = false }
 buffers = { package = "librqbit-buffers", version = "9.0.1" }
 bytes = "1"
