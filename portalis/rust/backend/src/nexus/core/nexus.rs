@@ -4311,6 +4311,81 @@ mod tests {
         nexus.close().await;
     }
 
+    /// The 500ms progress ticker must actually reach the projection while a
+    /// publication is genuinely in flight — this is the ordinary case the
+    /// ticker exists for, not the shutdown/completion edges the neighbouring
+    /// tests cover. Held in "hashing" until this test explicitly releases
+    /// it, a live collection must show `publish_progress` with that stage,
+    /// and `isPublishing`-shaped code (Dart) must be able to tell it apart
+    /// from every other resolving-metadata reason. The test runtime is
+    /// paused and advanced by hand so the ticker's interval fires
+    /// deterministically — no wall-clock sleep, no flakiness.
+    #[tokio::test(start_paused = true)]
+    async fn publishing_progress_reaches_the_projection_mid_publish() {
+        let _state = crate::nexus::paths::redirect_to_temp();
+        let scratch = Scratch::new("publish-progress-mid-flight");
+        let source = scratch.0.join("episode.mp4");
+        std::fs::write(&source, b"episode").expect("writes source");
+        let substrate = Arc::new(crate::nexus::substrate::Recorded::publishing_held(
+            "11".repeat(20),
+            b"torrent descriptor".to_vec(),
+        ));
+        let nexus = open_with_substrate(&scratch, substrate.clone());
+        let mut states = nexus.watch();
+
+        nexus
+            .command(&Command::CreateCollection {
+                name: "Episodes".to_owned(),
+                files: vec![LocalFile {
+                    name: "episode.mp4".to_owned(),
+                    path: source,
+                    bytes: 7,
+                }],
+            })
+            .expect("accepts source");
+        let collection = states.borrow().collections[0].id;
+        nexus
+            .command(&Command::PublishDraft { collection })
+            .expect("confirms the draft");
+
+        // Give the publish task a chance to reach "hashing" and register
+        // its stage, then advance the paused clock past the ticker's
+        // 500ms interval so its first tick actually fires.
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_millis(600)).await;
+        tokio::task::yield_now().await;
+
+        assert_eq!(
+            states.borrow().collections[0]
+                .publish_progress
+                .as_ref()
+                .map(|progress| progress.stage.as_str()),
+            Some("hashing"),
+            "the ticker's tick reaches the projection while publishing runs; \
+             final projection: {:?}",
+            states.borrow().collections
+        );
+
+        substrate.release_publish();
+        let settled = tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let settled = states
+                    .borrow()
+                    .collections
+                    .first()
+                    .is_some_and(|collection| collection.status == Status::Seeding);
+                if settled {
+                    break;
+                }
+                states.changed().await.expect("runtime remains open");
+            }
+        })
+        .await;
+        assert!(settled.is_ok(), "publisher settles");
+
+        nexus.close().await;
+    }
+
     /// The progress ticker must die with the publication it reports on.
     ///
     /// It ran on a 500ms interval and only ever checked `is_cancelled()`,
