@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Fixed Android zero-copy media previews. Grid images and videos backed by
+  `content://` now use a bounded native thumbnail decoder instead of being
+  passed to filesystem-only Flutter widgets; duplicate previews share a
+  64-entry cache, and native decoding is limited to two worker threads rather
+  than creating a full video output or a new thread for every tile.
+- Made Android zero-copy publication reuse one persisted SAF descriptor per
+  source while hashing and seeding, instead of reopening it and synchronously
+  logging its private URI for every 1 MiB read. Document providers whose file
+  descriptor reports an unknown zero length now retain the stable length
+  supplied by the picker, preventing owner collections from falling into
+  metadata retry before hashing starts.
+- Prevented alternating Android debug and release builds from reusing the
+  other profile's Rust JNI libraries through the shared `jniLibs` directory.
+
 ## 1.0.50+60 — 2026-09-04
 
 - Completed ADR-0016 and ADR-0017; both move from `proposed` to `accepted`.

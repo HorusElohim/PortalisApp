@@ -17,6 +17,7 @@ fi
 mkdir -p "$JNILIBS_DIR"
 
 STAMP="$JNILIBS_DIR/.portalis-rust-$BUILD_PROFILE.stamp"
+ACTIVE_PROFILE="$JNILIBS_DIR/.portalis-rust-active-profile"
 inputs_newer_than_stamp() {
   [[ ! -f "$STAMP" ]] && return 0
   for input in "$CRATE_DIR/Cargo.toml" "$CRATE_DIR/Cargo.lock" "$ROOT_DIR/android/build_rust_android.sh" "$CRATE_DIR/src" "$CRATE_DIR/vendor"; do
@@ -31,13 +32,23 @@ inputs_newer_than_stamp() {
   return 1
 }
 
-if ! inputs_newer_than_stamp; then
+profile_changed=true
+if [[ -f "$ACTIVE_PROFILE" ]] && [[ "$(<"$ACTIVE_PROFILE")" == "$BUILD_PROFILE" ]]; then
+  profile_changed=false
+fi
+
+if ! inputs_newer_than_stamp && [[ "$profile_changed" == false ]]; then
   echo "==> Android Rust libraries are up to date ($BUILD_PROFILE); skipping cargo-ndk"
   exit 0
 fi
 
 if command -v cargo-ndk >/dev/null 2>&1; then
   echo "==> Using cargo-ndk to build Android libs ($BUILD_PROFILE)"
+  # Debug and release must never coexist here: Gradle scans this directory for
+  # every variant, so a release build after a debug build could otherwise
+  # package the previous profile's native libraries when its own stamp looked
+  # current. The active-profile marker above makes the next switch rebuild.
+  rm -rf "$JNILIBS_DIR/arm64-v8a" "$JNILIBS_DIR/armeabi-v7a" "$JNILIBS_DIR/x86_64"
   pushd "$CRATE_DIR" >/dev/null
   if [[ "$BUILD_PROFILE" == "release" ]]; then
     cargo ndk -o "$JNILIBS_DIR" -t arm64-v8a -t x86_64 -t armeabi-v7a build --release
@@ -52,6 +63,7 @@ else
 fi
 
 touch "$STAMP"
+printf '%s\n' "$BUILD_PROFILE" > "$ACTIVE_PROFILE"
 
 echo "✅ JNI libs are in: $JNILIBS_DIR"
 
