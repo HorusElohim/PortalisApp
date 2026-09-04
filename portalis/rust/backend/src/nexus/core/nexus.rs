@@ -94,6 +94,12 @@ pub struct Nexus {
     /// Wakes the worker that resolves torrent sources and starts downloads.
     torrents: Arc<Notify>,
     activity: crate::nexus::activity::DeviceActivityTracker,
+    /// Kicked on `set_active(true)` to force every live transfer to
+    /// re-establish its peer connections after the app returns from the
+    /// background — see [`Substrate::reconnect_active`] for why the
+    /// substrate's own reconnect logic cannot be relied on to have run
+    /// while the process was suspended.
+    substrate: Arc<dyn crate::nexus::substrate::Substrate>,
     /// Serializes import admission, so two commands racing inside the same
     /// process moment cannot both pass the durable-uniqueness check before
     /// either has written its row (ADR-0015). Held only for the duration of
@@ -647,6 +653,7 @@ impl Nexus {
         let publisher = Arc::new(Notify::new());
         let torrents = Arc::new(Notify::new());
         let substrate_for_torrents = Arc::clone(&substrate);
+        let substrate_for_activity = Arc::clone(&substrate);
         let holdings = super::transfers::Holdings::default();
         let activity = crate::nexus::activity::DeviceActivityTracker::start(
             Arc::clone(&store),
@@ -759,6 +766,7 @@ impl Nexus {
             publisher,
             torrents,
             activity,
+            substrate: substrate_for_activity,
             importing: Arc::new(Mutex::new(())),
         })
     }
@@ -796,6 +804,21 @@ impl Nexus {
         // Deliberately not touched here: this device's own reachability from
         // the network's point of view does not depend on whether the app is
         // in the foreground.
+        if active {
+            // Coming back to the foreground (iOS/Android: the process may
+            // have been fully suspended, not merely idle) is when a stalled
+            // transfer needs to be actively re-kicked — librqbit's own
+            // reconnect logic only runs while the process is scheduled, and
+            // a suspended process was not. Fire-and-forget: this is best
+            // effort recovery, not something `set_active`'s caller should
+            // have to await or fail on.
+            let substrate = Arc::clone(&self.substrate);
+            tokio::spawn(async move {
+                if let Err(error) = substrate.reconnect_active().await {
+                    crate::nexus::log::clog!("torrent", "reconnect on resume failed: {error:#}");
+                }
+            });
+        }
     }
 
     /// Renames this device and updates the live snapshot in the same call.
@@ -4453,6 +4476,57 @@ mod tests {
             states.borrow().collections[0].publish_progress,
             None,
             "no ticker survives the publication to resurrect a finished bar"
+        );
+
+        nexus.close().await;
+    }
+
+    #[tokio::test]
+    async fn returning_to_the_foreground_reconnects_active_transfers() {
+        // iOS/Android can fully suspend the process while it is
+        // backgrounded, so librqbit's own reconnect logic — which only
+        // runs while something is scheduling it — cannot be relied on to
+        // have noticed a dead swarm on its own. `set_active(true)` (the
+        // lifecycle bridge call both platforms' `AppLifecycleState.resumed`
+        // handler makes) must actively kick every live transfer, not just
+        // resume checkpointing activity.
+        let _state = crate::nexus::paths::redirect_to_temp();
+        let scratch = Scratch::new("resume-reconnects");
+        let substrate = Arc::new(crate::nexus::substrate::Recorded::default());
+        let mut nexus = open_with_substrate(&scratch, substrate.clone());
+
+        nexus.set_active(false);
+        assert_eq!(
+            *substrate.reconnects.lock().unwrap(),
+            0,
+            "going to the background does not reconnect anything"
+        );
+
+        nexus.set_active(true);
+        // `reconnect_active` is fired-and-forgotten from a spawned task, so
+        // give the runtime one scheduling pass to run it rather than racing
+        // on a bare assert.
+        tokio::task::yield_now().await;
+        let settled = tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if *substrate.reconnects.lock().unwrap() >= 1 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        assert!(settled.is_ok(), "resuming to the foreground reconnects");
+
+        // A second resume without an intervening background transition is a
+        // no-op transition (`set_active` already ignores it) — the count
+        // must not creep on every no-op call.
+        nexus.set_active(true);
+        tokio::task::yield_now().await;
+        assert_eq!(
+            *substrate.reconnects.lock().unwrap(),
+            1,
+            "resuming twice in a row without backgrounding in between reconnects once"
         );
 
         nexus.close().await;

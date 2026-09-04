@@ -134,10 +134,16 @@ static NSURL *PortalisDirectAssetURL(PHAsset *asset, NSError **outError) {
   if (!PortalisWaitBounded(done, kPortalisPhotoKitMetadataTimeoutSeconds)) {
     // No direct URL within budget; the caller falls back to the sequential
     // reader rather than blocking forever on a slow iCloud fetch.
+    fprintf(stderr, "Portalis direct Photos URL request for %s timed out, falling back to the byte stream\\n", asset.localIdentifier.UTF8String);
     return nil;
   }
   if (url != nil) {
     @synchronized (urls) { urls[asset.localIdentifier] = url; }
+    // Logged once per asset (immediately after caching, so a second call
+    // for the same asset hits the early cache return above and never
+    // re-logs) — this is the "did we get a real direct file URL, or are we
+    // about to fall back to the slow PhotoKit byte stream" boundary.
+    fprintf(stderr, "Portalis resolved direct Photos URL for %s\\n", asset.localIdentifier.UTF8String);
   }
   if (outError != NULL) *outError = requestError;
   return url;
@@ -208,6 +214,11 @@ static PortalisPhotoSequentialReader *PortalisSequentialReaderStart(
     reader.dataAvailable = dispatch_semaphore_create(0);
     reader.lock = [[NSLock alloc] init];
     readers[identifier] = reader;
+
+    // Logged once per stream (right here, not per read call) — the moment
+    // Portalis actually starts pulling bytes through PhotoKit's slower
+    // resource-manager stream instead of a direct file handle.
+    fprintf(stderr, "Portalis opened the Photos byte stream for %s\\n", identifier.UTF8String);
 
     PHAssetResourceRequestOptions *options = [[PHAssetResourceRequestOptions alloc] init];
     options.networkAccessAllowed = YES;

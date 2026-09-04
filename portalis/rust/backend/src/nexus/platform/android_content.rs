@@ -90,6 +90,7 @@ pub(crate) fn open(uri: &str) -> anyhow::Result<File> {
         anyhow::ensure!(fd >= 0, "Android Files returned an invalid descriptor");
         // `detachFd` transfers ownership to us, so this File is responsible
         // for closing it even when a piece read fails.
+        crate::nexus::log::clog!("content", "opened Android content URI {uri}");
         Ok(unsafe { File::from_raw_fd(fd) })
     })
     .map_err(|error| anyhow::anyhow!("opening Android content URI {uri:?}: {error}"))

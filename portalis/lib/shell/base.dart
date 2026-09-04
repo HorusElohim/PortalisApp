@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../app/app_controllers.dart';
 import '../design/design.dart';
@@ -36,6 +37,24 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
     // above a list drawn from another. Nexus owns the engine; a second one
     // running quietly is how the interface ends up lying.
     AppControllers.settings.load();
+    // Keeps the screen awake for exactly as long as a transfer is actually
+    // moving bytes — a phone going to sleep mid-transfer is a suspended
+    // process on iOS/Android, which is a stalled transfer (see
+    // `Nexus::reconnect_active`/`set_active` for the other half of that
+    // recovery story). `activity.transfers` is the one place the engine
+    // already answers "is anything moving right now", so this listens to
+    // the same signal every screen reads rather than tracking its own.
+    AppControllers.engine.addListener(_syncWakelock);
+    _syncWakelock();
+  }
+
+  bool _wakelockHeld = false;
+
+  void _syncWakelock() {
+    final active = AppControllers.engine.activity.transfers > 0;
+    if (active == _wakelockHeld) return;
+    _wakelockHeld = active;
+    unawaited(WakelockPlus.toggle(enable: active));
   }
 
   @override
@@ -111,6 +130,10 @@ abstract class AdaptiveShellState<T extends AdaptiveShell> extends State<T>
   void dispose() {
     AppNavigation.tab.removeListener(_onTabChanged);
     WidgetsBinding.instance.removeObserver(this);
+    AppControllers.engine.removeListener(_syncWakelock);
+    if (_wakelockHeld) {
+      unawaited(WakelockPlus.disable());
+    }
     unawaited(AppControllers.engine.stop());
     super.dispose();
   }
