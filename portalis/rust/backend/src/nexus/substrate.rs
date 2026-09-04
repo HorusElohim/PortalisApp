@@ -407,13 +407,20 @@ impl Substrate for Recorded {
         &self,
         name: String,
         _files: Vec<SourceFile>,
-        _progress: PublishProgress,
+        progress: PublishProgress,
     ) -> anyhow::Result<Published> {
         self.published.lock().unwrap().push(name.clone());
         let publication = self.publication.lock().unwrap().clone();
         let Some((info_hash, descriptor)) = publication else {
             anyhow::bail!("publish is not configured for this double ({name})");
         };
+        // The real implementation walks these stages as it hashes (see
+        // `torrent::native`), and the projection's progress ticker only
+        // publishes a snapshot once the stage has left "preparing". A double
+        // that never advanced the stage made that ticker unobservable, so
+        // tests could not see it write — or fail to stop writing.
+        progress.set_stage("hashing");
+        progress.set_stage("seeding");
         Ok(Published {
             info: held_torrent(&info_hash),
             descriptor,

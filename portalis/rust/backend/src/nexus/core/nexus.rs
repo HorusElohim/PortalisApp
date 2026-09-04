@@ -1844,7 +1844,7 @@ async fn publish_pending_collections(
             let progress_for_ui = progress.clone();
             let states_for_ui = states.clone();
             let collections_for_ui = Arc::clone(&collections);
-            let _progress_updater = tokio::spawn(async move {
+            let progress_updater = tokio::spawn(async move {
                 let mut interval = tokio::time::interval(std::time::Duration::from_millis(500));
                 loop {
                     interval.tick().await;
@@ -1886,10 +1886,17 @@ async fn publish_pending_collections(
             let result = tokio::select! {
                 () = shutdown.requested() => {
                     progress.cancel();
+                    progress_updater.abort();
                     return;
                 }
                 result = &mut publishing => result,
             };
+            // The ticker reports on this publication and must not outlive it.
+            // Left running, it woke 500ms later and wrote its final snapshot
+            // back over the cleared field below — re-asserting a hashing bar
+            // on a finished collection forever, and leaking one task per
+            // publication.
+            progress_updater.abort();
             match result {
                 Ok(revision) => {
                     crate::nexus::log::clog!(
@@ -4301,6 +4308,78 @@ mod tests {
             nexus.share_uri(collection).expect("share URI").is_none(),
             "a stored handle without a loaded torrent cannot be shared"
         );
+        nexus.close().await;
+    }
+
+    /// The progress ticker must die with the publication it reports on.
+    ///
+    /// It ran on a 500ms interval and only ever checked `is_cancelled()`,
+    /// which is set on shutdown alone — so on the ordinary success path it
+    /// outlived the publish and kept writing. The success path clears
+    /// `publish_progress`, and then the surviving ticker put it straight
+    /// back with the final "seeding" snapshot, forever, once per tick. A
+    /// collection that had finished hashing showed a hashing bar for the
+    /// rest of the process's life, and every publication leaked another
+    /// ticker. Settling once is not enough to catch that: the bug only
+    /// appears on the tick *after* completion.
+    #[tokio::test]
+    async fn publishing_progress_stops_when_the_publication_finishes() {
+        let _state = crate::nexus::paths::redirect_to_temp();
+        let scratch = Scratch::new("publish-progress-stops");
+        let source = scratch.0.join("episode.mp4");
+        std::fs::write(&source, b"episode").expect("writes source");
+        let substrate = Arc::new(crate::nexus::substrate::Recorded::publishing(
+            "11".repeat(20),
+            b"torrent descriptor".to_vec(),
+        ));
+        let nexus = open_with_substrate(&scratch, substrate.clone());
+        let mut states = nexus.watch();
+
+        nexus
+            .command(&Command::CreateCollection {
+                name: "Episodes".to_owned(),
+                files: vec![LocalFile {
+                    name: "episode.mp4".to_owned(),
+                    path: source,
+                    bytes: 7,
+                }],
+            })
+            .expect("accepts source");
+        let collection = states.borrow().collections[0].id;
+        nexus
+            .command(&Command::PublishDraft { collection })
+            .expect("confirms the draft");
+
+        let settled = tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let settled = states
+                    .borrow()
+                    .collections
+                    .first()
+                    .is_some_and(|collection| collection.status == Status::Seeding);
+                if settled {
+                    break;
+                }
+                states.changed().await.expect("runtime remains open");
+            }
+        })
+        .await;
+        assert!(settled.is_ok(), "publisher settles");
+        assert_eq!(
+            states.borrow().collections[0].publish_progress,
+            None,
+            "completing the publication clears the hashing progress"
+        );
+
+        // Past several ticker periods. A leaked ticker rewrites the cleared
+        // field with its final snapshot within one 500ms interval.
+        tokio::time::sleep(Duration::from_millis(1_600)).await;
+        assert_eq!(
+            states.borrow().collections[0].publish_progress,
+            None,
+            "no ticker survives the publication to resurrect a finished bar"
+        );
+
         nexus.close().await;
     }
 
