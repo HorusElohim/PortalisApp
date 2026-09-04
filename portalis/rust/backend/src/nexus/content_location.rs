@@ -13,7 +13,7 @@ use std::path::PathBuf;
 pub(crate) enum ContentLocation {
     Filesystem(PathBuf),
     #[cfg(target_os = "android")]
-    AndroidContent(String),
+    AndroidContent(std::sync::Arc<crate::nexus::platform::android_content::Source>),
     #[cfg(target_os = "ios")]
     PhotoAsset(String),
 }
@@ -23,7 +23,9 @@ impl ContentLocation {
     pub(crate) fn from_source_path(source: &str) -> anyhow::Result<Self> {
         #[cfg(target_os = "android")]
         if source.starts_with("content://") {
-            return Ok(Self::AndroidContent(source.into()));
+            return Ok(Self::AndroidContent(std::sync::Arc::new(
+                crate::nexus::platform::android_content::Source::new(source),
+            )));
         }
         #[cfg(target_os = "ios")]
         if let Some(identifier) = source.strip_prefix("phasset://") {
@@ -53,10 +55,7 @@ impl ContentLocation {
                 .map(|metadata| metadata.len())
                 .map_err(|error| anyhow::anyhow!("cannot read source {path:?}: {error}")),
             #[cfg(target_os = "android")]
-            Self::AndroidContent(uri) => crate::nexus::platform::android_content::open(uri)
-                .and_then(|file| file.metadata().map_err(anyhow::Error::from))
-                .map(|metadata| metadata.len())
-                .map_err(|error| anyhow::anyhow!("cannot read Android source {uri:?}: {error}")),
+            Self::AndroidContent(source) => source.length(known_length),
             #[cfg(target_os = "ios")]
             Self::PhotoAsset(identifier) => {
                 anyhow::ensure!(
@@ -94,12 +93,7 @@ impl ContentLocation {
                 }
             }
             #[cfg(target_os = "android")]
-            Self::AndroidContent(uri) => {
-                use std::os::unix::fs::FileExt;
-                crate::nexus::platform::android_content::open(uri)?
-                    .read_exact_at(buffer, offset)?;
-                Ok(())
-            }
+            Self::AndroidContent(source) => source.read_exact_at(offset, buffer),
             #[cfg(target_os = "ios")]
             Self::PhotoAsset(identifier) => {
                 crate::nexus::platform::ios_photo::read_asset(identifier, offset, buffer)

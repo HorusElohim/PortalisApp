@@ -6,11 +6,19 @@ on:
     paths:
       - 'portalis/**'
       - '.github/**'
+      - 'tests/**'
+      - 'doc/**'
+      - 'CHANGELOG.md'
+      - 'AGENTS.md'
   pull_request:
     branches: [ main ]
     paths:
       - 'portalis/**'
       - '.github/**'
+      - 'tests/**'
+      - 'doc/**'
+      - 'CHANGELOG.md'
+      - 'AGENTS.md'
 
 concurrency:
   group: pipeline-${{ github.ref }}

@@ -1,8 +1,8 @@
 // Collection media presentation shared by list, grid and viewer surfaces.
 
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -95,11 +95,18 @@ class MediaThumbnail extends StatelessWidget {
     // image-kind file is decodable. Native image formats use a bounded
     // platform decode and remain byte-for-byte unchanged on disk.
     final format = MediaFormats.resolve(media.label);
+    final nativeReference = media.isReady &&
+        (media.localPath!.startsWith('phasset://') ||
+            media.localPath!.startsWith('content://'));
+    final androidVideo = media.isReady &&
+        defaultTargetPlatform == TargetPlatform.android &&
+        format.preview == PreviewSupport.player;
     if (media.isReady &&
-        media.localPath!.startsWith('phasset://') &&
-        (format.preview == PreviewSupport.image ||
-            format.preview == PreviewSupport.nativeImage ||
-            format.preview == PreviewSupport.player)) {
+        ((nativeReference &&
+                (format.preview == PreviewSupport.image ||
+                    format.preview == PreviewSupport.nativeImage ||
+                    format.preview == PreviewSupport.player)) ||
+            androidVideo)) {
       return _NativeImageThumbnail(
         media: media,
         borderRadius: borderRadius,

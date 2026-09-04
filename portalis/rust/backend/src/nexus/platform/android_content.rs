@@ -5,7 +5,11 @@
 //! URI into a cache path. The installed application context will be used by
 //! the Android `ContentLocation` storage adapter.
 
-use std::{fs::File, os::fd::FromRawFd, sync::OnceLock};
+use std::{
+    fs::File,
+    os::fd::FromRawFd,
+    sync::{Mutex, OnceLock},
+};
 
 use anyhow::Context as _;
 use jni::EnvUnowned;
@@ -14,6 +18,58 @@ use jni::vm::JavaVM;
 
 static JVM: OnceLock<JavaVM> = OnceLock::new();
 static APPLICATION_CONTEXT: OnceLock<Global<JObject<'static>>> = OnceLock::new();
+
+/// One persisted Android document, with the descriptor reused for its entire
+/// hashing/seeding lifetime. Reopening through JNI for every torrent block is
+/// both expensive and hostile to remote document providers.
+#[derive(Debug)]
+pub(crate) struct Source {
+    uri: String,
+    file: Mutex<Option<File>>,
+}
+
+impl Source {
+    pub(crate) fn new(uri: &str) -> Self {
+        Self {
+            uri: uri.to_owned(),
+            file: Mutex::new(None),
+        }
+    }
+
+    pub(crate) fn length(&self, known_length: Option<u64>) -> anyhow::Result<u64> {
+        self.with_file(|file| {
+            let measured = file.metadata()?.len();
+            Ok(if measured == 0 {
+                known_length.unwrap_or(0)
+            } else {
+                measured
+            })
+        })
+    }
+
+    pub(crate) fn read_exact_at(&self, offset: u64, buffer: &mut [u8]) -> anyhow::Result<()> {
+        use std::os::unix::fs::FileExt;
+        self.with_file(|file| {
+            file.read_exact_at(buffer, offset)?;
+            Ok(())
+        })
+    }
+
+    fn with_file<T>(
+        &self,
+        operation: impl FnOnce(&File) -> anyhow::Result<T>,
+    ) -> anyhow::Result<T> {
+        let mut held = self
+            .file
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if held.is_none() {
+            *held = Some(open(&self.uri)?);
+            crate::nexus::log::clog!("content", "opened Android content source");
+        }
+        operation(held.as_ref().expect("source descriptor was initialized"))
+    }
+}
 
 /// Called exactly once by `PortalisNative.install` during Android activity
 /// startup. Keeping the application context, not an Activity, prevents a
@@ -90,8 +146,7 @@ pub(crate) fn open(uri: &str) -> anyhow::Result<File> {
         anyhow::ensure!(fd >= 0, "Android Files returned an invalid descriptor");
         // `detachFd` transfers ownership to us, so this File is responsible
         // for closing it even when a piece read fails.
-        crate::nexus::log::clog!("content", "opened Android content URI {uri}");
         Ok(unsafe { File::from_raw_fd(fd) })
     })
-    .map_err(|error| anyhow::anyhow!("opening Android content URI {uri:?}: {error}"))
+    .map_err(|error| anyhow::anyhow!("opening Android content source: {error}"))
 }
