@@ -3616,7 +3616,10 @@ pub mod native {
 
         #[test]
         fn extended_handshake_identifies_portalis_exactly() {
-            assert_eq!(super::super::client_name_and_version(), "Portalis 0.1.49");
+            assert_eq!(
+                super::super::client_name_and_version(),
+                concat!("Portalis ", env!("CARGO_PKG_VERSION"))
+            );
         }
 
         /// The default exercises an HTTPS exact-source descriptor; setting

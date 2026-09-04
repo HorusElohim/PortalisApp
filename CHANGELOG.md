@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.0.50+60 — 2026-09-04
+
 - Completed ADR-0016 and ADR-0017; both move from `proposed` to `accepted`.
 - Completed ADR-0018 delivery integrity gates: CI now pins and force-checks
   FRB 2.13.0 generated output, runs Rust advisories/licenses/sources/bans
