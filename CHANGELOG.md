@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Made Android CI release signing fail closed: CI now requires the keystore
+  and release signing configuration to be loaded before assembling the APK,
+  preventing silent fallback to an unsigned artifact.
 - Added backend coverage for default-store initialization and displayable
   unknown-collection errors.
 - Hardened Android CI signing by using an absolute keystore path and

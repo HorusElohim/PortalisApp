@@ -16,6 +16,13 @@ def hasReleaseKeystore = keystorePropertiesFile.exists()
 if (hasReleaseKeystore) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
+def requireReleaseSigning = providers.gradleProperty("portalisRequireReleaseSigning").orNull == "true"
+if (requireReleaseSigning && !hasReleaseKeystore) {
+    throw new GradleException("release signing is required but android/key.properties is missing")
+}
+if (requireReleaseSigning && !file(keystoreProperties["storeFile"]).isFile()) {
+    throw new GradleException("release signing is required but the configured keystore is missing")
+}
 
 android {
     namespace = "com.portalis"
@@ -54,9 +61,9 @@ android {
 
     buildTypes {
         release {
-            // Signs with the beta/production keystore when key.properties is
-            // present; otherwise signs with the debug keys so `flutter build
-            // apk --release` and `flutter run --release` still work.
+            // Local debug-compatible builds may fall back to debug signing,
+            // but CI sets portalisRequireReleaseSigning and therefore cannot
+            // silently produce an unsigned or debug-signed release artifact.
             signingConfig = hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
             // Unset before this point: the release APK shipped every class
             // and every resource from every dependency verbatim, unshrunk.
