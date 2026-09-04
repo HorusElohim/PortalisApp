@@ -98,13 +98,22 @@ runs:
           openssl x509 -noout -fingerprint -sha256 | \
           cut -d= -f2 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
         apksigner=$(find "${ANDROID_HOME}/build-tools" -name apksigner -type f | sort -V | tail -1)
-        actual=$("$apksigner" verify --print-certs "$apk" | \
-          awk -F': ' '/Signer #1 certificate SHA-256 digest:/{print $2; exit}' | \
+        signer_output=$("$apksigner" verify --print-certs "$apk" 2>&1) || {
+          echo "[ERROR] apksigner could not verify the release APK" >&2
+          printf '%s\n' "$signer_output" >&2
+          exit 1
+        }
+        actual=$(printf '%s\n' "$signer_output" | \
+          awk -F': ' '/certificate SHA-256 digest:/{print $2; exit}' | \
           tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
         if test -z "$expected" || test -z "$actual" || test "$expected" != "$actual"; then
           echo "[ERROR] release APK signer does not match the configured upload key" >&2
           echo "[ERROR] expected certificate SHA-256: ${expected:-<missing>}" >&2
           echo "[ERROR] actual certificate SHA-256:   ${actual:-<missing>}" >&2
+          if test -z "$actual"; then
+            echo "[ERROR] apksigner output:" >&2
+            printf '%s\n' "$signer_output" >&2
+          fi
           exit 1
         fi
         echo "release APK signer verified: $actual"
