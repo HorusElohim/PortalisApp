@@ -2707,6 +2707,56 @@ mod tests {
         nexus.close().await;
     }
 
+    #[tokio::test]
+    async fn imported_detail_projects_entries_and_native_availability() {
+        let scratch = Scratch::new("imported-detail");
+        let nexus = open(&scratch);
+        let accepted = nexus
+            .command(&Command::ImportTorrent {
+                source: "magnet:?xt=urn:btih:abc".to_owned(),
+            })
+            .expect("accepts torrent import");
+        let collection = accepted.collection.expect("names the import");
+        let available = scratch.0.join("available.bin");
+        std::fs::write(&available, b"data").expect("writes downloaded entry");
+        let key = nexus
+            .collection_key(collection)
+            .expect("finds collection key");
+        nexus
+            .store
+            .put_torrent_import_entries(
+                &key,
+                &[
+                    StoredImportEntry {
+                        label: "available.bin".to_owned(),
+                        bytes: 4,
+                        selected: true,
+                        native_location: Some(available.to_string_lossy().into_owned()),
+                    },
+                    StoredImportEntry {
+                        label: "missing.bin".to_owned(),
+                        bytes: 7,
+                        selected: false,
+                        native_location: None,
+                    },
+                ],
+            )
+            .expect("writes imported entries");
+
+        let detail = nexus
+            .detail_sources()
+            .build(collection)
+            .expect("builds imported detail");
+        assert_eq!(detail.entries.len(), 2);
+        assert_eq!(detail.entries[0].label, "available.bin");
+        assert!(detail.entries[0].available);
+        assert_eq!(detail.entries[1].label, "missing.bin");
+        assert!(!detail.entries[1].available);
+        assert!(!detail.entries[1].selected);
+
+        nexus.close().await;
+    }
+
     /// Waits for a background worker to reach `done`, or fails the test.
     ///
     /// Bounded and condition-driven rather than a fixed sleep: a worker that
