@@ -97,8 +97,16 @@ pub struct Nexus {
     /// re-establish its peer connections after the app returns from the
     /// background — see [`Substrate::reconnect_active`] for why the
     /// substrate's own reconnect logic cannot be relied on to have run
-    /// while the process was suspended.
-    substrate: Arc<dyn crate::nexus::substrate::Substrate>,
+    /// while the process was suspended. A `Notify`, not a direct
+    /// `tokio::spawn` from `set_active`: `set_active` is called from
+    /// flutter_rust_bridge's synchronous worker thread, which has no Tokio
+    /// runtime — spawning there panics with "there is no reactor running",
+    /// and because that panic happens while `portalis_api::locked_runtime`'s
+    /// mutex is held, it poisons the one lock every FRB call goes through,
+    /// bricking the app until relaunch. `notify_one()` needs no runtime, so
+    /// the actual `reconnect_active().await` call happens on the
+    /// already-running supervised worker instead.
+    resume: Arc<Notify>,
     /// Serializes import admission, so two commands racing inside the same
     /// process moment cannot both pass the durable-uniqueness check before
     /// either has written its row (ADR-0015). Held only for the duration of
@@ -665,8 +673,9 @@ impl Nexus {
         let collections = Arc::new(Mutex::new(collections));
         let publisher = Arc::new(Notify::new());
         let torrents = Arc::new(Notify::new());
+        let resume = Arc::new(Notify::new());
         let substrate_for_torrents = Arc::clone(&substrate);
-        let substrate_for_activity = Arc::clone(&substrate);
+        let substrate_for_resume = Arc::clone(&substrate);
         let holdings = super::transfers::Holdings::default();
         let activity = crate::nexus::activity::DeviceActivityTracker::start(
             Arc::clone(&store),
@@ -760,6 +769,29 @@ impl Nexus {
             let torrents = Arc::clone(&torrents);
             move |shutdown| watch_source_sanity(store, torrents, shutdown)
         });
+        // Runs `Substrate::reconnect_active` off the app's own async
+        // runtime rather than from `set_active` directly — see the
+        // `resume` field's doc comment for why `set_active` (called from
+        // FRB's synchronous worker thread) cannot safely `tokio::spawn`
+        // itself.
+        supervisor.start_now("resume reconnect", {
+            let substrate = Arc::clone(&substrate_for_resume);
+            let resume = Arc::clone(&resume);
+            move |mut shutdown| async move {
+                loop {
+                    tokio::select! {
+                        () = shutdown.requested() => return,
+                        _ = resume.notified() => {}
+                    }
+                    if let Err(error) = substrate.reconnect_active().await {
+                        crate::nexus::log::clog!(
+                            "torrent",
+                            "reconnect on resume failed: {error:#}"
+                        );
+                    }
+                }
+            }
+        });
         // One coalesced wake each is enough: both workers scan durable
         // collection state, so restart recovery does not depend on an
         // in-memory job.
@@ -779,7 +811,7 @@ impl Nexus {
             publisher,
             torrents,
             activity,
-            substrate: substrate_for_activity,
+            resume,
             importing: Arc::new(Mutex::new(())),
         })
     }
@@ -822,15 +854,13 @@ impl Nexus {
             // have been fully suspended, not merely idle) is when a stalled
             // transfer needs to be actively re-kicked — librqbit's own
             // reconnect logic only runs while the process is scheduled, and
-            // a suspended process was not. Fire-and-forget: this is best
-            // effort recovery, not something `set_active`'s caller should
-            // have to await or fail on.
-            let substrate = Arc::clone(&self.substrate);
-            tokio::spawn(async move {
-                if let Err(error) = substrate.reconnect_active().await {
-                    crate::nexus::log::clog!("torrent", "reconnect on resume failed: {error:#}");
-                }
-            });
+            // a suspended process was not. `set_active` runs on FRB's
+            // synchronous worker thread, which has no Tokio runtime, so the
+            // actual reconnect happens on the "resume reconnect" supervised
+            // worker instead — see the `resume` field's doc comment for why
+            // a direct `tokio::spawn` here previously panicked and poisoned
+            // the one lock every FRB call depends on.
+            self.resume.notify_one();
         }
     }
 
