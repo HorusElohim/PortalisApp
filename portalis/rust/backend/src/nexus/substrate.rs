@@ -41,7 +41,7 @@ pub struct Inspected {
 }
 
 #[async_trait]
-pub trait Substrate: Send + Sync {
+pub trait Substrate: Send + Sync + std::fmt::Debug {
     /// Make these files available, and answer with the handle others fetch by.
     async fn publish(
         &self,
@@ -99,9 +99,24 @@ pub trait Substrate: Send + Sync {
 
     /// Everything held right now.
     async fn holdings(&self) -> Vec<TorrentInfo>;
+
+    /// Forces every unpaused handle to drop and re-establish its peer
+    /// connections and re-announce to trackers/DHT.
+    ///
+    /// For coming back from the background/standby on iOS and Android: the
+    /// OS can suspend or throttle the process hard enough that a live
+    /// swarm's sockets go dead without librqbit's own reconnect logic ever
+    /// running (that logic lives *in* the suspended process). Resuming to
+    /// the foreground must not just resume a UI refresh — it must actively
+    /// kick every transfer that may have silently stalled, not wait for
+    /// librqbit to notice on its own next tick, because a fully suspended
+    /// process was not ticking at all. A no-op for anything genuinely still
+    /// connected; the point is recovering the ones that are not.
+    async fn reconnect_active(&self) -> anyhow::Result<()>;
 }
 
 /// The real one.
+#[derive(Debug)]
 pub struct Torrents;
 
 /// Validated, bounded peer addresses supplied by a discovery/bootstrap source.
@@ -329,6 +344,10 @@ impl Substrate for Torrents {
             .await
             .unwrap_or_default()
     }
+
+    async fn reconnect_active(&self) -> anyhow::Result<()> {
+        crate::nexus::torrent::reconnect_active().await
+    }
 }
 
 static CURRENT: Mutex<Option<Arc<dyn Substrate>>> = Mutex::new(None);
@@ -345,7 +364,7 @@ pub(crate) fn current() -> Arc<dyn Substrate> {
 /// two paths that decide *what* to move, which is where the bugs have been —
 /// nothing here pretends to move anything.
 #[cfg(test)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(crate) struct Recorded {
     pub(crate) held: Mutex<Vec<String>>,
     pub(crate) released: Mutex<Vec<String>>,
@@ -364,6 +383,10 @@ pub(crate) struct Recorded {
     pub(crate) paused: Mutex<Vec<(String, bool)>>,
     /// Every `(handle, files)` the engine was told to fetch after starting.
     pub(crate) reselected: Mutex<Vec<(String, Vec<usize>)>>,
+    /// How many times `reconnect_active` was invoked — how a test observes
+    /// the resume-from-background kick without caring what it did to any
+    /// particular handle.
+    pub(crate) reconnects: Mutex<u32>,
     publication: Mutex<Option<(String, Vec<u8>)>>,
     inspection: Mutex<Option<Inspected>>,
     /// When set, `publish` reports "hashing" and then waits on this before
@@ -522,6 +545,11 @@ impl Substrate for Recorded {
             .map(String::as_str)
             .map(held_torrent)
             .collect()
+    }
+
+    async fn reconnect_active(&self) -> anyhow::Result<()> {
+        *self.reconnects.lock().unwrap() += 1;
+        Ok(())
     }
 }
 

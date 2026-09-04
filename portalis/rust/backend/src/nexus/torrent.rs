@@ -918,6 +918,10 @@ pub(crate) async fn restart_torrent(info_hash_hex: &str) -> anyhow::Result<()> {
     native::restart_torrent(info_hash_hex).await
 }
 
+pub(crate) async fn reconnect_active() -> anyhow::Result<()> {
+    native::reconnect_active().await
+}
+
 pub mod native {
     use std::io::Write;
     use std::net::{IpAddr, SocketAddr};
@@ -2979,6 +2983,46 @@ pub mod native {
         add_managed_torrent(&session, AddTorrent::from_url(info_hash_hex), add_opts())
             .await
             .with_context(|| format!("re-adding torrent {info_hash_hex}"))?;
+        Ok(())
+    }
+
+    /// Forces every live (unpaused) handle to drop its peer connections and
+    /// re-establish them, re-announcing to trackers/DHT in the process. See
+    /// [`Substrate::reconnect_active`] for why this exists: librqbit's own
+    /// reconnect logic only runs while the process is actually scheduled,
+    /// which a backgrounded/suspended app is not guaranteed to be — coming
+    /// back to the foreground has to actively re-kick, not just wait.
+    ///
+    /// Implemented as pause-then-unpause: `Session::pause` tears down the
+    /// live state (closing sockets, cancelling the swarm), and
+    /// `Session::unpause` runs the same fresh `start()` a freshly-added
+    /// torrent takes, including a new peer stream and a first announce.
+    /// Already-paused handles are left alone — the user asked for those to
+    /// be idle, so a resume event should not silently restart them.
+    pub(super) async fn reconnect_active() -> anyhow::Result<()> {
+        let session = session().await?;
+        let live: Vec<Arc<librqbit::ManagedTorrent>> =
+            session.with_torrents(|iter| iter.map(|(_, handle)| handle.clone()).collect());
+        for handle in live {
+            if handle.is_paused() {
+                continue;
+            }
+            if let Err(e) = session.pause(&handle).await {
+                crate::nexus::log::clog!(
+                    "torrent",
+                    "reconnect: pause failed for {}: {e:#}",
+                    handle.id()
+                );
+                continue;
+            }
+            if let Err(e) = session.unpause(&handle).await {
+                crate::nexus::log::clog!(
+                    "torrent",
+                    "reconnect: unpause failed for {}: {e:#}",
+                    handle.id()
+                );
+            }
+        }
         Ok(())
     }
 
