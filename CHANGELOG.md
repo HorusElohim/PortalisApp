@@ -7,12 +7,13 @@
   passed to filesystem-only Flutter widgets; duplicate previews share a
   64-entry cache, and native decoding is limited to two worker threads rather
   than creating a full video output or a new thread for every tile.
-- Made Android zero-copy publication reuse one persisted SAF descriptor per
-  source while hashing and seeding, instead of reopening it and synchronously
-  logging its private URI for every 1 MiB read. Document providers whose file
-  descriptor reports an unknown zero length now retain the stable length
-  supplied by the picker, preventing owner collections from falling into
-  metadata retry before hashing starts.
+- Made Android zero-copy publication reuse SAF descriptors through a bounded
+  64-entry cache while hashing and seeding, instead of reopening them and
+  synchronously logging a private URI for every 1 MiB read. Descriptors are
+  evicted when inactive so many collections cannot exhaust Android file
+  descriptors. Providers whose descriptor reports an unknown zero length now
+  retain the stable length supplied by the picker, preventing owner
+  collections from falling into metadata retry before hashing starts.
 - Prevented alternating Android debug and release builds from reusing the
   other profile's Rust JNI libraries through the shared `jniLibs` directory.
 - Prevented late Android native-preview callbacks from targeting a destroyed

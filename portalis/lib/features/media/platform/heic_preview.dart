@@ -12,8 +12,8 @@ class HeicPreview {
 
   static const _channel = MethodChannel('app.portalis/heic-preview');
   static const _cacheLimit = 64;
-  static final LinkedHashMap<String, Future<Uint8List?>> _cache =
-      LinkedHashMap();
+  static final LinkedHashMap<String, Uint8List> _cache = LinkedHashMap();
+  static final Map<String, Future<Uint8List?>> _inFlight = {};
 
   static bool get isSupported => switch (defaultTargetPlatform) {
         TargetPlatform.android ||
@@ -32,15 +32,23 @@ class HeicPreview {
       _cache[key] = cached;
       return cached;
     }
+    final running = _inFlight[key];
+    if (running != null) return running;
 
     final loading = _decode(path, size);
-    _cache[key] = loading;
-    while (_cache.length > _cacheLimit) {
-      _cache.remove(_cache.keys.first);
+    _inFlight[key] = loading;
+    try {
+      final bytes = await loading;
+      if (bytes != null) {
+        _cache[key] = bytes;
+        while (_cache.length > _cacheLimit) {
+          _cache.remove(_cache.keys.first);
+        }
+      }
+      return bytes;
+    } finally {
+      if (identical(_inFlight[key], loading)) _inFlight.remove(key);
     }
-    final bytes = await loading;
-    if (bytes == null && identical(_cache[key], loading)) _cache.remove(key);
-    return bytes;
   }
 
   static Future<Uint8List?> _decode(String path, int maxPixelSize) async {
