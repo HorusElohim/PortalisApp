@@ -2871,6 +2871,7 @@ pub mod native {
                     .ok_or_else(|| anyhow::anyhow!("received source has no length"))
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
+        let all_files_selected = selected.len() == files.len();
         crate::nexus::linked_source_store::upsert(
             crate::nexus::linked_source_store::LinkedSourceRecord {
                 info_hash: info_hash.to_owned(),
@@ -2894,7 +2895,7 @@ pub mod native {
         // Partial selections intentionally skip this optimization: marking
         // unselected pieces complete would make the QR seeder advertise data
         // that this device does not own.
-        if selected.len() == files.len() {
+        if all_files_selected {
             let piece_count = parsed.info.data.pieces.0.len() / 20;
             if piece_count > 0 {
                 let mut all_pieces =
