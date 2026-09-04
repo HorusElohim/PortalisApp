@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added backend coverage for the carried-collection storage join, verifying
+  local handles, names, and substrate identifiers are projected together.
 - Added backend regression coverage for the public Nexus constructor and
   configured-store runtime initialization.
 - Added backend regression coverage for imported collection detail projection,

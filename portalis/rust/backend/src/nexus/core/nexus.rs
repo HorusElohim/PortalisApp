@@ -2704,6 +2704,21 @@ mod tests {
         assert_eq!(stored.sources.len(), 1);
         assert_eq!(stored.sources[0].bytes, 5);
 
+        nexus
+            .store
+            .put_collection(
+                &key,
+                &StoredCollection {
+                    substrate_handle: Some("abc123".to_owned()),
+                    ..stored
+                },
+            )
+            .expect("records substrate handle");
+        assert_eq!(
+            nexus.carried_collections(),
+            vec![(collection, "Photos".to_owned(), "abc123".to_owned())]
+        );
+
         nexus.close().await;
     }
 
