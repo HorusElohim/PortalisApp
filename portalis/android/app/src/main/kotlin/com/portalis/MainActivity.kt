@@ -44,6 +44,11 @@ class MainActivity: FlutterActivity() {
                 previewExecutor.execute {
                     val bytes = decode(path, maxPixelSize)
                     runOnUiThread {
+                        // A grid may be torn down while a native frame is
+                        // decoding. Never answer a MethodChannel owned by a
+                        // destroyed Flutter engine; the originating widget
+                        // is gone and its future no longer has a consumer.
+                        if (isFinishing || isDestroyed) return@runOnUiThread
                         if (bytes == null) {
                             result.error(
                                 "decode_failed",

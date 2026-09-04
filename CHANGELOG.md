@@ -15,6 +15,8 @@
   metadata retry before hashing starts.
 - Prevented alternating Android debug and release builds from reusing the
   other profile's Rust JNI libraries through the shared `jniLibs` directory.
+- Prevented late Android native-preview callbacks from targeting a destroyed
+  Flutter activity when a grid is closed during frame decoding.
 
 ## 1.0.50+60 — 2026-09-04
 
