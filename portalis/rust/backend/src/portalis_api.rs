@@ -322,10 +322,22 @@ fn runtime() -> &'static Mutex<Option<Nexus>> {
     RUNTIME.get_or_init(|| Mutex::new(None))
 }
 
+/// Recovers from a poisoned lock rather than bricking every future call.
+///
+/// A `std::sync::Mutex` poisons permanently the instant any holder panics
+/// while it was locked — and `RUNTIME` is a single process-wide `OnceLock`,
+/// so poisoning it once means every FRB call for the rest of the process's
+/// life returns "the Nexus runtime lock was poisoned" instead of doing
+/// anything, with no way back short of restarting the app. The rest of this
+/// codebase already treats a poisoned lock as recoverable (see
+/// `activity.rs`/`nexus.rs`'s `PoisonError::into_inner`) on the reasoning
+/// that a panicked writer left the data in whatever state it was in when it
+/// panicked, not corrupted — the same reasoning applies here, and applies
+/// more, since this is the one lock every single call goes through.
 fn locked_runtime() -> Result<std::sync::MutexGuard<'static, Option<Nexus>>, String> {
-    runtime()
+    Ok(runtime()
         .lock()
-        .map_err(|_| "the Nexus runtime lock was poisoned".to_owned())
+        .unwrap_or_else(std::sync::PoisonError::into_inner))
 }
 
 /// Opens the local Nexus runtime once. Calling it again is harmless.
