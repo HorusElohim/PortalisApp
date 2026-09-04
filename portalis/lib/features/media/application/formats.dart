@@ -213,6 +213,10 @@ const _kNoDecoder =
     'Flutter\'s image pipeline has no decoder for this format, so it opens '
     'in your system viewer instead.';
 
+const _kExternalDocument =
+    'Portalis has no in-app viewer for this file type, so it opens in '
+    'whatever app your system uses for it.';
+
 final List<MediaFormat> _builtIns = [
   // --- Images -------------------------------------------------------------
   const MediaFormat(
@@ -251,6 +255,33 @@ final List<MediaFormat> _builtIns = [
     kind: MediaKind.image,
     preview: PreviewSupport.nativeImage,
   ),
+  const MediaFormat(
+    extensions: ['tif', 'tiff'],
+    label: 'TIFF image',
+    kind: MediaKind.image,
+    preview: PreviewSupport.externalOnly,
+    previewNote: _kNoDecoder,
+  ),
+  const MediaFormat(
+    extensions: ['jfif'],
+    label: 'JFIF image',
+    kind: MediaKind.image,
+    preview: PreviewSupport.image,
+  ),
+  const MediaFormat(
+    extensions: ['ico'],
+    label: 'Icon image',
+    kind: MediaKind.image,
+    preview: PreviewSupport.externalOnly,
+    previewNote: _kNoDecoder,
+  ),
+  const MediaFormat(
+    extensions: ['dng', 'cr2', 'cr3', 'nef', 'arw', 'raf', 'orf', 'rw2'],
+    label: 'RAW photo',
+    kind: MediaKind.image,
+    preview: PreviewSupport.externalOnly,
+    previewNote: _kNoDecoder,
+  ),
 
   // --- Video --------------------------------------------------------------
   const MediaFormat(
@@ -282,6 +313,36 @@ final List<MediaFormat> _builtIns = [
   const MediaFormat(
     extensions: ['avi'],
     label: 'AVI video',
+    kind: MediaKind.video,
+    preview: PreviewSupport.player,
+  ),
+  const MediaFormat(
+    extensions: ['flv'],
+    label: 'Flash video',
+    kind: MediaKind.video,
+    preview: PreviewSupport.player,
+  ),
+  const MediaFormat(
+    extensions: ['wmv'],
+    label: 'Windows Media video',
+    kind: MediaKind.video,
+    preview: PreviewSupport.player,
+  ),
+  const MediaFormat(
+    extensions: ['3gp'],
+    label: '3GP video',
+    kind: MediaKind.video,
+    preview: PreviewSupport.player,
+  ),
+  const MediaFormat(
+    extensions: ['mpg', 'mpeg'],
+    label: 'MPEG video',
+    kind: MediaKind.video,
+    preview: PreviewSupport.player,
+  ),
+  const MediaFormat(
+    extensions: ['ts', 'm2ts'],
+    label: 'Transport Stream video',
     kind: MediaKind.video,
     preview: PreviewSupport.player,
   ),
@@ -368,6 +429,40 @@ final List<MediaFormat> _builtIns = [
     preview: PreviewSupport.externalOnly,
     previewNote: _kNoDecoder,
   ),
+  const MediaFormat(
+    extensions: ['json', 'xml', 'csv', 'yaml', 'yml', 'ini', 'toml'],
+    label: 'Data file',
+    kind: MediaKind.document,
+    preview: PreviewSupport.text,
+  ),
+  const MediaFormat(
+    extensions: ['doc', 'docx'],
+    label: 'Word document',
+    kind: MediaKind.document,
+    preview: PreviewSupport.externalOnly,
+    previewNote: _kExternalDocument,
+  ),
+  const MediaFormat(
+    extensions: ['xls', 'xlsx'],
+    label: 'Excel spreadsheet',
+    kind: MediaKind.document,
+    preview: PreviewSupport.externalOnly,
+    previewNote: _kExternalDocument,
+  ),
+  const MediaFormat(
+    extensions: ['ppt', 'pptx'],
+    label: 'PowerPoint presentation',
+    kind: MediaKind.document,
+    preview: PreviewSupport.externalOnly,
+    previewNote: _kExternalDocument,
+  ),
+  const MediaFormat(
+    extensions: ['rtf'],
+    label: 'Rich text document',
+    kind: MediaKind.document,
+    preview: PreviewSupport.externalOnly,
+    previewNote: _kExternalDocument,
+  ),
 
   // --- Archives -----------------------------------------------------------
   const MediaFormat(
@@ -380,6 +475,27 @@ final List<MediaFormat> _builtIns = [
   const MediaFormat(
     extensions: ['iso'],
     label: 'Disc image',
+    kind: MediaKind.archive,
+    preview: PreviewSupport.externalOnly,
+    previewNote: 'Archives are shared as-is and opened by your system.',
+  ),
+  const MediaFormat(
+    extensions: ['rar'],
+    label: 'RAR archive',
+    kind: MediaKind.archive,
+    preview: PreviewSupport.externalOnly,
+    previewNote: 'Archives are shared as-is and opened by your system.',
+  ),
+  const MediaFormat(
+    extensions: ['7z'],
+    label: '7-Zip archive',
+    kind: MediaKind.archive,
+    preview: PreviewSupport.externalOnly,
+    previewNote: 'Archives are shared as-is and opened by your system.',
+  ),
+  const MediaFormat(
+    extensions: ['tar', 'gz', 'tgz', 'bz2', 'xz'],
+    label: 'Compressed archive',
     kind: MediaKind.archive,
     preview: PreviewSupport.externalOnly,
     previewNote: 'Archives are shared as-is and opened by your system.',
