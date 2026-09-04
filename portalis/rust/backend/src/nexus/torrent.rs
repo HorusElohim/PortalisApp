@@ -1182,8 +1182,18 @@ pub mod native {
                     client_name_and_version: Some(super::client_name_and_version()),
                     // A range is mandatory, not optional: librqbit only binds
                     // a TCP listener when `listen` is `Some(..)`.
+                    //
+                    // TCP and uTP both, not TCP-only: uTP is BitTorrent's
+                    // own congestion-controlled transport over UDP, and some
+                    // peers only speak one or the other — most visibly two
+                    // Portalis devices on the same Wi-Fi/LAN, where one
+                    // side's OS or router path may prefer/require UDP.
+                    // Restricting to TCP silently drops every peer that
+                    // needed uTP, which reads as "stuck at 1 slow peer"
+                    // rather than a connection failure. Purely additive:
+                    // existing TCP-only peers connect exactly as before.
                     listen: Some(librqbit::ListenerOptions {
-                        mode: librqbit::ListenerMode::TcpOnly,
+                        mode: librqbit::ListenerMode::TcpAndUtp,
                         listen_addr: (std::net::Ipv6Addr::UNSPECIFIED, port).into(),
                         enable_upnp_port_forwarding: settings.enable_upnp_port_forwarding,
                         ..Default::default()
