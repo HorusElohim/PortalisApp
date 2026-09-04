@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed native Android/local collection projections so adding media updates
+  the live entry count and total byte count immediately, not only after a
+  restart or later worker refresh.
 - Fixed Android zero-copy media previews. Grid images and videos backed by
   `content://` now use a bounded native thumbnail decoder instead of being
   passed to filesystem-only Flutter widgets; duplicate previews share a

@@ -1451,6 +1451,12 @@ impl Nexus {
             .put_collection(&key, &stored)
             .map_err(persistence)?;
         self.refresh_status(handle, &key)?;
+        let entries = u32::try_from(stored.sources.len()).unwrap_or(u32::MAX);
+        let total_bytes = stored.sources.iter().map(|source| source.bytes).sum();
+        self.update_collection(handle, |collection| {
+            collection.entries = entries;
+            collection.total_bytes = total_bytes;
+        })?;
         self.republish(handle, &key);
         Ok(())
     }
@@ -2628,6 +2634,64 @@ mod tests {
             .iter()
             .any(|collection| collection.name == "kept");
         assert!(survives, "clearing activity never destroys collections");
+
+        nexus.close().await;
+    }
+
+    #[tokio::test]
+    async fn public_views_and_add_media_use_the_durable_nexus_state() {
+        let scratch = Scratch::new("public-views-and-add-media");
+        let nexus = open(&scratch);
+        let source = scratch.0.join("photo.jpg");
+        std::fs::write(&source, b"image").expect("writes source file");
+
+        let accepted = nexus
+            .command(&Command::CreateCollection {
+                name: "Photos".to_owned(),
+                files: Vec::new(),
+            })
+            .expect("creates a collection");
+        let collection = accepted.collection.expect("names the collection");
+
+        let mut state = nexus.watch();
+        assert_eq!(state.borrow().device.name, "Ada's laptop");
+        let bus = nexus.events_bus();
+        let _subscription = bus.subscribe().await;
+        assert_eq!(bus.subscribers().await, 1);
+        assert!(nexus.peers().is_empty());
+        assert!(nexus.peer_history(collection).is_empty());
+        assert!(nexus.watch_detail(None).borrow().is_none());
+
+        nexus
+            .command(&Command::AddMedia {
+                collection,
+                label: "photo.jpg".to_owned(),
+                files: vec![LocalFile {
+                    name: "photo.jpg".to_owned(),
+                    path: source,
+                    bytes: 5,
+                }],
+            })
+            .expect("adds media to the draft");
+
+        state.changed().await.expect("receives updated snapshot");
+        let snapshot = state.borrow().clone();
+        let projected = snapshot
+            .collections
+            .iter()
+            .find(|item| item.id == collection)
+            .expect("collection remains projected");
+        assert_eq!(projected.entries, 1);
+        let key = nexus
+            .collection_key(collection)
+            .expect("finds collection key");
+        let stored = nexus
+            .store
+            .collection(&key)
+            .expect("reads collection")
+            .expect("collection exists");
+        assert_eq!(stored.sources.len(), 1);
+        assert_eq!(stored.sources[0].bytes, 5);
 
         nexus.close().await;
     }
