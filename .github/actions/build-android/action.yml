@@ -45,24 +45,28 @@ runs:
     - name: Install release keystore
       shell: bash
       working-directory: ${{ inputs.working-dir }}
+      env:
+        KEYSTORE_BASE64: ${{ inputs.keystore-base64 }}
+        KEYSTORE_PASSWORD: ${{ inputs.keystore-password }}
+        KEYSTORE_ALIAS: ${{ inputs.keystore-alias }}
       run: |
         set -euo pipefail
-        test -n "${{ inputs.keystore-base64 }}" || { echo "[ERROR] release keystore is required" >&2; exit 1; }
-        test -n "${{ inputs.keystore-password }}" || { echo "[ERROR] release keystore password is required" >&2; exit 1; }
-        echo "${{ inputs.keystore-base64 }}" | base64 -d > android/app/portalis-release.jks
+        test -n "$KEYSTORE_BASE64" || { echo "[ERROR] release keystore is required" >&2; exit 1; }
+        test -n "$KEYSTORE_PASSWORD" || { echo "[ERROR] release keystore password is required" >&2; exit 1; }
+        printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/app/portalis-release.jks
         test -s android/app/portalis-release.jks || { echo "[ERROR] decoded release keystore is empty" >&2; exit 1; }
         keytool -list -keystore android/app/portalis-release.jks \
-          -alias "${{ inputs.keystore-alias }}" \
-          -storepass "${{ inputs.keystore-password }}" >/dev/null || {
+          -alias "$KEYSTORE_ALIAS" \
+          -storepass "$KEYSTORE_PASSWORD" >/dev/null || {
           echo "[ERROR] release keystore password or alias is invalid" >&2
           exit 1
         }
-        cat > android/key.properties <<EOF
-        storePassword=${{ inputs.keystore-password }}
-        keyPassword=${{ inputs.keystore-password }}
-        keyAlias=${{ inputs.keystore-alias }}
-        storeFile=$(pwd)/android/app/portalis-release.jks
-        EOF
+        printf '%s\n' \
+          "storePassword=$KEYSTORE_PASSWORD" \
+          "keyPassword=$KEYSTORE_PASSWORD" \
+          "keyAlias=$KEYSTORE_ALIAS" \
+          "storeFile=$(pwd)/android/app/portalis-release.jks" \
+          > android/key.properties
         test -s android/key.properties || { echo "[ERROR] Android signing properties were not created" >&2; exit 1; }
 
     - name: Build Rust JNI libs (release)
@@ -73,7 +77,10 @@ runs:
     - name: Flutter build apk (release)
       shell: bash
       working-directory: ${{ inputs.working-dir }}
-      run: flutter build apk --release
+      run: |
+        set -euo pipefail
+        export ORG_GRADLE_PROJECT_portalisRequireReleaseSigning=true
+        flutter build apk --release
 
     - name: Verify release APK signer
       shell: bash
