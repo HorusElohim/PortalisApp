@@ -11,9 +11,9 @@
   64-entry cache while hashing and seeding, instead of reopening them and
   synchronously logging a private URI for every 1 MiB read. Descriptors are
   evicted when inactive so many collections cannot exhaust Android file
-  descriptors. Providers whose descriptor reports an unknown zero length now
-  retain the stable length supplied by the picker, preventing owner
-  collections from falling into metadata retry before hashing starts.
+  descriptors. The stable length supplied by the picker remains authoritative
+  even when the descriptor reports a different or unknown length, preventing
+  owner collections from falling into metadata retry before hashing starts.
 - Prevented alternating Android debug and release builds from reusing the
   other profile's Rust JNI libraries through the shared `jniLibs` directory.
 - Prevented late Android native-preview callbacks from targeting a destroyed
