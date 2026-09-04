@@ -240,6 +240,16 @@ mod tests {
             Connectivity::Degraded { since_unix_ns: 1 }.wire(),
             "Degraded"
         );
+        assert_eq!(
+            Connectivity::parse("LocalOnly"),
+            Some(Connectivity::LocalOnly)
+        );
+        assert_eq!(
+            Connectivity::parse("Connecting"),
+            Some(Connectivity::Connecting)
+        );
+        assert_eq!(Connectivity::parse("Online"), None);
+        assert_eq!(Connectivity::parse("Degraded"), None);
     }
 
     /// A word that cannot be read back is a word nothing can match on.
