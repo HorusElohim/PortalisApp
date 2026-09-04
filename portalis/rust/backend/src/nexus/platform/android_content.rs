@@ -6,9 +6,10 @@
 //! the Android `ContentLocation` storage adapter.
 
 use std::{
+    collections::{HashMap, VecDeque},
     fs::File,
     os::fd::FromRawFd,
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use anyhow::Context as _;
@@ -19,20 +20,28 @@ use jni::vm::JavaVM;
 static JVM: OnceLock<JavaVM> = OnceLock::new();
 static APPLICATION_CONTEXT: OnceLock<Global<JObject<'static>>> = OnceLock::new();
 
+const MAX_OPEN_DOCUMENT_DESCRIPTORS: usize = 64;
+
+#[derive(Default)]
+struct DescriptorCache {
+    files: HashMap<String, Arc<File>>,
+    order: VecDeque<String>,
+}
+
+static DESCRIPTORS: OnceLock<Mutex<DescriptorCache>> = OnceLock::new();
+
 /// One persisted Android document, with the descriptor reused for its entire
 /// hashing/seeding lifetime. Reopening through JNI for every torrent block is
 /// both expensive and hostile to remote document providers.
 #[derive(Debug)]
 pub(crate) struct Source {
     uri: String,
-    file: Mutex<Option<File>>,
 }
 
 impl Source {
     pub(crate) fn new(uri: &str) -> Self {
         Self {
             uri: uri.to_owned(),
-            file: Mutex::new(None),
         }
     }
 
@@ -59,16 +68,45 @@ impl Source {
         &self,
         operation: impl FnOnce(&File) -> anyhow::Result<T>,
     ) -> anyhow::Result<T> {
-        let mut held = self
-            .file
+        let file = cached_file(&self.uri)?;
+        operation(&file)
+    }
+}
+
+fn cached_file(uri: &str) -> anyhow::Result<Arc<File>> {
+    let cache = DESCRIPTORS.get_or_init(|| Mutex::new(DescriptorCache::default()));
+    {
+        let mut cache = cache
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if held.is_none() {
-            *held = Some(open(&self.uri)?);
-            crate::nexus::log::clog!("content", "opened Android content source");
+        if let Some(file) = cache.files.get(uri).cloned() {
+            cache.order.retain(|key| key != uri);
+            cache.order.push_back(uri.to_owned());
+            return Ok(file);
         }
-        operation(held.as_ref().expect("source descriptor was initialized"))
     }
+
+    // Do not hold the global cache lock across a provider call. A slow or
+    // remote DocumentsProvider must not stall unrelated source reads.
+    let opened = Arc::new(open(uri)?);
+    let mut cache = cache
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(file) = cache.files.get(uri).cloned() {
+        cache.order.retain(|key| key != uri);
+        cache.order.push_back(uri.to_owned());
+        return Ok(file);
+    }
+    cache.files.insert(uri.to_owned(), Arc::clone(&opened));
+    cache.order.push_back(uri.to_owned());
+    while cache.files.len() > MAX_OPEN_DOCUMENT_DESCRIPTORS {
+        let Some(oldest) = cache.order.pop_front() else {
+            break;
+        };
+        cache.files.remove(&oldest);
+    }
+    crate::nexus::log::clog!("content", "opened Android content source");
+    Ok(opened)
 }
 
 /// Called exactly once by `PortalisNative.install` during Android activity
