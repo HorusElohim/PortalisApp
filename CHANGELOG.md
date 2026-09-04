@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened Android signer parsing to accept only an actual 64-hex SHA-256
+  certificate digest, rejecting CI labels or placeholder text as fingerprints.
 - Hardened Android APK signer verification to capture the complete
   `apksigner` output and report its non-secret diagnostics when no certificate
   digest is found in CI.

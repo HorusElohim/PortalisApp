@@ -104,8 +104,8 @@ runs:
           exit 1
         }
         actual=$(printf '%s\n' "$signer_output" | \
-          awk -F': ' '/certificate SHA-256 digest:/{print $2; exit}' | \
-          tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          grep -Eo '([[:xdigit:]]{2}:){31}[[:xdigit:]]{2}|[[:xdigit:]]{64}' | \
+          head -1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]' || true)
         if test -z "$expected" || test -z "$actual" || test "$expected" != "$actual"; then
           echo "[ERROR] release APK signer does not match the configured upload key" >&2
           echo "[ERROR] expected certificate SHA-256: ${expected:-<missing>}" >&2
