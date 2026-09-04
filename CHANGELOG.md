@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added backend regression coverage for imported collection detail projection,
+  including selected entries and native-file availability.
 - Added backend regression coverage for torrent metadata resolution and
   selection acquisition, including persisted descriptors, selected indices,
   lifecycle transitions, and substrate handles.
