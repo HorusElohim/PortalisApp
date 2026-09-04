@@ -7,6 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 RUST_DIR="$PROJECT_DIR/../rust/backend"
+source "$PROJECT_DIR/../tool/parallelism.sh"
 
 # Xcode-provided variables for the current build
 # Fallback to Debug layout if not present (e.g., manual invocation)

@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 IOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJ_DIR="$IOS_DIR"
+source "$IOS_DIR/../tool/parallelism.sh"
 RUST_DIR="$IOS_DIR/../rust/backend"
 OUT_DIR="$IOS_DIR/Frameworks"
 
