@@ -847,10 +847,13 @@ pub(crate) async fn move_completed_import_entries(
         return Ok(0);
     }
     for candidate in &moves {
-        let identifier = crate::nexus::platform::ios_photo::import_completed_media(
-            &candidate.path,
-            candidate.video,
-        )?;
+        let path = candidate.path.clone();
+        let video = candidate.video;
+        let identifier = tokio::task::spawn_blocking(move || {
+            crate::nexus::platform::ios_photo::import_completed_media(&path, video)
+        })
+        .await
+        .map_err(|error| anyhow::anyhow!("PhotoKit import task failed: {error}"))??;
         entries[candidate.index].native_location = Some(format!("phasset://{identifier}"));
         // Durable before the next file: a crash leaves the original sandbox
         // file intact, so recovery never has to re-download completed bytes.
