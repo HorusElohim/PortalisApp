@@ -2787,6 +2787,30 @@ mod tests {
         nexus.close().await;
     }
 
+    #[tokio::test]
+    async fn open_default_uses_the_redirected_platform_store() {
+        let _state = crate::nexus::paths::redirect_to_temp();
+        let nexus = Nexus::open_default().expect("opens the default store");
+
+        assert!(nexus.state().collections.is_empty());
+        nexus.close().await;
+    }
+
+    #[tokio::test]
+    async fn commands_for_unknown_collections_return_a_displayable_error() {
+        let scratch = Scratch::new("unknown-collection");
+        let nexus = open(&scratch);
+
+        let error = nexus
+            .command(&Command::DeleteFiles {
+                collection: Handle(u32::MAX),
+            })
+            .expect_err("rejects an unknown collection");
+        assert!(error.to_string().contains("collection"));
+
+        nexus.close().await;
+    }
+
     /// Waits for a background worker to reach `done`, or fails the test.
     ///
     /// Bounded and condition-driven rather than a fixed sleep: a worker that
