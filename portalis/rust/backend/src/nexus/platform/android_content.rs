@@ -48,11 +48,16 @@ impl Source {
     pub(crate) fn length(&self, known_length: Option<u64>) -> anyhow::Result<u64> {
         self.with_file(|file| {
             let measured = file.metadata()?.len();
-            Ok(if measured == 0 {
-                known_length.unwrap_or(0)
-            } else {
-                measured
-            })
+            if let Some(known) = known_length {
+                if measured != 0 && measured != known {
+                    crate::nexus::log::clog!(
+                        "content",
+                        "Android source descriptor length differs from picker metadata; using picker length"
+                    );
+                }
+                return Ok(known);
+            }
+            Ok(measured)
         })
     }
 
