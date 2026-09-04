@@ -861,6 +861,10 @@ impl Nexus {
             // a direct `tokio::spawn` here previously panicked and poisoned
             // the one lock every FRB call depends on.
             self.resume.notify_one();
+            // Metadata resolution has the same suspension failure mode. Wake
+            // its durable worker too, so WaitingForSender retries immediately
+            // after resume instead of waiting for the current backoff timer.
+            self.torrents.notify_one();
         }
     }
 
