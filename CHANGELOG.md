@@ -3,6 +3,12 @@
 ## Unreleased
 
 - Completed ADR-0016 and ADR-0017; both move from `proposed` to `accepted`.
+- Completed ADR-0018 delivery integrity gates: CI now pins and force-checks
+  FRB 2.13.0 generated output, runs Rust advisories/licenses/sources/bans
+  policy, requires and verifies Android release signing, and rejects stale
+  generated artifacts before frontend checks. Windows and macOS publisher
+  metadata now identify Portalis, and local `.hermes/` planning state is
+  ignored.
 - Typed receiver-completion events replace Flutter's snapshot diffing (third
   slice of ADR-0016). Rust emits `Event::TransferSettled` exactly once, at
   the moment `follow_transfers` records a completion — the one place this

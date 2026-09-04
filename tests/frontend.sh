@@ -25,4 +25,22 @@ flutter analyze
 echo "==> flutter test --no-pub ${*:+${*}}"
 flutter test --no-pub "$@"
 
+echo "==> FRB generated drift check"
+./tool/frb_build.sh --codegen-only --force-frb --ai
+if ! git diff --quiet -- \
+  rust/backend/src/api.rs \
+  lib/nexus/bridge/bridge.dart \
+  lib/nexus/bridge/portalis_api.dart \
+  lib/nexus/bridge/frb_generated.dart \
+  lib/nexus/bridge/frb_generated.io.dart \
+  lib/nexus/bridge/frb_generated.web.dart \
+  lib/nexus/bridge/nexus/device.dart \
+  lib/nexus/bridge/nexus/settings.dart; then
+  echo "[ERROR] generated FRB output is stale; run ./tool/frb_build.sh --codegen-only" >&2
+  git diff --stat -- \
+    rust/backend/src/api.rs \
+    lib/nexus/bridge
+  exit 1
+fi
+
 popd >/dev/null
