@@ -7,7 +7,7 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `accept`, `app_activity`, `app_collection_contract`, `app_collection_lifecycle`, `app_run`, `collection_projection`, `detail_projection`, `group_people_peers`, `locked_runtime`, `runtime`, `snapshot`, `source_files`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Opens the local Nexus runtime once. Calling it again is harmless.
 ///
@@ -368,6 +368,7 @@ class AppCollection {
   final BigInt? completedAt;
   final AppTransfer? transfer;
   final AppPending? pending;
+  final AppPublishProgress? publishProgress;
 
   const AppCollection({
     required this.id,
@@ -388,6 +389,7 @@ class AppCollection {
     this.completedAt,
     this.transfer,
     this.pending,
+    this.publishProgress,
   });
 
   @override
@@ -409,7 +411,8 @@ class AppCollection {
       startedAt.hashCode ^
       completedAt.hashCode ^
       transfer.hashCode ^
-      pending.hashCode;
+      pending.hashCode ^
+      publishProgress.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -433,7 +436,8 @@ class AppCollection {
           startedAt == other.startedAt &&
           completedAt == other.completedAt &&
           transfer == other.transfer &&
-          pending == other.pending;
+          pending == other.pending &&
+          publishProgress == other.publishProgress;
 }
 
 /// Application decisions that only Rust may make.
@@ -937,6 +941,47 @@ class AppPeoplePeer {
           peakDownBytesPerSecond == other.peakDownBytesPerSecond &&
           peakUpBytesPerSecond == other.peakUpBytesPerSecond &&
           lastSeenAt == other.lastSeenAt;
+}
+
+/// Progress of hashing/creating a torrent for a collection this device is
+/// publishing (owner side, before seeding begins). Distinct from
+/// `AppTransfer`, which covers moving bytes over the wire — this covers the
+/// local, network-free work of turning selected sources into a torrent.
+class AppPublishProgress {
+  /// Coarse phase label ("preparing", "hashing", "seeding", ...). Not
+  /// meant for exhaustive matching — see `PublishProgressSnapshot::stage`.
+  final String stage;
+  final BigInt processedBytes;
+  final BigInt totalBytes;
+  final BigInt completedPieces;
+  final BigInt totalPieces;
+
+  const AppPublishProgress({
+    required this.stage,
+    required this.processedBytes,
+    required this.totalBytes,
+    required this.completedPieces,
+    required this.totalPieces,
+  });
+
+  @override
+  int get hashCode =>
+      stage.hashCode ^
+      processedBytes.hashCode ^
+      totalBytes.hashCode ^
+      completedPieces.hashCode ^
+      totalPieces.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppPublishProgress &&
+          runtimeType == other.runtimeType &&
+          stage == other.stage &&
+          processedBytes == other.processedBytes &&
+          totalBytes == other.totalBytes &&
+          completedPieces == other.completedPieces &&
+          totalPieces == other.totalPieces;
 }
 
 /// The complete, app-renderable Nexus projection.

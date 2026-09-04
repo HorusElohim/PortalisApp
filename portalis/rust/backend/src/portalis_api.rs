@@ -157,6 +157,7 @@ pub struct AppCollection {
     pub completed_at: Option<u64>,
     pub transfer: Option<AppTransfer>,
     pub pending: Option<AppPending>,
+    pub publish_progress: Option<AppPublishProgress>,
 }
 
 /// One member named by the collection's signed current revision.
@@ -185,6 +186,21 @@ pub struct AppTransfer {
 pub struct AppPending {
     pub command: u64,
     pub queued: bool,
+}
+
+/// Progress of hashing/creating a torrent for a collection this device is
+/// publishing (owner side, before seeding begins). Distinct from
+/// `AppTransfer`, which covers moving bytes over the wire — this covers the
+/// local, network-free work of turning selected sources into a torrent.
+#[derive(Clone, Debug)]
+pub struct AppPublishProgress {
+    /// Coarse phase label ("preparing", "hashing", "seeding", ...). Not
+    /// meant for exhaustive matching — see `PublishProgressSnapshot::stage`.
+    pub stage: String,
+    pub processed_bytes: u64,
+    pub total_bytes: u64,
+    pub completed_pieces: u64,
+    pub total_pieces: u64,
 }
 
 /// A receiver-side transfer's completion, as a typed fact rather than
@@ -1312,6 +1328,16 @@ fn collection_projection(
             command: pending.command,
             queued: pending.queued,
         }),
+        publish_progress: collection
+            .publish_progress
+            .as_ref()
+            .map(|progress| AppPublishProgress {
+                stage: progress.stage.clone(),
+                processed_bytes: progress.processed_bytes,
+                total_bytes: progress.total_bytes,
+                completed_pieces: progress.completed_pieces,
+                total_pieces: progress.total_pieces,
+            }),
     }
 }
 
@@ -1426,6 +1452,7 @@ mod tests {
                 eta_secs: Some(4),
             }),
             pending: None,
+            publish_progress: None,
         };
         let idle = CollectionState {
             id: Handle(2),
@@ -1443,6 +1470,7 @@ mod tests {
             completed_at: None,
             transfer: None,
             pending: None,
+            publish_progress: None,
         };
         let projection = PortalisState {
             device: DeviceState {
@@ -1497,6 +1525,7 @@ mod tests {
             completed_at: None,
             transfer: None,
             pending: None,
+            publish_progress: None,
         };
 
         let app = collection_projection(&collection);
@@ -1532,6 +1561,7 @@ mod tests {
             completed_at: None,
             transfer: None,
             pending: None,
+            publish_progress: None,
         };
 
         let app = collection_projection(&resolving);

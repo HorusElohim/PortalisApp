@@ -321,6 +321,9 @@ pub struct CollectionState {
     pub completed_at: Option<u64>,
     /// Progress tier: present only while something is moving.
     pub transfer: Option<Transfer>,
+    /// Publishing progress: present only while this device is hashing/creating
+    /// a new torrent from local sources.
+    pub publish_progress: Option<crate::nexus::torrent::PublishProgressSnapshot>,
     pub pending: Option<Pending>,
 }
 

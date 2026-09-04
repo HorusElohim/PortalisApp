@@ -1542,6 +1542,8 @@ impl SseDecode for crate::portalis_api::AppCollection {
         let mut var_completedAt = <Option<u64>>::sse_decode(deserializer);
         let mut var_transfer = <Option<crate::portalis_api::AppTransfer>>::sse_decode(deserializer);
         let mut var_pending = <Option<crate::portalis_api::AppPending>>::sse_decode(deserializer);
+        let mut var_publishProgress =
+            <Option<crate::portalis_api::AppPublishProgress>>::sse_decode(deserializer);
         return crate::portalis_api::AppCollection {
             id: var_id,
             name: var_name,
@@ -1561,6 +1563,7 @@ impl SseDecode for crate::portalis_api::AppCollection {
             completed_at: var_completedAt,
             transfer: var_transfer,
             pending: var_pending,
+            publish_progress: var_publishProgress,
         };
     }
 }
@@ -1831,6 +1834,24 @@ impl SseDecode for crate::portalis_api::AppPeoplePeer {
             peak_down_bytes_per_second: var_peakDownBytesPerSecond,
             peak_up_bytes_per_second: var_peakUpBytesPerSecond,
             last_seen_at: var_lastSeenAt,
+        };
+    }
+}
+
+impl SseDecode for crate::portalis_api::AppPublishProgress {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_stage = <String>::sse_decode(deserializer);
+        let mut var_processedBytes = <u64>::sse_decode(deserializer);
+        let mut var_totalBytes = <u64>::sse_decode(deserializer);
+        let mut var_completedPieces = <u64>::sse_decode(deserializer);
+        let mut var_totalPieces = <u64>::sse_decode(deserializer);
+        return crate::portalis_api::AppPublishProgress {
+            stage: var_stage,
+            processed_bytes: var_processedBytes,
+            total_bytes: var_totalBytes,
+            completed_pieces: var_completedPieces,
+            total_pieces: var_totalPieces,
         };
     }
 }
@@ -2266,6 +2287,19 @@ impl SseDecode for Option<crate::portalis_api::AppPending> {
     }
 }
 
+impl SseDecode for Option<crate::portalis_api::AppPublishProgress> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::portalis_api::AppPublishProgress>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::portalis_api::AppTransfer> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2522,6 +2556,7 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppCollection {
             self.completed_at.into_into_dart().into_dart(),
             self.transfer.into_into_dart().into_dart(),
             self.pending.into_into_dart().into_dart(),
+            self.publish_progress.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2899,6 +2934,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppPeoplePeer>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppPublishProgress {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.stage.into_into_dart().into_dart(),
+            self.processed_bytes.into_into_dart().into_dart(),
+            self.total_bytes.into_into_dart().into_dart(),
+            self.completed_pieces.into_into_dart().into_dart(),
+            self.total_pieces.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::portalis_api::AppPublishProgress
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppPublishProgress>
+    for crate::portalis_api::AppPublishProgress
+{
+    fn into_into_dart(self) -> crate::portalis_api::AppPublishProgress {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppSnapshot {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -3242,6 +3301,10 @@ impl SseEncode for crate::portalis_api::AppCollection {
         <Option<u64>>::sse_encode(self.completed_at, serializer);
         <Option<crate::portalis_api::AppTransfer>>::sse_encode(self.transfer, serializer);
         <Option<crate::portalis_api::AppPending>>::sse_encode(self.pending, serializer);
+        <Option<crate::portalis_api::AppPublishProgress>>::sse_encode(
+            self.publish_progress,
+            serializer,
+        );
     }
 }
 
@@ -3438,6 +3501,17 @@ impl SseEncode for crate::portalis_api::AppPeoplePeer {
         <u32>::sse_encode(self.peak_down_bytes_per_second, serializer);
         <u32>::sse_encode(self.peak_up_bytes_per_second, serializer);
         <u64>::sse_encode(self.last_seen_at, serializer);
+    }
+}
+
+impl SseEncode for crate::portalis_api::AppPublishProgress {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.stage, serializer);
+        <u64>::sse_encode(self.processed_bytes, serializer);
+        <u64>::sse_encode(self.total_bytes, serializer);
+        <u64>::sse_encode(self.completed_pieces, serializer);
+        <u64>::sse_encode(self.total_pieces, serializer);
     }
 }
 
@@ -3742,6 +3816,16 @@ impl SseEncode for Option<crate::portalis_api::AppPending> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::portalis_api::AppPending>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::portalis_api::AppPublishProgress> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::portalis_api::AppPublishProgress>::sse_encode(value, serializer);
         }
     }
 }

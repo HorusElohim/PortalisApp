@@ -623,6 +623,7 @@ mod tests {
             completed_at: None,
             transfer: None,
             pending: None,
+            publish_progress: None,
         };
         let (states, _) = watch::channel(PortalisState {
             device: crate::nexus::projection::state::DeviceState {

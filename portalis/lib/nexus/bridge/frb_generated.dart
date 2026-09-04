@@ -1272,8 +1272,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppCollection dco_decode_app_collection(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 18)
-      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
+    if (arr.length != 19)
+      throw Exception('unexpected arr length: expect 19 but see ${arr.length}');
     return AppCollection(
       id: dco_decode_u_32(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -1293,6 +1293,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       completedAt: dco_decode_opt_box_autoadd_u_64(arr[15]),
       transfer: dco_decode_opt_box_autoadd_app_transfer(arr[16]),
       pending: dco_decode_opt_box_autoadd_app_pending(arr[17]),
+      publishProgress: dco_decode_opt_box_autoadd_app_publish_progress(arr[18]),
     );
   }
 
@@ -1498,6 +1499,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AppPublishProgress dco_decode_app_publish_progress(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return AppPublishProgress(
+      stage: dco_decode_String(arr[0]),
+      processedBytes: dco_decode_u_64(arr[1]),
+      totalBytes: dco_decode_u_64(arr[2]),
+      completedPieces: dco_decode_u_64(arr[3]),
+      totalPieces: dco_decode_u_64(arr[4]),
+    );
+  }
+
+  @protected
   AppSnapshot dco_decode_app_snapshot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1619,6 +1635,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppPending dco_decode_box_autoadd_app_pending(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_app_pending(raw);
+  }
+
+  @protected
+  AppPublishProgress dco_decode_box_autoadd_app_publish_progress(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_app_publish_progress(raw);
   }
 
   @protected
@@ -1806,6 +1828,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AppPublishProgress? dco_decode_opt_box_autoadd_app_publish_progress(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_app_publish_progress(raw);
+  }
+
+  @protected
   AppTransfer? dco_decode_opt_box_autoadd_app_transfer(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_app_transfer(raw);
@@ -1970,6 +2001,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_completedAt = sse_decode_opt_box_autoadd_u_64(deserializer);
     var var_transfer = sse_decode_opt_box_autoadd_app_transfer(deserializer);
     var var_pending = sse_decode_opt_box_autoadd_app_pending(deserializer);
+    var var_publishProgress =
+        sse_decode_opt_box_autoadd_app_publish_progress(deserializer);
     return AppCollection(
         id: var_id,
         name: var_name,
@@ -1988,7 +2021,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         startedAt: var_startedAt,
         completedAt: var_completedAt,
         transfer: var_transfer,
-        pending: var_pending);
+        pending: var_pending,
+        publishProgress: var_publishProgress);
   }
 
   @protected
@@ -2206,6 +2240,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AppPublishProgress sse_decode_app_publish_progress(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_stage = sse_decode_String(deserializer);
+    var var_processedBytes = sse_decode_u_64(deserializer);
+    var var_totalBytes = sse_decode_u_64(deserializer);
+    var var_completedPieces = sse_decode_u_64(deserializer);
+    var var_totalPieces = sse_decode_u_64(deserializer);
+    return AppPublishProgress(
+        stage: var_stage,
+        processedBytes: var_processedBytes,
+        totalBytes: var_totalBytes,
+        completedPieces: var_completedPieces,
+        totalPieces: var_totalPieces);
+  }
+
+  @protected
   AppSnapshot sse_decode_app_snapshot(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_device = sse_decode_app_device(deserializer);
@@ -2345,6 +2396,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppPending sse_decode_box_autoadd_app_pending(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_app_pending(deserializer));
+  }
+
+  @protected
+  AppPublishProgress sse_decode_box_autoadd_app_publish_progress(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_app_publish_progress(deserializer));
   }
 
   @protected
@@ -2646,6 +2704,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AppPublishProgress? sse_decode_opt_box_autoadd_app_publish_progress(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_app_publish_progress(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   AppTransfer? sse_decode_opt_box_autoadd_app_transfer(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2827,6 +2897,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_u_64(self.completedAt, serializer);
     sse_encode_opt_box_autoadd_app_transfer(self.transfer, serializer);
     sse_encode_opt_box_autoadd_app_pending(self.pending, serializer);
+    sse_encode_opt_box_autoadd_app_publish_progress(
+        self.publishProgress, serializer);
   }
 
   @protected
@@ -2978,6 +3050,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_app_publish_progress(
+      AppPublishProgress self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.stage, serializer);
+    sse_encode_u_64(self.processedBytes, serializer);
+    sse_encode_u_64(self.totalBytes, serializer);
+    sse_encode_u_64(self.completedPieces, serializer);
+    sse_encode_u_64(self.totalPieces, serializer);
+  }
+
+  @protected
   void sse_encode_app_snapshot(AppSnapshot self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_app_device(self.device, serializer);
@@ -3075,6 +3158,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       AppPending self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_app_pending(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_app_publish_progress(
+      AppPublishProgress self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_app_publish_progress(self, serializer);
   }
 
   @protected
@@ -3319,6 +3409,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_app_pending(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_app_publish_progress(
+      AppPublishProgress? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_app_publish_progress(self, serializer);
     }
   }
 

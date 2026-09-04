@@ -8,6 +8,7 @@ import '../../media/presentation/thumbnail.dart';
 import '../../media/application/formats.dart';
 import '../domain/collection.dart';
 import '../domain/collection_state.dart';
+import '../../../nexus/domain/app_state.dart' show AppPublishProgress;
 import 'commands.dart';
 import 'peer_color.dart';
 import '../../../design/indicators.dart';
@@ -85,6 +86,7 @@ class _CollectionRowState extends State<CollectionRow> {
     // No metadata has arrived, so there is no total to measure against — an
     // indeterminate bar is the honest shape for "reaching out to a peer".
     final connecting = collection.isConnecting;
+    final publishing = collection.isPublishing;
     final subtitle = collection.subtitle;
     return Row(
       children: [
@@ -136,6 +138,20 @@ class _CollectionRowState extends State<CollectionRow> {
                     valueColor: AlwaysStoppedAnimation(accent),
                   ),
                 ),
+              ] else if (publishing) ...[
+                const SizedBox(height: 9),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  child: LinearProgressIndicator(
+                    // Hashing has no byte total until the first tick reports
+                    // one; an indeterminate bar is the honest shape until
+                    // then, same as the receiver's "connecting" state.
+                    value: _publishFraction(collection.publishProgress),
+                    minHeight: 5,
+                    backgroundColor: AppColors.borderStrong,
+                    valueColor: AlwaysStoppedAnimation(accent),
+                  ),
+                ),
               ],
             ],
           ),
@@ -151,6 +167,16 @@ class _CollectionRowState extends State<CollectionRow> {
   Widget _status() {
     final collection = widget.collection;
     final accent = collection.isShared ? AppColors.signal : AppColors.ember;
+    if (collection.isPublishing) {
+      final progress = collection.publishProgress;
+      final fraction = _publishFraction(progress);
+      return StatusBadge(
+        label: fraction == null
+            ? (progress?.stage.toUpperCase() ?? 'PREPARING')
+            : formatProgressPercent(fraction),
+        color: accent,
+      );
+    }
     if (collection.isDownloading) {
       return StatusBadge(
         label: formatProgressPercent(collection.progress),
@@ -188,6 +214,17 @@ class _CollectionRowState extends State<CollectionRow> {
           true,
         _ => false,
       };
+}
+
+/// Local hashing progress as zero-to-one, or `null` before the first tick
+/// has reported a byte total — the same "nothing to measure against yet"
+/// shape as a receiver's indeterminate connecting bar.
+double? _publishFraction(AppPublishProgress? progress) {
+  if (progress == null) return null;
+  final total = progress.totalBytes;
+  if (total <= BigInt.zero) return null;
+  final processed = progress.processedBytes;
+  return (processed.toDouble() / total.toDouble()).clamp(0.0, 1.0);
 }
 
 class _TorrentCollectionTile extends StatelessWidget {

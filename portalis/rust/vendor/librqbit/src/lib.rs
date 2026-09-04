@@ -44,7 +44,7 @@ mod stat_gen;
 pub mod api;
 mod api_error;
 mod bitv;
-mod bitv_factory;
+pub mod bitv_factory;
 mod chunk_tracker;
 mod create_torrent_file;
 mod dht_utils;
@@ -65,17 +65,17 @@ mod peer_connection;
 mod peer_info_reader;
 mod piece_tracker;
 mod read_buf;
-mod session;
+pub mod session;
 mod session_persistence;
 pub mod session_stats;
 pub mod spawn_utils;
+pub mod type_aliases;
 
 pub mod storage;
 mod stream_connect;
-mod torrent_state;
+pub mod torrent_state;
 #[cfg(feature = "tracing-subscriber-utils")]
 pub mod tracing_subscriber_config_utils;
-mod type_aliases;
 #[cfg(all(feature = "http-api", feature = "upnp-serve-adapter"))]
 pub mod upnp_server_adapter;
 mod vectored_traits;
@@ -85,10 +85,16 @@ pub mod watch;
 pub use error::{Error, Result};
 
 pub use api::Api;
+pub use api::TorrentIdOrHash;
 pub use api_error::{ApiError, WithStatus, WithStatusError};
+pub use bitv_factory::BitVFactory;
 pub use create_torrent_file::{CreateTorrentOptions, CreateTorrentResult, create_torrent};
 pub use dht;
 pub use librqbit_core::spawn_utils::spawn as librqbit_spawn;
+pub use librqbit_core::torrent_metainfo;
+pub use librqbit_core::torrent_metainfo::{
+    TorrentMetaV1File, TorrentMetaV1Info, TorrentMetaV1Owned,
+};
 pub use listen::{ListenerMode, ListenerOptions};
 pub use peer_connection::PeerConnectionOptions;
 pub use session::{
@@ -100,13 +106,16 @@ pub use torrent_state::{
     ManagedTorrent, ManagedTorrentShared, ManagedTorrentState, TorrentMetadata, TorrentStats,
     TorrentStatsState,
 };
+pub use type_aliases::BF;
 pub use type_aliases::FileInfos;
 
 pub use buffers::*;
 pub use clone_to_owned::CloneToOwned;
+pub use librqbit_core::hash_id::{Id20, Id32};
 pub use librqbit_core::magnet::*;
 pub use librqbit_core::peer_id::*;
 pub use librqbit_core::torrent_metainfo::*;
+pub use sha1w::{ISha1, ISha256, Sha1, Sha256};
 
 #[cfg(test)]
 mod tests;

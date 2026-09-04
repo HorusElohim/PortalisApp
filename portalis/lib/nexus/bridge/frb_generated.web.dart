@@ -103,6 +103,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppPeoplePeer dco_decode_app_people_peer(dynamic raw);
 
   @protected
+  AppPublishProgress dco_decode_app_publish_progress(dynamic raw);
+
+  @protected
   AppSnapshot dco_decode_app_snapshot(dynamic raw);
 
   @protected
@@ -128,6 +131,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AppPending dco_decode_box_autoadd_app_pending(dynamic raw);
+
+  @protected
+  AppPublishProgress dco_decode_box_autoadd_app_publish_progress(dynamic raw);
 
   @protected
   AppTransfer dco_decode_box_autoadd_app_transfer(dynamic raw);
@@ -206,6 +212,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AppPending? dco_decode_opt_box_autoadd_app_pending(dynamic raw);
+
+  @protected
+  AppPublishProgress? dco_decode_opt_box_autoadd_app_publish_progress(
+      dynamic raw);
 
   @protected
   AppTransfer? dco_decode_opt_box_autoadd_app_transfer(dynamic raw);
@@ -319,6 +329,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppPeoplePeer sse_decode_app_people_peer(SseDeserializer deserializer);
 
   @protected
+  AppPublishProgress sse_decode_app_publish_progress(
+      SseDeserializer deserializer);
+
+  @protected
   AppSnapshot sse_decode_app_snapshot(SseDeserializer deserializer);
 
   @protected
@@ -345,6 +359,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AppPending sse_decode_box_autoadd_app_pending(SseDeserializer deserializer);
+
+  @protected
+  AppPublishProgress sse_decode_box_autoadd_app_publish_progress(
+      SseDeserializer deserializer);
 
   @protected
   AppTransfer sse_decode_box_autoadd_app_transfer(SseDeserializer deserializer);
@@ -432,6 +450,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AppPending? sse_decode_opt_box_autoadd_app_pending(
+      SseDeserializer deserializer);
+
+  @protected
+  AppPublishProgress? sse_decode_opt_box_autoadd_app_publish_progress(
       SseDeserializer deserializer);
 
   @protected
@@ -547,6 +569,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_app_people_peer(AppPeoplePeer self, SseSerializer serializer);
 
   @protected
+  void sse_encode_app_publish_progress(
+      AppPublishProgress self, SseSerializer serializer);
+
+  @protected
   void sse_encode_app_snapshot(AppSnapshot self, SseSerializer serializer);
 
   @protected
@@ -577,6 +603,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_app_pending(
       AppPending self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_app_publish_progress(
+      AppPublishProgress self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_app_transfer(
@@ -673,6 +703,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_app_pending(
       AppPending? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_app_publish_progress(
+      AppPublishProgress? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_app_transfer(

@@ -63,6 +63,14 @@ class Collection {
       lifecycle == AppCollectionLifecycle.retryingMetadata;
   bool get isSeeding => lifecycle == AppCollectionLifecycle.seeding;
 
+  /// This device is hashing/creating a torrent for its own selected sources
+  /// — local, network-free work distinct from receiving bytes over the
+  /// wire. Rust reuses `ResolvingMetadata` for both directions (see
+  /// `status_for`); `publishProgress` being present is what disambiguates
+  /// "resolving a peer's metadata" from "hashing my own files".
+  AppPublishProgress? get publishProgress => source.publishProgress;
+  bool get isPublishing => publishProgress != null;
+
   bool get isSharing => source.facts.sharing;
   bool get canShareQr => source.capabilities.canShare;
   bool get isComplete => source.facts.complete;
