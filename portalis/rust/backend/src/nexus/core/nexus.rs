@@ -266,6 +266,7 @@ impl DetailSources {
 /// Store keys survive a restart; handles deliberately do not. Keeping their
 /// mapping beside the projection prevents either identifier becoming the
 /// other's accidental public API.
+
 #[derive(Debug, Default)]
 pub struct LocalCollections {
     keys: HashMap<Handle, Vec<u8>>,
@@ -522,6 +523,7 @@ fn project_stored_collection(
         on_disk_bytes: stored.on_disk_bytes,
         uploaded_bytes: 0,
         transfer: None,
+        publish_progress: None,
         pending: None,
     }
 }
@@ -1836,6 +1838,43 @@ async fn publish_pending_collections(
                 total
             );
             let progress = crate::nexus::torrent::PublishProgress::new(total);
+            let key_for_progress = key.clone();
+
+            // Spawn a task that periodically surfaces the publish progress to the UI.
+            let progress_for_ui = progress.clone();
+            let states_for_ui = states.clone();
+            let collections_for_ui = Arc::clone(&collections);
+            let _progress_updater = tokio::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_millis(500));
+                loop {
+                    interval.tick().await;
+                    if progress_for_ui.is_cancelled() {
+                        break;
+                    }
+                    let snapshot = progress_for_ui.snapshot();
+                    if snapshot.stage != "preparing" {
+                        let handle_opt = collections_for_ui
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .handle(&key_for_progress);
+                        if let Some(handle) = handle_opt {
+                            let _ = states_for_ui.send_if_modified(|state| {
+                                if let Some(projected) =
+                                    state.collections.iter_mut().find(|p| p.id == handle)
+                                {
+                                    let changed =
+                                        projected.publish_progress != Some(snapshot.clone());
+                                    projected.publish_progress = Some(snapshot);
+                                    changed
+                                } else {
+                                    false
+                                }
+                            });
+                        }
+                    }
+                }
+            });
+
             let publishing = publish_collection_sources(
                 &store,
                 substrate.as_ref(),
@@ -1887,6 +1926,7 @@ async fn publish_pending_collections(
                                 if let Some(status) = status {
                                     projected.status = status;
                                 }
+                                projected.publish_progress = None;
                             }
                         });
                     }
@@ -1927,6 +1967,7 @@ async fn publish_pending_collections(
                             }
                             projected.status =
                                 crate::nexus::projection::state::Status::RetryingMetadata;
+                            projected.publish_progress = None;
                             true
                         });
                     }
@@ -2560,6 +2601,7 @@ mod tests {
             uploaded_bytes: 0,
             transfer: None,
             pending: None,
+            publish_progress: None,
         }
     }
 

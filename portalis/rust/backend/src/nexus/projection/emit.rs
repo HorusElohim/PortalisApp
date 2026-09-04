@@ -225,6 +225,7 @@ mod tests {
             uploaded_bytes: 0,
             transfer,
             pending: None,
+            publish_progress: None,
         }
     }
 

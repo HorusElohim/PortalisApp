@@ -563,6 +563,11 @@ impl Session {
         &self.client_name_and_version
     }
 
+    /// Returns the bitv factory used for fastresume bitfield persistence.
+    pub fn bitv_factory(&self) -> &Arc<dyn BitVFactory> {
+        &self.bitv_factory
+    }
+
     /// Create a new session with options.
     #[inline(never)]
     pub fn new_with_opts(

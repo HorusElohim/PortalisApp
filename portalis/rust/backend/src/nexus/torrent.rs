@@ -309,6 +309,10 @@ impl PublishProgress {
             .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.cancelled.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub(crate) fn ensure_active(&self) -> anyhow::Result<()> {
         anyhow::ensure!(
             !self.cancelled.load(std::sync::atomic::Ordering::Relaxed),
@@ -316,6 +320,29 @@ impl PublishProgress {
         );
         Ok(())
     }
+
+    /// Returns a snapshot of the current publishing progress.
+    /// Used by the projection to surface hashing progress in the UI.
+    pub(crate) fn snapshot(&self) -> PublishProgressSnapshot {
+        let state = self.inner.lock().unwrap();
+        PublishProgressSnapshot {
+            stage: state.stage.clone(),
+            processed_bytes: state.processed_bytes,
+            total_bytes: state.total_bytes,
+            completed_pieces: state.completed_pieces,
+            total_pieces: state.total_pieces,
+        }
+    }
+}
+
+/// Snapshot of publishing progress for the projection/UI.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PublishProgressSnapshot {
+    pub stage: String,
+    pub processed_bytes: u64,
+    pub total_bytes: u64,
+    pub completed_pieces: u64,
+    pub total_pieces: u64,
 }
 
 #[cfg(test)]
@@ -900,18 +927,16 @@ pub mod native {
     use anyhow::Context;
     use bencode::bencode_serialize_to_writer;
     use buffers::ByteBufOwned;
-    use librqbit::api::TorrentIdOrHash;
+    use librqbit::Id20;
+    use librqbit::api::{Api, TorrentIdOrHash};
+    use librqbit::session::{AddTorrent, AddTorrentOptions, AddTorrentResponse, Session};
     use librqbit::storage::{StorageFactory, StorageFactoryExt, TorrentStorage};
-    use librqbit::{
-        AddTorrent, AddTorrentOptions, AddTorrentResponse, Api, ManagedTorrentShared, Session,
-        TorrentMetadata,
-    };
-    use librqbit_core::Id20;
-    use librqbit_core::torrent_metainfo::{
-        TorrentMetaV1File, TorrentMetaV1Info, TorrentMetaV1Owned,
-    };
+    use librqbit::torrent_metainfo::{TorrentMetaV1File, TorrentMetaV1Info, TorrentMetaV1Owned};
+    use librqbit::torrent_state::{ManagedTorrentShared, TorrentMetadata};
+    use librqbit::type_aliases::BF;
+    use librqbit::{ISha1, Sha1};
     use network_interface::{Addr, NetworkInterface, NetworkInterfaceConfig};
-    use sha1w::{ISha1, Sha1};
+    use std::str::FromStr;
     use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
     use super::{
@@ -1117,9 +1142,6 @@ pub mod native {
                 let dir = output_dir_for(&settings);
                 std::fs::create_dir_all(&dir)
                     .with_context(|| format!("creating output dir {dir:?}"))?;
-                // Every knob comes from the persisted settings now — see
-                // settings.rs. librqbit reads these once, here, which is why
-                // changing any of them needs a restart.
                 let trackers: std::collections::HashSet<_> = settings
                     .trackers
                     .iter()
@@ -1959,6 +1981,39 @@ pub mod native {
         );
         progress.ensure_active()?;
         progress.set_stage("seeding");
+
+        // Pre-seed librqbit's fastresume store with an all-pieces bitfield so
+        // its initial_check becomes a cheap one-piece spot-check instead of a
+        // second full-file re-hash. We just verified every piece during our
+        // own hashing pass, so this is honest — not a shortcut.
+        let piece_count = parsed.info.data.pieces.0.len() / 20;
+        if piece_count > 0 {
+            let mut all_pieces =
+                BF::from_boxed_slice(vec![u8::MAX; piece_count.div_ceil(8)].into_boxed_slice());
+            // `all_pieces.len()` is in BITS (BitBox::from_boxed_slice sizes to
+            // slice.len() * 8), which is >= piece_count when piece_count isn't
+            // byte-aligned. Clear the padding bits beyond piece_count so the
+            // fastresume bitfield reports exactly the pieces that exist.
+            let total_bits = all_pieces.len();
+            for idx in piece_count..total_bits {
+                all_pieces.set(idx, false);
+            }
+            let info_hash_id =
+                Id20::from_str(&info_hash).context("parsing info hash for fastresume")?;
+            if let Err(e) = session
+                .bitv_factory()
+                .store_initial_check(TorrentIdOrHash::Hash(info_hash_id), all_pieces)
+                .await
+            {
+                crate::nexus::log::clog!(
+                    "torrent",
+                    "failed to pre-seed fastresume bitfield for {}: {:#}",
+                    info_hash,
+                    e
+                );
+            }
+        }
+
         let metadata_dir = referenced_metadata_dir(&info_hash);
         std::fs::create_dir_all(&metadata_dir)?;
         let options = AddTorrentOptions {
@@ -2015,7 +2070,7 @@ pub mod native {
         progress: &PublishProgress,
     ) -> anyhow::Result<(bytes::Bytes, String)> {
         const PIECE_LENGTH: u32 = TORRENT_PIECE_LENGTH as u32;
-        const READ_SIZE: usize = 64 * 1024;
+        const READ_SIZE: usize = 1024 * 1024;
         anyhow::ensure!(
             files.len() == sources.len() && files.len() == lengths.len(),
             "source descriptor mismatch"
