@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added backend regression coverage for the public Nexus constructor and
+  configured-store runtime initialization.
 - Added backend regression coverage for imported collection detail projection,
   including selected entries and native-file availability.
 - Added backend regression coverage for torrent metadata resolution and

@@ -2757,6 +2757,21 @@ mod tests {
         nexus.close().await;
     }
 
+    #[tokio::test]
+    async fn public_open_constructs_a_runtime_from_a_configured_store() {
+        let scratch = Scratch::new("public-open");
+        let nexus = Nexus::open(&Config {
+            data_dir: scratch.0.clone(),
+            device_name: "Configured device".to_owned(),
+            fingerprint: "configured-fingerprint".to_owned(),
+        })
+        .expect("opens through the public constructor");
+
+        assert_eq!(nexus.state().device.name, "Configured device");
+        assert_eq!(nexus.state().device.fingerprint, "configured-fingerprint");
+        nexus.close().await;
+    }
+
     /// Waits for a background worker to reach `done`, or fails the test.
     ///
     /// Bounded and condition-driven rather than a fixed sleep: a worker that
