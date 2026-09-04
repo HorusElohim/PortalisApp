@@ -1,39 +1,30 @@
-# cargo-deny configuration for Portalis backend
-# See https://github.com/EmbarkStudios/cargo-deny
+# Explicit dependency policy for Portalis' Rust delivery gate.
+# Keep this list reviewed: a newly introduced license must fail the gate.
 
 [advisories]
-# Fetch advisories from the RustSec database
-# db-path = "advisories-db"  # optional: cache location
-# Ignore specific advisories with justification
-# Each entry needs: id = "RUSTSEC-YYYY-NNNN", reason = "..."
-# ignore = []
 
-# [bans]
-# Disabled for now - too many duplicates from transitive deps
-# multiple-versions = "deny"
-
-# [licenses]
-# Disabled for now - our own crates cause issues
-# allow = [
-#   "MIT",
-#   "Apache-2.0",
-#   "BSD-2-Clause",
-#   "BSD-3-Clause",
-#   "ISC",
-#   "Zlib",
-#   "Unicode-DFS-2016",
-#   "Unicode-3.0",
-#   "MPL-2.0",
-#   "Apache-2.0 WITH LLVM-exception",
-# ]
+[licenses]
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Zlib",
+]
 
 [sources]
-# Only allow crates from crates.io and git repositories
-# allow-unknown-registry = false
-# allow-unknown-git = false
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
+unknown-registry = "deny"
+unknown-git = "deny"
 
-# Known registries we trust
-# allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-
-# known-git = []
-# e.g. known-git = [{ repo = "https://github.com/example/repo" }]
+[bans]
+# Several direct/transitive libraries intentionally use incompatible major
+# versions (for example FRB versus librqbit). The dependency graph remains
+# visible in CI; duplicate-version bans are not a safe release gate here.
+multiple-versions = "allow"

@@ -32,7 +32,7 @@ inputs:
   frb-codegen-version:
     description: Version of flutter_rust_bridge_codegen to install
     required: false
-    default: '2.11.1'
+    default: '2.13.0'
   install-cargo-ndk:
     description: Install cargo-ndk (Android helper)
     required: false

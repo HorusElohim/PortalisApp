@@ -6,16 +6,11 @@ inputs:
     required: false
     default: portalis
   keystore-base64:
-    description: >-
-      Base64-encoded release keystore (.jks). When empty, the release APK
-      falls back to debug signing, which is fine for a quick sideload but is
-      not upload-key-stable across builds.
-    required: false
-    default: ''
+    description: Base64-encoded release keystore (.jks).
+    required: true
   keystore-password:
-    description: Keystore/key password (this project's generator uses one PKCS12 password for both).
-    required: false
-    default: ''
+    description: Keystore/key password.
+    required: true
   keystore-alias:
     description: Key alias inside the keystore.
     required: false
@@ -48,11 +43,12 @@ runs:
         working-dir: ${{ inputs.working-dir }}
 
     - name: Install release keystore
-      if: ${{ inputs.keystore-base64 != '' }}
       shell: bash
       working-directory: ${{ inputs.working-dir }}
       run: |
         set -euo pipefail
+        test -n "${{ inputs.keystore-base64 }}" || { echo "[ERROR] release keystore is required" >&2; exit 1; }
+        test -n "${{ inputs.keystore-password }}" || { echo "[ERROR] release keystore password is required" >&2; exit 1; }
         echo "${{ inputs.keystore-base64 }}" | base64 -d > android/app/portalis-release.jks
         cat > android/key.properties <<EOF
         storePassword=${{ inputs.keystore-password }}
@@ -70,6 +66,27 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-dir }}
       run: flutter build apk --release
+
+    - name: Verify release APK signer
+      shell: bash
+      working-directory: ${{ inputs.working-dir }}
+      env:
+        KEYSTORE_PASSWORD: ${{ inputs.keystore-password }}
+        KEYSTORE_ALIAS: ${{ inputs.keystore-alias }}
+      run: |
+        set -euo pipefail
+        apk="build/app/outputs/flutter-apk/app-release.apk"
+        expected=$(keytool -list -v -keystore android/app/portalis-release.jks \
+          -alias "$KEYSTORE_ALIAS" -storepass "$KEYSTORE_PASSWORD" \
+          -keypass "$KEYSTORE_PASSWORD" | awk -F': ' '/SHA256:/{print $2; exit}')
+        apksigner=$(find "${ANDROID_HOME}/build-tools" -name apksigner -type f | sort -V | tail -1)
+        actual=$("$apksigner" verify --print-certs "$apk" | \
+          awk -F': ' '/Signer #1 certificate SHA-256 digest:/{print $2; exit}')
+        test -n "$expected" && test "$expected" = "$actual" || {
+          echo "[ERROR] release APK signer does not match the configured upload key" >&2
+          exit 1
+        }
+        echo "release APK signer verified"
 
     - name: Remove release keystore
       if: always()

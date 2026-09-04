@@ -62,6 +62,9 @@ jobs:
       - uses: actions/checkout@v5
       - name: Toolchains
         uses: ./.github/actions/setup-flutter-rust
+        with:
+          install-frb-codegen: 'true'
+          frb-codegen-version: '2.13.0'
       - name: Frontend checks
         run: ./tests/frontend.sh
 

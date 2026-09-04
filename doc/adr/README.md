@@ -29,10 +29,11 @@ instead of a living SPEC.
 | [0015](0015-idempotent-collection-imports.md) | Make collection imports idempotent in Rust | proposed | — |
 | [0016](0016-rust-owned-app-contract.md) | Rust-owned app contract with a thin Flutter renderer | proposed | — |
 | [0017](0017-canonical-production-projection.md) | One production projection path, tested through production | proposed | — |
-| [0018](0018-delivery-integrity-gates.md) | Treat generated bindings, security, coverage, and artifacts as release inputs | proposed | — |
+| [0018](0018-delivery-integrity-gates.md) | Treat generated bindings, security, coverage, artifacts, and release metadata as inputs | accepted | — |
 
-> **Note:** ADRs record decisions agreed during design sessions and remain
-> `proposed` pending owner validation at PR merge. ADR-0002 and the one-engine
+> **Note:** ADRs record decisions agreed during design sessions. Entries marked
+> `accepted` include implementation and acceptance evidence; `proposed` entries
+> remain pending owner validation at PR merge. ADR-0002 and the one-engine
 > portion of ADR-0003.5 are already reflected in the tree; the remaining records
 > describe direction and are sequenced with the code changes they motivate.
 > A new ADR declares what it supersedes; older records remain unchanged as

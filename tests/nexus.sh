@@ -29,6 +29,6 @@ buf lint
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo audit
-cargo deny check advisories bans sources
+cargo deny check advisories bans licenses sources
 cargo test --workspace --all-targets --all-features "$@"
 ./scripts/coverage.sh
