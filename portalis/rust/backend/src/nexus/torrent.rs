@@ -2888,6 +2888,29 @@ pub mod native {
                 .await
                 .context("replacing received torrent storage")?;
         }
+        // The files were just verified by the completed receiver and every
+        // file is selected, so librqbit can reuse an honest all-pieces
+        // fast-resume bitmap instead of hashing the gallery assets again.
+        // Partial selections intentionally skip this optimization: marking
+        // unselected pieces complete would make the QR seeder advertise data
+        // that this device does not own.
+        if selected.len() == files.len() {
+            let piece_count = parsed.info.data.pieces.0.len() / 20;
+            if piece_count > 0 {
+                let mut all_pieces =
+                    BF::from_boxed_slice(vec![u8::MAX; piece_count.div_ceil(8)].into_boxed_slice());
+                for index in piece_count..all_pieces.len() {
+                    all_pieces.set(index, false);
+                }
+                let info_hash_id =
+                    Id20::from_str(info_hash).context("parsing received info hash")?;
+                session
+                    .bitv_factory()
+                    .store_initial_check(TorrentIdOrHash::Hash(info_hash_id), all_pieces)
+                    .await
+                    .context("storing received torrent fast-resume bitmap")?;
+            }
+        }
         let metadata_dir = referenced_metadata_dir(info_hash);
         std::fs::create_dir_all(&metadata_dir)?;
         let options = AddTorrentOptions {
