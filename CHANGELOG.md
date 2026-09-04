@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Hardened Android CI signing by using an absolute keystore path and
+  validating the decoded keystore, alias, password, and signing properties
+  before the release build starts.
 - Added backend coverage for the carried-collection storage join, verifying
   local handles, names, and substrate identifiers are projected together.
 - Added backend regression coverage for the public Nexus constructor and
