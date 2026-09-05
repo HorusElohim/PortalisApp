@@ -1202,9 +1202,20 @@ pub mod native {
                         ..Default::default()
                     }),
                     connect: Some(make_connect()),
+                    // `folder: None` asks librqbit to guess a location via
+                    // `directories::ProjectDirs::from("com", "rqbit",
+                    // "session")`, which resolves through `HOME`/XDG
+                    // environment variables an Android app process never
+                    // sets — the same class of failure as the DHT
+                    // persistence path above ("cannot determine project
+                    // directory for com.rqbit.session"), also turning every
+                    // publish/resume into an infinite retry loop. Point it at
+                    // our own already-Android-safe state directory instead.
                     persistence: settings.persist_session.then_some(
                         librqbit::SessionPersistenceConfig::Json {
-                            folder: None,
+                            folder: Some(
+                                crate::nexus::paths::state_dir().join("librqbit-session"),
+                            ),
                         },
                     ),
                     fastresume: settings.fastresume,

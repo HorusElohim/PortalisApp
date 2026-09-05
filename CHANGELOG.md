@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed a second, identical Android publication/resume stall: the librqbit
+  session persistence store had the same `directories`-crate guessing bug as
+  DHT persistence (below) — `SessionPersistenceConfig::Json { folder: None }`
+  asked for an OS-guessed folder via `HOME`/XDG environment variables, which
+  Android app processes never set, failing every `librqbit::Session`
+  construction with "cannot determine project directory for com.rqbit.session"
+  even after the DHT persistence path was fixed. Session persistence now also
+  writes into Portalis's own Android-safe state directory.
 - Fixed Android publication/resume never leaving `RetryingMetadata`: DHT
   persistence used to ask the `directories` crate to guess a config path via
   `HOME`/XDG environment variables, which Android app processes never set,
