@@ -62,7 +62,7 @@ class _HomeState extends State<Home> {
         LocalSources(:final files) when files.isEmpty => null,
         LocalSources(:final files) => await _createDraft(files),
         TorrentSource(:final source) => await _importTorrent(source),
-        ScannedCollectionSource(:final magnet) => await _importTorrent(magnet),
+        ScannedCollectionSource(:final source) => await _importTorrent(source),
       };
       if (collection == null || !mounted) return;
       _openCollectionById(collection);
@@ -171,13 +171,6 @@ class _HomeState extends State<Home> {
       setState(() => _dropBusy = true);
       try {
         await _importTorrent(files.single.path);
-        if (mounted) {
-          showToast(
-            context,
-            'Torrent added — choose files on the collection',
-            severity: ToastSeverity.success,
-          );
-        }
       } catch (error) {
         if (mounted) {
           showToast(

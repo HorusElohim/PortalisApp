@@ -859,50 +859,6 @@ fn group_people_peers(
     grouped.into_values().collect()
 }
 
-/// What a scanned invitation says about a collection, before any network.
-///
-/// A magnet answers only "what content", so an import screen had nothing to
-/// show until the swarm replied. This is the sending device's own description,
-/// carried in the code itself, so the receiver can name the collection, lay out
-/// placeholders for its entries, and warn about a code that cannot work here —
-/// all before the first packet.
-///
-/// Every field is untrusted input from a scanned image. It is safe to display
-/// and to size a placeholder grid with; it is not authorization, and the
-/// content itself remains verified by info hash exactly as before.
-pub struct AppInvitation {
-    /// The collection's name on the sharing device.
-    pub name: String,
-    /// The sharing device's name.
-    pub owner: String,
-    /// How many entries the collection holds.
-    pub entries: u32,
-    /// Seconds since the Unix epoch at which the code was produced.
-    pub issued_at_secs: u32,
-    /// Whether any advertised endpoint sits on a network this device is also
-    /// on. False means the code was almost certainly produced on another
-    /// network — the single most common reason an in-person share stalls.
-    pub reachable_here: bool,
-}
-
-/// Describes a scanned invitation without importing it.
-///
-/// Separate from `send` so the interface can show what a code contains — and
-/// refuse an unusable one — before committing to a durable collection row.
-/// Returns `None` for anything that is not a Portalis invitation, including a
-/// plain magnet, which the import path still accepts directly.
-pub fn describe_invitation(link: String) -> Option<AppInvitation> {
-    let invitation = portalis_nexus_protocol::Invitation::decode(&link).ok()?;
-    let reachable_here = invitation.shares_network_with(&crate::nexus::torrent::local_addresses());
-    Some(AppInvitation {
-        name: invitation.name,
-        owner: invitation.owner,
-        entries: invitation.entries,
-        issued_at_secs: invitation.issued_at_secs,
-        reachable_here,
-    })
-}
-
 /// The collection's shareable invitation link, when the local substrate has a
 /// real persisted info hash for it. Fetched on demand rather than added to
 /// every snapshot because a QR is only useful on the screen that asked for it,
