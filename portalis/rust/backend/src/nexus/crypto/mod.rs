@@ -6,7 +6,6 @@
 //! `portalis_nexus_protocol` types — so they move here rather than being
 //! deleted with the transport that used to sit beside them.
 
-mod capsule;
 mod keys;
 mod verify;
 
@@ -14,6 +13,5 @@ pub use keys::{
     KeyError, Recipient, SealedFor, Sealing, generate_content_key, open_content_key,
     seal_content_key,
 };
-#[allow(unused_imports)]
 pub use verify::{ChainError, ChainStore, Continuity, MemoryChainStore, verify as verify_revision};
 pub(crate) use verify::{ChainState, position};
