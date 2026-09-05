@@ -34,8 +34,7 @@ runs:
       id: setup
       uses: ./.github/actions/setup-flutter-rust
       with:
-        rust-targets: >-
-          aarch64-linux-android x86_64-linux-android armv7-linux-androideabi
+        rust-targets: aarch64-linux-android
         install-cargo-ndk: 'true'
         cache-key-suffix: android
         extract-version: 'true'
@@ -80,7 +79,7 @@ runs:
       run: |
         set -euo pipefail
         export ORG_GRADLE_PROJECT_portalisRequireReleaseSigning=true
-        flutter build apk --release
+        flutter build apk --release --target-platform android-arm64
 
     - name: Verify release APK signer
       shell: bash
