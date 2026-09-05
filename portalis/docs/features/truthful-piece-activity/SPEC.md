@@ -1,6 +1,6 @@
 # Truthful piece activity
 
-Status: **implemented for Portalis 1.0.9 / backend 0.1.7**
+Status: **implemented for Portalis 1.0.51 / backend 0.1.51**
 
 ## Intent
 

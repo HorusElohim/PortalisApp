@@ -1,9 +1,18 @@
 # Changelog
 
-## Unreleased
+## 1.0.51+61 — 2026-09-06
+
+- Replaced the unused exact piece bitmap bridge payload with compact per-file
+  64-bucket progress shapes. Rust packs verified and active regions into 16
+  bytes per file, and the existing media perimeter renders them without
+  moving transfer logic into Flutter.
+- Rust now builds rich torrent file details only for collections with an open
+  detail subscription; summary, peer accounting, rates, and history remain
+  continuously owned by Rust. The rqbit fork is pinned to its merged iOS
+  socket-dependency fix.
 
 - Portalis now consumes `librqbit` from the maintained `HorusElohim/rqbit`
-  `portalis` branch. The fork is based on upstream `main`, carries the
+  `main` branch. The fork is based on upstream `main`, carries the
   Portalis telemetry/persistence extensions, and schedules normal media
   downloads sequentially within the first unfinished file while preserving
   higher-priority streaming requests.
