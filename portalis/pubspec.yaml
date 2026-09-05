@@ -38,11 +38,6 @@ dependencies:
   # https://pub.dev/packages/flutter_rust_bridge
   flutter_rust_bridge: 2.13.0
 
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
-
   # Cross-platform file picker, used by the Torrent tab to pick a .torrent
   # file (magnet links are just a text field).
   file_picker: ^12.0.0
