@@ -7,6 +7,10 @@
   and orphaned Flutter demo/progress/barrel files. The typed Rust-owned paths
   remain unchanged.
 
+- Android builds now explicitly pass `--target-platform android-arm64` from the
+  shared local build wrapper, matching the Rust JNI build and CI. This prevents
+  Flutter from requesting ABIs for which no native library is produced.
+
 - Fixed scanned invitations being refused before they could be unwrapped.
   Command validation runs ahead of `import_torrent` and accepted only a magnet
   URI or a `.torrent` path, so every scanned QR was rejected with "choose a
