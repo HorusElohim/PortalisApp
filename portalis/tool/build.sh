@@ -212,6 +212,17 @@ fi
 
 case "$FLUTTER_PLATFORM" in
   android)
+    # Rust produces only arm64-v8a now. Keep Flutter's packaging target in
+    # lockstep so local builds do not request ABIs with no JNI library.
+    has_target_platform=0
+    for argument in "${FLUTTER_ARGS[@]}"; do
+      case "$argument" in
+        --target-platform|--target-platform=*) has_target_platform=1 ;;
+      esac
+    done
+    if [[ "$has_target_platform" -eq 0 ]]; then
+      BUILD_ARGS+=("--target-platform" "android-arm64")
+    fi
     # Flutter has no `build android` command; APK is the canonical Android
     # artifact and matches the CI build action.
     run flutter build apk "${BUILD_ARGS[@]}"
