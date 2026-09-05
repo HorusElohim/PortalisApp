@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `tool/run.sh android` now reuses the APK produced by its build step via
+  Flutter's supported `--use-application-binary` option, avoiding a second
+  Gradle `assembleRelease` invocation. Explicit device IDs are also passed as
+  the sole Android device selector.
+
 - Removed the obsolete JSON peer-hints bridge, its unused LAN-discovery module,
   the unreachable cryptographic capsule prototype, unused key-rotation helper,
   and orphaned Flutter demo/progress/barrel files. The typed Rust-owned paths
