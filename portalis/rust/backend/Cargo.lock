@@ -1803,7 +1803,7 @@ dependencies = [
 [[package]]
 name = "librqbit"
 version = "9.0.1"
-source = "git+https://github.com/HorusElohim/rqbit?branch=main#92011ad6097bd4d75421861790cf1dcf8bdeb557"
+source = "git+https://github.com/HorusElohim/rqbit?branch=main#b5230a52266dd1b7c96114f4fa800e5102de159f"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1866,7 +1866,7 @@ dependencies = [
 [[package]]
 name = "librqbit-bencode"
 version = "9.0.1"
-source = "git+https://github.com/HorusElohim/rqbit?branch=main#92011ad6097bd4d75421861790cf1dcf8bdeb557"
+source = "git+https://github.com/HorusElohim/rqbit?branch=main#b5230a52266dd1b7c96114f4fa800e5102de159f"
 dependencies = [
  "anyhow",
  "arrayvec",
@@ -1882,7 +1882,7 @@ dependencies = [
 [[package]]
 name = "librqbit-buffers"
 version = "9.0.1"
-source = "git+https://github.com/HorusElohim/rqbit?branch=main#92011ad6097bd4d75421861790cf1dcf8bdeb557"
+source = "git+https://github.com/HorusElohim/rqbit?branch=main#b5230a52266dd1b7c96114f4fa800e5102de159f"
 dependencies = [
  "bytes",
  "librqbit-clone-to-owned",
@@ -1893,7 +1893,7 @@ dependencies = [
 [[package]]
 name = "librqbit-clone-to-owned"
 version = "9.0.1"
-source = "git+https://github.com/HorusElohim/rqbit?branch=main#92011ad6097bd4d75421861790cf1dcf8bdeb557"
+source = "git+https://github.com/HorusElohim/rqbit?branch=main#b5230a52266dd1b7c96114f4fa800e5102de159f"
 dependencies = [
  "bytes",
 ]
@@ -1901,7 +1901,7 @@ dependencies = [
 [[package]]
 name = "librqbit-core"
 version = "9.0.1"
-source = "git+https://github.com/HorusElohim/rqbit?branch=main#92011ad6097bd4d75421861790cf1dcf8bdeb557"
+source = "git+https://github.com/HorusElohim/rqbit?branch=main#b5230a52266dd1b7c96114f4fa800e5102de159f"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1930,7 +1930,7 @@ dependencies = [
 [[package]]
 name = "librqbit-dht"
 version = "9.0.1"
-source = "git+https://github.com/HorusElohim/rqbit?branch=main#92011ad6097bd4d75421861790cf1dcf8bdeb557"
+source = "git+https://github.com/HorusElohim/rqbit?branch=main#b5230a52266dd1b7c96114f4fa800e5102de159f"
 dependencies = [
  "anyhow",
  "backon",
@@ -1960,8 +1960,7 @@ dependencies = [
 [[package]]
 name = "librqbit-dualstack-sockets"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7189f1ff66ca75055137a38b062ba7df9691d071b7172e5090997c62eb4b4de"
+source = "git+https://github.com/HorusElohim/librqbit-dualstack-sockets?rev=9d142bc#9d142bcbdb4ea13bdc44038668bbc14e3191da1e"
 dependencies = [
  "axum",
  "backon",
@@ -1977,7 +1976,7 @@ dependencies = [
 [[package]]
 name = "librqbit-lsd"
 version = "9.0.1"
-source = "git+https://github.com/HorusElohim/rqbit?branch=main#92011ad6097bd4d75421861790cf1dcf8bdeb557"
+source = "git+https://github.com/HorusElohim/rqbit?branch=main#b5230a52266dd1b7c96114f4fa800e5102de159f"
 dependencies = [
  "anyhow",
  "atoi",
@@ -1996,7 +1995,7 @@ dependencies = [
 [[package]]
 name = "librqbit-peer-protocol"
 version = "9.0.1"
-source = "git+https://github.com/HorusElohim/rqbit?branch=main#92011ad6097bd4d75421861790cf1dcf8bdeb557"
+source = "git+https://github.com/HorusElohim/rqbit?branch=main#b5230a52266dd1b7c96114f4fa800e5102de159f"
 dependencies = [
  "anyhow",
  "bitvec",
@@ -2016,7 +2015,7 @@ dependencies = [
 [[package]]
 name = "librqbit-sha1-wrapper"
 version = "9.0.1"
-source = "git+https://github.com/HorusElohim/rqbit?branch=main#92011ad6097bd4d75421861790cf1dcf8bdeb557"
+source = "git+https://github.com/HorusElohim/rqbit?branch=main#b5230a52266dd1b7c96114f4fa800e5102de159f"
 dependencies = [
  "assert_cfg",
  "aws-lc-rs",
@@ -2025,7 +2024,7 @@ dependencies = [
 [[package]]
 name = "librqbit-tracker-comms"
 version = "9.0.1"
-source = "git+https://github.com/HorusElohim/rqbit?branch=main#92011ad6097bd4d75421861790cf1dcf8bdeb557"
+source = "git+https://github.com/HorusElohim/rqbit?branch=main#b5230a52266dd1b7c96114f4fa800e5102de159f"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2075,7 +2074,7 @@ dependencies = [
 [[package]]
 name = "librqbit-upnp"
 version = "9.0.1"
-source = "git+https://github.com/HorusElohim/rqbit?branch=main#92011ad6097bd4d75421861790cf1dcf8bdeb557"
+source = "git+https://github.com/HorusElohim/rqbit?branch=main#b5230a52266dd1b7c96114f4fa800e5102de159f"
 dependencies = [
  "anyhow",
  "bstr",
