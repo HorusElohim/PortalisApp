@@ -140,8 +140,7 @@ fn client_name_and_version() -> String {
 }
 
 /// The media formats Portalis may automatically hand to a native gallery.
-/// This explicit allow-list is shared with the future Android MediaStore path.
-#[cfg(any(target_os = "ios", test))]
+#[cfg(any(target_os = "ios", target_os = "android", test))]
 pub(crate) fn is_gallery_media_filename(name: &str) -> bool {
     let extension = name
         .rsplit_once('.')
@@ -168,7 +167,7 @@ pub(crate) fn is_gallery_media_filename(name: &str) -> bool {
     )
 }
 
-#[cfg(any(target_os = "ios", test))]
+#[cfg(any(target_os = "ios", target_os = "android", test))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GalleryMoveCandidate {
     pub(crate) index: usize,
@@ -179,7 +178,7 @@ pub(crate) struct GalleryMoveCandidate {
 /// Identifies receiver-side entries that are individually verified and ready
 /// for native-gallery ownership. The plan is per entry so documents and later
 /// selected files keep their writable Portalis locations.
-#[cfg(any(target_os = "ios", test))]
+#[cfg(any(target_os = "ios", target_os = "android", test))]
 pub(crate) fn gallery_move_plan(
     info: &TorrentInfo,
     entries: &[crate::nexus::store::records::StoredImportEntry],
@@ -822,7 +821,7 @@ pub(crate) fn forget_linked_sources(info_hash_hex: &str) -> anyhow::Result<()> {
 
 /// Rebinds one received torrent to durable native/gallery and filesystem
 /// locations without changing its info hash or selected-file intent.
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "android"))]
 pub(crate) async fn rebind_received_storage(
     info_hash: &str,
     descriptor: &[u8],
@@ -855,6 +854,81 @@ pub(crate) async fn move_completed_import_entries(
         .await
         .map_err(|error| anyhow::anyhow!("PhotoKit import task failed: {error}"))??;
         entries[candidate.index].native_location = Some(format!("phasset://{identifier}"));
+        // Durable before the next file: a crash leaves the original sandbox
+        // file intact, so recovery never has to re-download completed bytes.
+        store.put_torrent_import_entries(key, &entries)?;
+    }
+    let descriptor = store
+        .torrent_import_descriptor(key)?
+        .ok_or_else(|| anyhow::anyhow!("completed import has no torrent descriptor"))?;
+    let sources = info
+        .files
+        .iter()
+        .map(|file| {
+            let entry = entries
+                .iter()
+                .find(|entry| entry.label == file.name)
+                .ok_or_else(|| anyhow::anyhow!("received file is absent from stored entries"))?;
+            Ok(SourceFile {
+                name: file.name.clone(),
+                path: entry
+                    .native_location
+                    .clone()
+                    .unwrap_or_else(|| file.absolute_path.clone()),
+                length_bytes: Some(file.length_bytes),
+            })
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let selected = entries
+        .iter()
+        .enumerate()
+        .filter_map(|(index, entry)| entry.selected.then_some(index))
+        .collect::<Vec<_>>();
+    rebind_received_storage(&info.info_hash, &descriptor, sources, selected).await?;
+    for candidate in &moves {
+        if let Err(error) = std::fs::remove_file(&candidate.path) {
+            crate::nexus::log::clog!(
+                "torrent",
+                "could not remove imported sandbox media: {error}"
+            );
+        }
+    }
+    Ok(moves.len())
+}
+
+/// Imports every newly verified media entry into MediaStore's public gallery
+/// collection, records its `content://` identifier, then rebinds the
+/// original torrent to those identifiers before dropping the now-redundant
+/// sandbox copies. Mirrors [`move_completed_import_entries`] above for iOS,
+/// swapping PhotoKit for MediaStore as the destination.
+#[cfg(target_os = "android")]
+pub(crate) async fn move_completed_import_entries(
+    store: &crate::nexus::store::Store,
+    key: &[u8],
+    info: &TorrentInfo,
+) -> anyhow::Result<usize> {
+    let mut entries = store.torrent_import_entries(key)?;
+    let moves = gallery_move_plan(info, &entries);
+    if moves.is_empty() {
+        return Ok(0);
+    }
+    for candidate in &moves {
+        let path = candidate.path.clone();
+        let video = candidate.video;
+        let display_name = std::path::Path::new(&path)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .ok_or_else(|| anyhow::anyhow!("received file path has no name"))?;
+        let uri = tokio::task::spawn_blocking(move || {
+            crate::nexus::platform::android_content::export_to_media_store(
+                &path,
+                &display_name,
+                video,
+            )
+        })
+        .await
+        .map_err(|error| anyhow::anyhow!("MediaStore export task failed: {error}"))??;
+        entries[candidate.index].native_location = Some(uri);
         // Durable before the next file: a crash leaves the original sandbox
         // file intact, so recovery never has to re-download completed bytes.
         store.put_torrent_import_entries(key, &entries)?;
@@ -2875,7 +2949,7 @@ pub mod native {
         Ok(())
     }
 
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_os = "android"))]
     pub(super) async fn rebind_received_storage(
         info_hash: &str,
         descriptor: &[u8],

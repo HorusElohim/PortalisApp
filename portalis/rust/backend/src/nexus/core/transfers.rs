@@ -24,23 +24,24 @@ use crate::nexus::store::records::{StoredCollection, StoredPeerHistory, StoredSa
 use crate::nexus::substrate::Substrate;
 use crate::nexus::torrent::TorrentInfo;
 
-/// A background import job for iOS Photos.
+/// A background import job that hands completed, verified received media to
+/// the native gallery (iOS Photos or Android MediaStore).
 ///
-/// Runs outside the hot polling loop, and the PhotoKit FFI itself runs on
+/// Runs outside the hot polling loop, and the native FFI itself runs on
 /// Tokio's blocking pool, so neither the poller nor the async runtime worker
-/// stalls on PhotoKit latency (which can take seconds per file).
+/// stalls on native gallery I/O (which can take seconds per file).
 /// If the app exits before completion, the next run will re-import any
 /// remaining sandbox files — the original download is never lost because
 /// the sandbox copy is only deleted *after* successful import.
-#[cfg(target_os = "ios")]
-pub(crate) fn spawn_import_to_photos(store: Arc<Store>, key: Vec<u8>, info: TorrentInfo) {
+#[cfg(any(target_os = "ios", target_os = "android"))]
+pub(crate) fn spawn_import_to_gallery(store: Arc<Store>, key: Vec<u8>, info: TorrentInfo) {
     tokio::spawn(async move {
         if let Err(error) =
             crate::nexus::torrent::move_completed_import_entries(&store, &key, &info).await
         {
             crate::nexus::log::clog!(
                 "torrent",
-                "background Photos import failed for {}: {error:#}",
+                "background gallery import failed for {}: {error:#}",
                 hex::encode(&key)
             );
         }
@@ -262,9 +263,9 @@ pub(crate) async fn follow_transfers(
                     "could not checkpoint completed transfer: {error}"
                 );
             }
-            #[cfg(target_os = "ios")]
+            #[cfg(any(target_os = "ios", target_os = "android"))]
             if completed_download {
-                spawn_import_to_photos(Arc::clone(&store), key.clone(), (*info).clone());
+                spawn_import_to_gallery(Arc::clone(&store), key.clone(), (*info).clone());
             }
             current.insert(
                 key.clone(),

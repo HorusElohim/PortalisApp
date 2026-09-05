@@ -8,6 +8,14 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Needed only below Android 10 (API 29): MediaStore inserts into the
+         shared Pictures/Movies collections require this on legacy storage.
+         Scoped storage (API 29+) grants that access without it, hence the
+         ceiling — declaring it unconditionally would only add an unused
+         permission prompt on newer OS versions. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"/>
     <application
         android:label="portalis"
         android:name="${applicationName}"
