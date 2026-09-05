@@ -216,12 +216,14 @@ case "$FLUTTER_PLATFORM" in
     # lockstep so local builds do not request ABIs with no JNI library.
     has_target_platform=0
     has_project_cache_dir=0
-    for argument in "${FLUTTER_ARGS[@]}"; do
-      case "$argument" in
-        --target-platform|--target-platform=*) has_target_platform=1 ;;
-        --android-project-cache-dir|--android-project-cache-dir=*) has_project_cache_dir=1 ;;
-      esac
-    done
+    if [[ ${#FLUTTER_ARGS[@]} -gt 0 ]]; then
+      for argument in "${FLUTTER_ARGS[@]}"; do
+        case "$argument" in
+          --target-platform|--target-platform=*) has_target_platform=1 ;;
+          --android-project-cache-dir|--android-project-cache-dir=*) has_project_cache_dir=1 ;;
+        esac
+      done
+    fi
     if [[ "$has_target_platform" -eq 0 ]]; then
       BUILD_ARGS+=("--target-platform" "android-arm64")
     fi
