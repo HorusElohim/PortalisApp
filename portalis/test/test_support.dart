@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -135,6 +136,7 @@ AppEntry buildEntry({
       selected: selected,
       available: available,
       downloadedBytes: BigInt.from(downloadedBytes),
+      progressBuckets: Uint8List(0),
       path: path,
     );
 

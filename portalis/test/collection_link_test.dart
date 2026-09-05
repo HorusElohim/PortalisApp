@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/app/collection_link.dart';
@@ -143,6 +144,7 @@ void main() {
             selected: true,
             available: false,
             downloadedBytes: BigInt.zero,
+            progressBuckets: Uint8List(0),
           ),
         ],
         peers: const [],

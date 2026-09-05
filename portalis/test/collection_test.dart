@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'test_support.dart';
 import 'package:portalis/app/collection_link.dart';
 import 'package:portalis/nexus/data/collection_view.dart';
@@ -563,6 +565,7 @@ void main() {
               selected: true,
               available: false,
               downloadedBytes: BigInt.from(450),
+              progressBuckets: Uint8List(0),
             ),
             AppEntry(
               id: 2,
@@ -571,6 +574,7 @@ void main() {
               selected: true,
               available: true,
               downloadedBytes: BigInt.from(1000),
+              progressBuckets: Uint8List(0),
               path: '/downloads/extras.mkv',
             ),
           ],
@@ -607,6 +611,7 @@ void main() {
               selected: true,
               available: false,
               downloadedBytes: BigInt.zero,
+              progressBuckets: Uint8List(0),
             ),
           ],
           peers: const [],

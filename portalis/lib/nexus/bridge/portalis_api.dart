@@ -708,6 +708,9 @@ class AppEntry {
   /// until the last byte of the last file lands.
   final BigInt downloadedBytes;
 
+  /// A packed 64-bucket visual progress shape, or empty when unavailable.
+  final Uint8List progressBuckets;
+
   /// Where the bytes landed, once they have, so the interface can show a
   /// preview rather than a filename.
   final String? path;
@@ -719,6 +722,7 @@ class AppEntry {
     required this.selected,
     required this.available,
     required this.downloadedBytes,
+    required this.progressBuckets,
     this.path,
   });
 
@@ -730,6 +734,7 @@ class AppEntry {
       selected.hashCode ^
       available.hashCode ^
       downloadedBytes.hashCode ^
+      progressBuckets.hashCode ^
       path.hashCode;
 
   @override
@@ -743,6 +748,7 @@ class AppEntry {
           selected == other.selected &&
           available == other.available &&
           downloadedBytes == other.downloadedBytes &&
+          progressBuckets == other.progressBuckets &&
           path == other.path;
 }
 

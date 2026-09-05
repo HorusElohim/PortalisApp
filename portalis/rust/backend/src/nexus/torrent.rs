@@ -124,6 +124,63 @@ pub struct PieceRun {
     pub peers: Vec<String>,
 }
 
+const PROGRESS_BUCKETS: usize = 64;
+const PROGRESS_BUCKET_BYTES: usize = PROGRESS_BUCKETS * 2 / 8;
+
+/// Packs a file's verified and active ranges into 64 two-bit buckets.
+///
+/// `0` is missing, `1` is verified, and `2` is actively downloading. The
+/// representation is deliberately approximate: it is a visual shape, not
+/// an engine bitmap. Keeping two bits per bucket limits the bridge payload
+/// to 16 bytes per file while preserving holes and active regions.
+pub(crate) fn progress_buckets_for_file(file: &TorrentFile) -> Vec<u8> {
+    let mut packed = vec![0; PROGRESS_BUCKET_BYTES];
+    if file.length_bytes == 0 {
+        return packed;
+    }
+
+    let file_length = u128::from(file.length_bytes);
+    for run in &file.piece_runs {
+        let start = run.offset_bytes.min(file.length_bytes);
+        let end = run
+            .offset_bytes
+            .saturating_add(run.length_bytes)
+            .min(file.length_bytes);
+        if start >= end {
+            continue;
+        }
+        let state = if run.verified {
+            1
+        } else if !run.peers.is_empty() {
+            2
+        } else {
+            0
+        };
+        if state == 0 {
+            continue;
+        }
+
+        let from = (u128::from(start) * PROGRESS_BUCKETS as u128 / file_length)
+            .try_into()
+            .unwrap_or(PROGRESS_BUCKETS);
+        let to = (u128::from(end) * PROGRESS_BUCKETS as u128)
+            .div_ceil(file_length)
+            .try_into()
+            .unwrap_or(PROGRESS_BUCKETS)
+            .min(PROGRESS_BUCKETS);
+        for bucket in from..to {
+            let byte = &mut packed[bucket / 4];
+            let shift = (bucket % 4) * 2;
+            let current = (*byte >> shift) & 0b11;
+            // Verified bytes are authoritative over an active overlap.
+            if state == 1 || current == 0 {
+                *byte = (*byte & !(0b11 << shift)) | (state << shift);
+            }
+        }
+    }
+    packed
+}
+
 /// One native file Rust will publish as torrent content.
 ///
 /// Only the path crosses the Flutter boundary. Rust owns reading, hashing,
@@ -3228,7 +3285,8 @@ pub mod native {
 
     #[cfg(test)]
     mod piece_activity_tests {
-        use super::piece_runs_for_file;
+        use super::{PieceRun, TorrentFile, piece_runs_for_file};
+        use crate::nexus::torrent::progress_buckets_for_file;
         use librqbit::api::{InflightPieceStats, PieceActivityStats};
 
         fn activity(bitmap: u8, inflight: Vec<InflightPieceStats>) -> PieceActivityStats {
@@ -3289,6 +3347,40 @@ pub mod native {
             assert_eq!(second[1].offset_bytes, 2);
             assert_eq!(second[1].length_bytes, 4);
             assert!(second[1].verified);
+        }
+
+        #[test]
+        fn progress_buckets_pack_verified_and_active_ranges_at_64_resolution() {
+            let file = TorrentFile {
+                name: "clip.mp4".into(),
+                absolute_path: "/tmp/clip.mp4".into(),
+                length_bytes: 100,
+                downloaded_bytes: 50,
+                piece_runs: vec![
+                    PieceRun {
+                        offset_bytes: 0,
+                        length_bytes: 25,
+                        verified: true,
+                        peers: Vec::new(),
+                    },
+                    PieceRun {
+                        offset_bytes: 50,
+                        length_bytes: 25,
+                        verified: false,
+                        peers: vec!["203.0.113.5:6881".into()],
+                    },
+                ],
+            };
+
+            let packed = progress_buckets_for_file(&file);
+            assert_eq!(packed.len(), 16, "64 buckets at two bits each");
+            let states: Vec<u8> = (0..64)
+                .map(|bucket| (packed[bucket / 4] >> ((bucket % 4) * 2)) & 0b11)
+                .collect();
+            assert!(states[..16].iter().all(|state| *state == 1));
+            assert!(states[16..32].iter().all(|state| *state == 0));
+            assert!(states[32..48].iter().all(|state| *state == 2));
+            assert!(states[48..].iter().all(|state| *state == 0));
         }
     }
 

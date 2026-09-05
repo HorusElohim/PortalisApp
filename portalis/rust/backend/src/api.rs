@@ -1611,6 +1611,7 @@ impl SseDecode for crate::portalis_api::AppEntry {
         let mut var_selected = <bool>::sse_decode(deserializer);
         let mut var_available = <bool>::sse_decode(deserializer);
         let mut var_downloadedBytes = <u64>::sse_decode(deserializer);
+        let mut var_progressBuckets = <Vec<u8>>::sse_decode(deserializer);
         let mut var_path = <Option<String>>::sse_decode(deserializer);
         return crate::portalis_api::AppEntry {
             id: var_id,
@@ -1619,6 +1620,7 @@ impl SseDecode for crate::portalis_api::AppEntry {
             selected: var_selected,
             available: var_available,
             downloaded_bytes: var_downloadedBytes,
+            progress_buckets: var_progressBuckets,
             path: var_path,
         };
     }
@@ -2675,6 +2677,7 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppEntry {
             self.selected.into_into_dart().into_dart(),
             self.available.into_into_dart().into_dart(),
             self.downloaded_bytes.into_into_dart().into_dart(),
+            self.progress_buckets.into_into_dart().into_dart(),
             self.path.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -3316,6 +3319,7 @@ impl SseEncode for crate::portalis_api::AppEntry {
         <bool>::sse_encode(self.selected, serializer);
         <bool>::sse_encode(self.available, serializer);
         <u64>::sse_encode(self.downloaded_bytes, serializer);
+        <Vec<u8>>::sse_encode(self.progress_buckets, serializer);
         <Option<String>>::sse_encode(self.path, serializer);
     }
 }
