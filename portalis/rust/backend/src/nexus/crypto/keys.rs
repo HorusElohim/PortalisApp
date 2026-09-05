@@ -187,25 +187,6 @@ pub fn seal_content_key(
     Ok(Sealing { envelopes, members })
 }
 
-/// Rotates a collection's content key and seals the new one to whoever remains.
-///
-/// This is what removing a member means. It cannot reach what they already
-/// hold — no protocol can — so what it achieves is that the next revision is
-/// closed to them.
-///
-/// # Errors
-///
-/// Returns [`KeyError`] for the same reasons [`seal_content_key`] does.
-#[allow(dead_code)]
-pub fn rotate_content_key(
-    collection_id: [u8; SHARE_ID_BYTES],
-    remaining: &[Recipient],
-) -> Result<(ContentKey, Sealing), KeyError> {
-    let key = generate_content_key();
-    let sealing = seal_content_key(&key, collection_id, remaining)?;
-    Ok((key, sealing))
-}
-
 /// Opens a content key sealed to this device.
 ///
 /// # Errors
@@ -507,29 +488,6 @@ mod tests {
             )
             .expect("what they already hold still opens"),
             first
-        );
-
-        let (second, after) = rotate_content_key(
-            COLLECTION,
-            &[recipient(&owner_entries), recipient(&member_entries)],
-        )
-        .expect("rotates to those who remain");
-
-        assert_ne!(second, first, "a rotation is a new key, not a reshuffle");
-        assert_eq!(after.members.len(), 2);
-        assert!(
-            after
-                .envelopes
-                .iter()
-                .all(|sealed| sealed.recipient_device_id != removed.device_id()),
-            "nothing in the next revision is addressed to them"
-        );
-        assert!(
-            !after
-                .members
-                .iter()
-                .any(|m| m.root_key == removed.signing_key()),
-            "and the revision does not list them"
         );
     }
 

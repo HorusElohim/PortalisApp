@@ -9,55 +9,6 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 String getVersion() => RustLib.instance.api.crateBridgeGetVersion();
 
-/// Create a new PeerHints instance from a list of IP:port strings.
-/// # Arguments
-/// * `peers` - A list of peer addresses in "ip:port" format
-///
-/// # Returns
-/// * JSON string containing success status and any error message
-///
-/// # Example
-/// ```javascript
-/// const result = PeerHints_create(["192.168.1.100:6881", "192.168.1.101:6881"]);
-/// ```
-/// Returns: {success: true, hints: "serialized_peer_hints_data"} or
-///          {success: false, error: "error message"}
-String peerHintsCreate({required List<String> peers}) =>
-    RustLib.instance.api.crateBridgePeerHintsCreate(peers: peers);
-
-/// Parse peer hints from a magnet URI.
-/// # Arguments
-/// * `magnet` - A magnet URI that may contain x.pe parameters
-///
-/// # Returns
-/// * JSON string containing success status and peer count
-String peerHintsFromMagnet({required String magnet}) =>
-    RustLib.instance.api.crateBridgePeerHintsFromMagnet(magnet: magnet);
-
-/// Validate if a string is a valid IP:port address.
-/// # Arguments
-/// * `address` - A string in "ip:port" format
-///
-/// # Returns
-/// * JSON string with validation result
-String peerHintsValidateAddress({required String address}) =>
-    RustLib.instance.api.crateBridgePeerHintsValidateAddress(address: address);
-
-/// Discover local network peers on the standard BitTorrent port (6881).
-///
-/// This function scans network interfaces and returns PeerHints containing
-/// IPv4 addresses of local network interfaces.
-/// # Returns
-/// * JSON string with success status and peer count
-///
-/// # Example
-/// ```javascript
-/// const result = peer_hints_discover_local();
-///  /// Returns: {success: true, count: 2} if two local interfaces found
-///  ```
-String peerHintsDiscoverLocal() =>
-    RustLib.instance.api.crateBridgePeerHintsDiscoverLocal();
-
 /// Loads the persisted identity, generating and saving one on first call.
 DeviceIdentityInfo deviceIdentity() =>
     RustLib.instance.api.crateBridgeDeviceIdentity();

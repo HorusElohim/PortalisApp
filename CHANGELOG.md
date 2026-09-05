@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Removed the obsolete JSON peer-hints bridge, its unused LAN-discovery module,
+  the unreachable cryptographic capsule prototype, unused key-rotation helper,
+  and orphaned Flutter demo/progress/barrel files. The typed Rust-owned paths
+  remain unchanged.
+
 - Fixed scanned invitations being refused before they could be unwrapped.
   Command validation runs ahead of `import_torrent` and accepted only a magnet
   URI or a `.torrent` path, so every scanned QR was rejected with "choose a
