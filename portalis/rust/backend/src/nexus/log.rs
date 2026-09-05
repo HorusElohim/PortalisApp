@@ -42,7 +42,30 @@ pub fn log(tag: &str, args: std::fmt::Arguments) {
     let line = format!("[{millis}] [{tag}] {args}");
     let mut stderr = std::io::stderr().lock();
     let _ = writeln!(stderr, "{line}");
+    #[cfg(target_os = "android")]
+    android_logcat(&line);
     crate::nexus::diagnostics::append(&line);
+}
+
+/// Android applications have no reliable native stderr in release mode.
+/// Mirror the same already-redacted line into Logcat so `flutter run` and
+/// `adb logcat` expose backend publication failures while they happen.
+#[cfg(target_os = "android")]
+fn android_logcat(line: &str) {
+    use std::ffi::{CStr, CString, c_char, c_int};
+
+    const ANDROID_LOG_INFO: c_int = 4;
+    const TAG: &CStr = c"PortalisRust";
+    let Ok(message) = CString::new(line) else {
+        return;
+    };
+    #[link(name = "log")]
+    unsafe extern "C" {
+        fn __android_log_write(priority: c_int, tag: *const c_char, text: *const c_char) -> c_int;
+    }
+    unsafe {
+        __android_log_write(ANDROID_LOG_INFO, TAG.as_ptr(), message.as_ptr());
+    }
 }
 
 /// `clog!("collab", "join: name={name:?}")` — tag first, then
