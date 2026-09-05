@@ -62,8 +62,7 @@ class _HomeState extends State<Home> {
         LocalSources(:final files) when files.isEmpty => null,
         LocalSources(:final files) => await _createDraft(files),
         TorrentSource(:final source) => await _importTorrent(source),
-        ScannedCollectionSource(:final magnet) =>
-          await _importScannedCollection(magnet),
+        ScannedCollectionSource(:final magnet) => await _importTorrent(magnet),
       };
       if (collection == null || !mounted) return;
       _openCollectionById(collection);
@@ -211,14 +210,6 @@ class _HomeState extends State<Home> {
     }
     // The caller opens it. A magnet's file list arrives from the swarm a
     // moment later and the screen fills in; a descriptor's is already there.
-    return collection;
-  }
-
-  Future<int?> _importScannedCollection(String magnet) async {
-    debugPrint(
-        '[home] scanned collection import start source_len=${magnet.length}');
-    final collection = await _importTorrent(magnet);
-    if (collection == null) return null;
     return collection;
   }
 

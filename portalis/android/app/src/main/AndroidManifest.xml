@@ -45,7 +45,13 @@
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
+                <!-- Both hosts the app produces. `import` wraps a magnet;
+                     `c` carries a versioned invitation envelope. A filter on
+                     one host silently drops the other: the OS finds no
+                     handler, so scanning the code does nothing at all and
+                     the app never learns a link existed. -->
                 <data android:scheme="portalis" android:host="import"/>
+                <data android:scheme="portalis" android:host="c"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

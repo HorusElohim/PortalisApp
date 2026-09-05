@@ -1299,7 +1299,11 @@ impl Nexus {
     /// wait for a network cannot resolve one inline anyway.
     fn import_torrent(&self, source: &str) -> Result<Handle, CommandError> {
         // A scanned invitation is unwrapped to its magnet once, here, so every
-        // layer below this point keeps seeing the source it already handles.
+        // layer below this point keeps seeing the source it already handles —
+        // including `canonical_import_identity`, which knows magnets and
+        // `.torrent` files and would answer `None` for the envelope, losing
+        // the duplicate-import refusal that ADR-0015 relies on.
+        let announced = portalis_nexus_protocol::Invitation::decode(source).ok();
         let source = normalize_import_source(source);
         let source = source.as_ref();
         crate::nexus::log::clog!(
@@ -1339,9 +1343,15 @@ impl Nexus {
 
         let id = crate::nexus::collections::model::CollectionId::generate();
         let stored = StoredCollection {
-            // A placeholder until the source says its real name. Taken from
-            // the source itself so the row is never nameless on screen.
-            name: torrent_name(source),
+            // The sender's own name for it when a scanned invitation carried
+            // one, so the row reads correctly from the moment it appears
+            // rather than after the swarm answers. Otherwise a placeholder
+            // taken from the source itself, so the row is never nameless.
+            name: announced
+                .as_ref()
+                .map(|invitation| invitation.name.clone())
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| torrent_name(source)),
             role: StoredRole::Owner,
             content_key: crate::nexus::crypto::generate_content_key(),
             media_path: String::new(),
