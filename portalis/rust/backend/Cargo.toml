@@ -142,3 +142,9 @@ cc = "1"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
 uuid = { version = "1", features = ["v4", "js"] }
+
+[patch.crates-io]
+# librqbit-upnp and librqbit-utp still request the published crate, whose
+# iOS cfg calls socket2::bind_device. Unify the graph on the reviewed Darwin
+# implementation until those upstream crates release the same fix.
+librqbit-dualstack-sockets = { git = "https://github.com/HorusElohim/librqbit-dualstack-sockets", rev = "9d142bc" }
