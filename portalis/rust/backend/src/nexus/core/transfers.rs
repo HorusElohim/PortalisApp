@@ -142,7 +142,8 @@ pub(crate) async fn follow_transfers(
             _ = tick.tick() => {}
         }
 
-        let reported = substrate.holdings().await;
+        let detailed_info_hashes = details.watched_substrate_handles();
+        let reported = substrate.holdings(&detailed_info_hashes).await;
         let by_handle: HashMap<&str, &TorrentInfo> = reported
             .iter()
             .map(|info| (info.info_hash.as_str(), info))

@@ -191,6 +191,18 @@ impl DetailSources {
         senders.keys().copied().collect()
     }
 
+    /// Substrate handles for collections with an active detail subscriber.
+    /// The transfer sampler uses these to request rich torrent data only for
+    /// views that can consume it.
+    pub(crate) fn watched_substrate_handles(&self) -> std::collections::HashSet<String> {
+        self.watched()
+            .into_iter()
+            .filter_map(|collection| self.key(collection))
+            .filter_map(|key| self.store.collection(&key).ok().flatten())
+            .filter_map(|stored| stored.substrate_handle)
+            .collect()
+    }
+
     pub(crate) fn senders(
         &self,
     ) -> std::sync::MutexGuard<'_, HashMap<Handle, watch::Sender<Option<Detail>>>> {

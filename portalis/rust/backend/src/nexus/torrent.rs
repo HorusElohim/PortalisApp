@@ -670,6 +670,14 @@ pub(crate) async fn list_torrents() -> anyhow::Result<Vec<TorrentInfo>> {
     native::list_torrents().await
 }
 
+/// Snapshot current torrents while requesting rich file details only for the
+/// supplied info hashes.
+pub(crate) async fn list_torrents_with_details(
+    detailed_info_hashes: &std::collections::HashSet<String>,
+) -> anyhow::Result<Vec<TorrentInfo>> {
+    native::list_torrents_with_details(detailed_info_hashes).await
+}
+
 /// One top-level item under the download directory — in practice, almost
 /// always one manifest entry's own batch folder (see
 /// `collections::add_media_to_collection`) or a plain torrent's folder.
@@ -2500,7 +2508,12 @@ pub mod native {
         runs
     }
 
-    fn to_info(api: &Api, id: usize, handle: &Arc<librqbit::ManagedTorrent>) -> TorrentInfo {
+    fn to_info(
+        api: &Api,
+        id: usize,
+        handle: &Arc<librqbit::ManagedTorrent>,
+        include_details: bool,
+    ) -> TorrentInfo {
         let stats = handle.stats();
         let state = format!("{:?}", stats.state);
         // While a resumed torrent is being verified at startup (state
@@ -2531,8 +2544,14 @@ pub mod native {
             .as_ref()
             .map_or(0, |live| live.snapshot.peer_stats.live);
         let info_hash = handle.info_hash().as_string();
-        let mut files = files_for(api, id, &stats, initializing);
-        if let Ok(Some(sources)) = crate::nexus::linked_source_store::sources_for(&info_hash) {
+        let mut files = if include_details {
+            files_for(api, id, &stats, initializing)
+        } else {
+            Vec::new()
+        };
+        if include_details
+            && let Ok(Some(sources)) = crate::nexus::linked_source_store::sources_for(&info_hash)
+        {
             // Matched by name rather than by position: librqbit orders a
             // torrent's files its own way, so lining the two lists up by index
             // put one file's original source path beside another file's name.
@@ -2631,7 +2650,7 @@ pub mod native {
                 anyhow::bail!("torrent was added in list-only mode; no handle available")
             }
         };
-        Ok(to_info(api, id, &handle))
+        Ok(to_info(api, id, &handle, true))
     }
 
     fn api(session: Arc<Session>) -> Api {
@@ -2936,10 +2955,21 @@ pub mod native {
     }
 
     pub(super) async fn list_torrents() -> anyhow::Result<Vec<TorrentInfo>> {
+        list_torrents_with_details(&std::collections::HashSet::new()).await
+    }
+
+    pub(super) async fn list_torrents_with_details(
+        detailed_info_hashes: &std::collections::HashSet<String>,
+    ) -> anyhow::Result<Vec<TorrentInfo>> {
         let session = session().await?;
         let api = api(session.clone());
-        Ok(session
-            .with_torrents(|iter| iter.map(|(id, handle)| to_info(&api, id, handle)).collect()))
+        Ok(session.with_torrents(|iter| {
+            iter.map(|(id, handle)| {
+                let info_hash = handle.info_hash().as_string();
+                to_info(&api, id, handle, detailed_info_hashes.contains(&info_hash))
+            })
+            .collect::<Vec<_>>()
+        }))
     }
 
     /// How long a walk stays good for. Both the Settings screen's total (this
@@ -3740,6 +3770,7 @@ pub mod native {
                 &reopened
                     .get(librqbit::api::TorrentIdOrHash::Id(restored_id))
                     .expect("the restored handle"),
+                true,
             );
             let file = restored.files.first().expect("its one file");
             assert_eq!(
