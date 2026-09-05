@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Fixed the share button offering a QR before the engine could produce one.
+  After a restart, rehydrated owned torrents are re-added paused and unpaused
+  asynchronously by the reconciler, but `status_for` reported `Seeding` — and
+  the UI "LOCAL SOURCE VERIFIED" — the moment durable state said the payload
+  was locally complete, without checking whether the engine had caught up.
+  Tapping share in that window answered "Not ready to share", because
+  `share_ready` requires a live torrent with a bound listener. The live
+  reading now carries a `share_ready` fact computed from the same three
+  prerequisites the share path itself checks, projected through
+  `CollectionState`, so `can_share` — and therefore the button's visibility —
+  reflects what the engine can actually do rather than what durable intent
+  says it should eventually be able to do.
+
 - Added Android gallery export for received media: a completed, verified
   torrent file that is an image or video is now copied once into MediaStore's
   public `Pictures/Portalis`/`Movies/Portalis` collections and the app's

@@ -226,6 +226,7 @@ mod tests {
             transfer,
             pending: None,
             publish_progress: None,
+            share_ready: false,
         }
     }
 
