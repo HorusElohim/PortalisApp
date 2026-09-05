@@ -8,11 +8,13 @@ import 'package:image_picker/image_picker.dart' hide PickedFile;
 
 import '../../../design/design.dart';
 import '../../../design/theme.dart';
+import '../../../nexus/bridge/portalis_api.dart';
 import '../domain/picked_file.dart';
 import '../platform/no_copy_source_picker.dart';
 import '../platform/photo_library_picker.dart';
 import '../platform/source_access.dart';
 import '../../peer_hints/widgets/collection_qr_scanner.dart';
+import 'scanned_invitation.dart';
 
 /// What a person chose to make a collection out of.
 ///
@@ -132,8 +134,16 @@ Future<ChosenSources?> showAddSourcesSheet(BuildContext context) async {
   }
 
   if (choice == 'scanQr') {
-    final magnet = await scanCollectionQrCode(context);
-    return magnet == null ? null : ScannedCollectionSource(magnet);
+    final scanned = await scanCollectionQrCode(context);
+    if (scanned == null || !context.mounted) return null;
+    // An invitation describes itself, so the one question worth asking can be
+    // asked while there is still nothing to undo. A plain magnet describes
+    // nothing, and there is no question to put — it goes straight through.
+    final invitation = await describeInvitation(link: scanned);
+    if (invitation == null) return ScannedCollectionSource(scanned);
+    if (!context.mounted) return null;
+    final confirmed = await confirmScannedInvitation(context, invitation);
+    return confirmed ? ScannedCollectionSource(scanned) : null;
   }
 
   try {

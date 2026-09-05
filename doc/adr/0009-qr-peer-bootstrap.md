@@ -121,6 +121,36 @@ enumeration that produces the hints, so they cannot disagree. It is a
 usability check, not a security boundary — a false positive costs a missing
 warning, never access.
 
+### Announced facts are not verified facts
+
+An invitation's fields are the sending device's claims, read off a screen. The
+receiving app keeps them strictly separate from what it has verified:
+
+- The announced **name** is adopted as the collection's name, because a name is
+  presentation with no correctness consequence, and the alternative was a row
+  reading "Portalis collection import" until the swarm answered.
+- The announced **item count** is shown only in the pre-import confirmation
+  sheet, where it is visibly attributed to the sender. It is deliberately not
+  merged into `CollectionState.entries`, which stays a verified count derived
+  from resolved metadata — merging them would let a scanned code make the
+  interface assert something untrue about content it has not seen.
+- The **info hash** remains the only thing that decides what content is, and it
+  is verified by the substrate exactly as before.
+
+Validation for `ImportTorrent` accepts all three shapes the import path
+understands (magnet, `.torrent` path, invitation). It runs *before* the
+envelope is unwrapped, so a shape missing from the guard is refused before it
+can reach the code that handles it — which is how the first build shipped with
+every scanned code rejected. Covered by
+`validation_accepts_every_shape_the_import_path_understands`.
+
+Platform URL registration is part of the format's contract, not an
+implementation detail: the OS routes by scheme *and* host, so a host the app
+produces but does not register is delivered nowhere, with nothing in the app
+able to observe it. Covered by
+`every host the app can produce is registered on Android`
+(`portalis/test/collection_link_test.dart`).
+
 ## Consequences
 
 - Offline sharing has a simple first step with no mandatory Nexus or internet.
