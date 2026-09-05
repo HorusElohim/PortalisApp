@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/app/collection_link.dart';
+import 'package:portalis/features/collections/domain/paste.dart';
 import 'package:portalis/nexus/domain/app_state.dart';
+
+const _hash = '0123456789abcdef0123456789abcdef01234567';
 
 void main() {
   group('collection links', () {
@@ -52,6 +56,34 @@ void main() {
         collectionMagnetFromLink(Uri.parse('portalis://elsewhere/AAAA')),
         isNull,
       );
+    });
+
+    /// The OS routes by scheme *and host*, so a host the app produces but does
+    /// not register is delivered nowhere: scanning the code does nothing at
+    /// all and the app never learns a link existed. That is exactly how the
+    /// first invitation build shipped — the manifest still filtered only the
+    /// older `import` host — and nothing in Dart could have caught it, because
+    /// every layer this side of the OS handled the link correctly.
+    test('every host the app can produce is registered on Android', () {
+      final manifest = File(
+        'android/app/src/main/AndroidManifest.xml',
+      ).readAsStringSync();
+
+      final hosts = {
+        // Wraps a magnet.
+        Uri.parse(collectionShareLink('magnet:?xt=urn:btih:$_hash')).host,
+        // Carries a versioned invitation envelope.
+        Uri.parse(collectionShareLink('${invitationPrefix}AAAA')).host,
+      };
+
+      for (final host in hosts) {
+        expect(
+          manifest,
+          contains('android:scheme="portalis" android:host="$host"'),
+          reason: 'portalis://$host/ is produced but not registered, so '
+              'Android will not deliver it to the app',
+        );
+      }
     });
 
     test('imports only a validated collection link', () async {

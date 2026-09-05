@@ -692,3 +692,130 @@ mod tests {
         assert_eq!(bytes[0] & FLAG_DEFLATE, 0, "should not compress");
     }
 }
+
+/// The whole journey a real code makes: struct → bytes → base64url → rendered
+/// QR pixels → camera decode → base64url → bytes → struct.
+///
+/// Every other test in this file stops at the string. That leaves the one step
+/// nobody controls — what a QR encoder does to those exact characters, and what
+/// a decoder hands back — completely unexercised, which is precisely where a
+/// link that round-trips perfectly in Rust can still fail to scan in the room.
+/// These use a real renderer and a real detector rather than a stub, so a
+/// change to the alphabet, the length, or the error-correction level shows up
+/// here instead of on a phone.
+#[cfg(test)]
+mod qr_round_trip {
+    use super::*;
+
+    /// Renders to an image the way the app does, then reads it back the way a
+    /// camera does. Returns whatever text the detector recovered.
+    fn through_a_real_qr(link: &str) -> String {
+        let code = qrcode::QrCode::new(link.as_bytes()).expect("the link fits in a QR code");
+        // Rendered large with a quiet zone, like a code on a screen: a
+        // detector needs whole modules and a margin, not a 1px-per-module
+        // bitmap it cannot resolve.
+        let image = code
+            .render::<image::Luma<u8>>()
+            .module_dimensions(8, 8)
+            .quiet_zone(true)
+            .build();
+
+        let mut prepared = rqrr::PreparedImage::prepare(image);
+        let grids = prepared.detect_grids();
+        assert_eq!(grids.len(), 1, "exactly one code should be detectable");
+        let (_meta, text) = grids[0].decode().expect("the detected grid decodes");
+        text
+    }
+
+    fn realistic() -> Invitation {
+        Invitation {
+            info_hash: [0x91; 20],
+            name: "Attic Boxes".to_owned(),
+            owner: "Ada's iPhone".to_owned(),
+            entries: 15,
+            issued_at_secs: 1_788_601_577,
+            // The exact peer set a real device advertised: a VPN address, a
+            // LAN address, two global IPv6 addresses and two ULAs.
+            peers: vec![
+                "10.153.41.26:6881".parse().unwrap(),
+                "192.168.0.100:6881".parse().unwrap(),
+                "[2a04:cec0:3e6:692b:18bd:59e5:c055:f083]:6881"
+                    .parse()
+                    .unwrap(),
+                "[2a04:cec0:3e6:692b:9988:7e75:fee0:6739]:6881"
+                    .parse()
+                    .unwrap(),
+                "[fd74:6572:6d6e:7573:c:3ac4:ba7a:1933]:6881"
+                    .parse()
+                    .unwrap(),
+                "[fd74:6572:6d6e:7573:d:3ac4:ba7a:1933]:6881"
+                    .parse()
+                    .unwrap(),
+            ],
+        }
+    }
+
+    #[test]
+    fn an_invitation_survives_being_rendered_and_scanned_as_a_real_qr_code() {
+        let original = realistic();
+        let link = original.encode();
+
+        let scanned = through_a_real_qr(&link);
+        assert_eq!(scanned, link, "the QR must return the exact link encoded");
+
+        let decoded = Invitation::decode(&scanned).expect("the scanned link decodes");
+        assert_eq!(decoded, original, "every field survives the round trip");
+    }
+
+    /// The alphabet is the reason this works at scannable sizes, so it is
+    /// worth asserting rather than assuming. Unpadded base64url is entirely
+    /// within QR's alphanumeric-adjacent byte mode and contains no character
+    /// a URI would escape — `+` and `/` from standard base64 would both be
+    /// percent-encoded by a URI parser on the way to the backend.
+    #[test]
+    fn the_encoded_payload_uses_only_uri_safe_characters() {
+        let link = realistic().encode();
+        let payload = link
+            .strip_prefix(INVITATION_PREFIX)
+            .expect("has the prefix");
+
+        assert!(
+            payload
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'),
+            "payload must be unpadded base64url: {payload}"
+        );
+        assert_eq!(
+            link,
+            url::Url::parse(&link).expect("parses as a URL").as_str(),
+            "a URL parser must not rewrite the link on its way to the backend"
+        );
+    }
+
+    /// A crowded code is the one that actually fails in the room: more peers
+    /// means more modules, and past a certain density a phone camera stops
+    /// resolving it at arm's length. Prove the worst case this format can
+    /// produce still renders and scans.
+    #[test]
+    fn even_a_fully_loaded_invitation_still_renders_and_scans() {
+        let crowded = Invitation {
+            name: "N".repeat(MAX_TEXT_BYTES),
+            owner: "O".repeat(MAX_TEXT_BYTES),
+            peers: (0..MAX_PEERS)
+                .map(|index| {
+                    let last = u8::try_from(index).expect("well under 255");
+                    SocketAddr::new(
+                        Ipv6Addr::new(0x2a04, 0xcec0, 0x3e6, 0x692b, 0, 0, 0, u16::from(last))
+                            .into(),
+                        6881,
+                    )
+                })
+                .collect(),
+            ..realistic()
+        };
+        let link = crowded.encode();
+
+        let decoded = Invitation::decode(&through_a_real_qr(&link)).expect("decodes");
+        assert_eq!(decoded, crowded);
+    }
+}
