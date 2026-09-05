@@ -285,6 +285,9 @@ impl DetailSources {
                             .map_or(if available { bytes } else { 0 }, |file| {
                                 file.downloaded_bytes
                             }),
+                        progress_buckets: carried.map_or_else(Vec::new, |file| {
+                            crate::nexus::torrent::progress_buckets_for_file(file)
+                        }),
                         // The substrate's resolved location wins when it has
                         // one — a multi-file torrent lands in a subfolder
                         // nobody chose — and the person's own source stands in

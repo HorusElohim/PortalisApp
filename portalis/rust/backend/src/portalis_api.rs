@@ -293,6 +293,8 @@ pub struct AppEntry {
     /// say "not here" or "here", and a multi-file torrent shows nothing at all
     /// until the last byte of the last file lands.
     pub downloaded_bytes: u64,
+    /// A packed 64-bucket visual progress shape, or empty when unavailable.
+    pub progress_buckets: Vec<u8>,
     /// Where the bytes landed, once they have, so the interface can show a
     /// preview rather than a filename.
     pub path: Option<String>,
@@ -1374,6 +1376,7 @@ fn detail_projection(detail: &Detail) -> AppDetail {
                 selected: entry.selected,
                 available: entry.available,
                 downloaded_bytes: entry.downloaded_bytes,
+                progress_buckets: entry.progress_buckets.clone(),
                 path: entry.path.clone(),
             })
             .collect(),

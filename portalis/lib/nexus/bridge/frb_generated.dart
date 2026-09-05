@@ -1306,8 +1306,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppEntry dco_decode_app_entry(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return AppEntry(
       id: dco_decode_u_32(arr[0]),
       label: dco_decode_String(arr[1]),
@@ -1315,7 +1315,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       selected: dco_decode_bool(arr[3]),
       available: dco_decode_bool(arr[4]),
       downloadedBytes: dco_decode_u_64(arr[5]),
-      path: dco_decode_opt_String(arr[6]),
+      progressBuckets: dco_decode_list_prim_u_8_strict(arr[6]),
+      path: dco_decode_opt_String(arr[7]),
     );
   }
 
@@ -2045,6 +2046,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_selected = sse_decode_bool(deserializer);
     var var_available = sse_decode_bool(deserializer);
     var var_downloadedBytes = sse_decode_u_64(deserializer);
+    var var_progressBuckets = sse_decode_list_prim_u_8_strict(deserializer);
     var var_path = sse_decode_opt_String(deserializer);
     return AppEntry(
         id: var_id,
@@ -2053,6 +2055,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         selected: var_selected,
         available: var_available,
         downloadedBytes: var_downloadedBytes,
+        progressBuckets: var_progressBuckets,
         path: var_path);
   }
 
@@ -2887,6 +2890,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.selected, serializer);
     sse_encode_bool(self.available, serializer);
     sse_encode_u_64(self.downloadedBytes, serializer);
+    sse_encode_list_prim_u_8_strict(self.progressBuckets, serializer);
     sse_encode_opt_String(self.path, serializer);
   }
 

@@ -378,6 +378,9 @@ pub struct EntryState {
     /// bar cannot say which of them is nearly done, which is exactly what a
     /// person watching a multi-file torrent wants to know.
     pub downloaded_bytes: u64,
+    /// A compact visual shape: 64 two-bit progress buckets, packed by the
+    /// torrent adapter. Empty when no live piece activity is available.
+    pub progress_buckets: Vec<u8>,
     /// Where the bytes actually landed, once they have.
     ///
     /// Resolved by the substrate rather than guessed from the media directory:
