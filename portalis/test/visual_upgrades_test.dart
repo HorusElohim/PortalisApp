@@ -10,9 +10,33 @@ import 'package:portalis/features/collections/presentation/views.dart';
 import 'package:portalis/features/collections/presentation/peers.dart';
 import 'package:portalis/features/collections/domain/peer_observation.dart';
 import 'package:portalis/features/media/presentation/grid.dart';
+import 'package:portalis/features/media/presentation/piece_frame.dart';
 
 void main() {
   tearDown(resetTestState);
+
+  test('decodes packed progress buckets into sparse perimeter segments', () {
+    final packed = List<int>.filled(16, 0);
+    for (var bucket = 0; bucket < 16; bucket++) {
+      packed[bucket ~/ 4] |= 1 << ((bucket % 4) * 2);
+    }
+    for (var bucket = 32; bucket < 48; bucket++) {
+      packed[bucket ~/ 4] |= 2 << ((bucket % 4) * 2);
+    }
+
+    expect(
+      progressSegmentsForBuckets(packed),
+      [
+        const PerimeterSegment(start: 0, extent: 0.25),
+        const PerimeterSegment(
+          start: 0.5,
+          extent: 0.25,
+          active: true,
+          workerCount: 1,
+        ),
+      ],
+    );
+  });
 
   group('torrent row tile', () {
     testWidgets('shows a format-aware icon once metadata names video files',

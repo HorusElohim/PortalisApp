@@ -8,6 +8,7 @@ class MediaItem {
     this.progress = 0.0,
     this.sizeBytes = 0,
     this.downloadedBytes = 0,
+    this.progressBuckets = const [],
     this.pieceRuns = const [],
     this.fetched = true,
     this.addedBy,
@@ -21,6 +22,7 @@ class MediaItem {
   final double progress;
   final int sizeBytes;
   final int downloadedBytes;
+  final List<int> progressBuckets;
   final List<MediaPieceRun> pieceRuns;
   final bool fetched;
   final String? addedBy;
@@ -53,6 +55,7 @@ class MediaItem {
         progress: progress,
         sizeBytes: sizeBytes,
         downloadedBytes: downloadedBytes,
+        progressBuckets: progressBuckets,
         pieceRuns: pieceRuns,
         fetched: fetched,
         addedBy: addedBy,
