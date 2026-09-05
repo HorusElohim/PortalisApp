@@ -241,3 +241,78 @@ private object PortalisNative {
     @JvmStatic
     private external fun installContext(context: Context)
 }
+
+/**
+ * Rust's only path into MediaStore. A completed, verified torrent file hands
+ * its absolute path here once; this inserts one MediaStore entry backed by
+ * that same file's bytes (a single stream copy into the public collection,
+ * exactly as any native gallery-saving app performs — Portalis' original
+ * received copy is left untouched and removed by Rust only after this
+ * succeeds), and returns the resulting `content://` URI so Rust can record it
+ * as the entry's durable native location.
+ *
+ * Never called for anything Portalis does not already own a complete,
+ * verified local copy of — this is an export into the system gallery, not a
+ * substitute reader for torrent piece I/O.
+ */
+private object PortalisGallery {
+    @JvmStatic
+    fun exportToMediaStore(context: Context, path: String, displayName: String, video: Boolean): String? {
+        val resolver = context.contentResolver
+        val collection: Uri
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+            val mimeType = guessMimeType(displayName, video)
+            if (mimeType != null) {
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(
+                    android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
+                    if (video) "Movies/Portalis" else "Pictures/Portalis",
+                )
+                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+        collection = if (video) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            } else {
+                android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            }
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            } else {
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            }
+        }
+        val itemUri = resolver.insert(collection, values) ?: return null
+        try {
+            resolver.openOutputStream(itemUri)?.use { output ->
+                java.io.FileInputStream(path).use { input ->
+                    input.copyTo(output)
+                }
+            } ?: run {
+                resolver.delete(itemUri, null, null)
+                return null
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(itemUri, values, null, null)
+            }
+        } catch (error: Exception) {
+            resolver.delete(itemUri, null, null)
+            return null
+        }
+        return itemUri.toString()
+    }
+
+    private fun guessMimeType(displayName: String, video: Boolean): String? {
+        val extension = displayName.substringAfterLast('.', "").lowercase()
+        if (extension.isEmpty()) return null
+        return android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+            ?: if (video) "video/*" else "image/*"
+    }
+}

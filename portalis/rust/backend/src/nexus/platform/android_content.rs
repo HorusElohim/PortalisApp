@@ -198,3 +198,50 @@ pub(crate) fn open(uri: &str) -> anyhow::Result<File> {
     })
     .map_err(|error| anyhow::anyhow!("opening Android content source: {error}"))
 }
+
+/// Exports one already-complete, already-verified received file into
+/// MediaStore's public gallery collection and returns its `content://` URI.
+///
+/// This performs the one unavoidable copy any Android app makes when saving
+/// media out of its private sandbox into the system gallery — the same copy
+/// a native "Save to gallery" button in any other app would make. It is
+/// never used as a substitute reader for torrent piece I/O, and it is only
+/// ever called once a file's bytes are already fully received and verified;
+/// Portalis' own sandbox copy is removed by the caller only after this
+/// succeeds, so an interruption never loses content.
+pub(crate) fn export_to_media_store(
+    path: &str,
+    display_name: &str,
+    video: bool,
+) -> anyhow::Result<String> {
+    let vm = JVM
+        .get()
+        .context("Android content access is unavailable before the app context is installed")?;
+    let context = APPLICATION_CONTEXT
+        .get()
+        .context("Android content access has no application context")?;
+    vm.attach_current_thread(|env| -> anyhow::Result<String> {
+        let java_path = JObject::from(env.new_string(path)?);
+        let java_name = JObject::from(env.new_string(display_name)?);
+        let result = env
+            .call_static_method(
+                jni::jni_str!("com/portalis/PortalisGallery"),
+                jni::jni_str!("exportToMediaStore"),
+                jni::jni_sig!(
+                    "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Z)Ljava/lang/String;"
+                ),
+                &[
+                    JValue::Object(context),
+                    JValue::Object(&java_path),
+                    JValue::Object(&java_name),
+                    JValue::Bool(video),
+                ],
+            )?
+            .l()?;
+        anyhow::ensure!(!result.is_null(), "MediaStore export did not return a URI");
+        let uri = env.cast_local::<jni::objects::JString>(result)?;
+        uri.try_to_string(env)
+            .map_err(|error| anyhow::anyhow!("reading MediaStore export result: {error}"))
+    })
+    .map_err(|error| anyhow::anyhow!("exporting Android media to MediaStore: {error}"))
+}

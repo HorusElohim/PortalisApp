@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added Android gallery export for received media: a completed, verified
+  torrent file that is an image or video is now copied once into MediaStore's
+  public `Pictures/Portalis`/`Movies/Portalis` collections and the app's
+  private sandbox copy is removed only after that export succeeds — mirroring
+  the existing iOS Photos import so downloaded media on Android is visible in
+  the system Gallery app, not just inside Portalis. Non-media files and
+  unselected entries are left in their existing writable Portalis location.
 - Fixed a second, identical Android publication/resume stall: the librqbit
   session persistence store had the same `directories`-crate guessing bug as
   DHT persistence (below) — `SessionPersistenceConfig::Json { folder: None }`
