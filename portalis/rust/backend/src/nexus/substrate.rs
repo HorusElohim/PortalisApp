@@ -98,7 +98,13 @@ pub trait Substrate: Send + Sync {
     async fn release(&self, handle: &str) -> anyhow::Result<()>;
 
     /// Everything held right now.
-    async fn holdings(&self) -> Vec<TorrentInfo>;
+    async fn holdings(
+        &self,
+        detailed_info_hashes: &std::collections::HashSet<String>,
+    ) -> Vec<TorrentInfo>;
+
+    /// Everything held with rich file details, for on-demand storage views.
+    async fn all_holdings(&self) -> Vec<TorrentInfo>;
 
     /// Forces every unpaused handle to drop and re-establish its peer
     /// connections and re-announce to trackers/DHT.
@@ -226,7 +232,16 @@ impl Substrate for Torrents {
         crate::nexus::torrent::forget_torrent(handle).await
     }
 
-    async fn holdings(&self) -> Vec<TorrentInfo> {
+    async fn holdings(
+        &self,
+        detailed_info_hashes: &std::collections::HashSet<String>,
+    ) -> Vec<TorrentInfo> {
+        crate::nexus::torrent::list_torrents_with_details(detailed_info_hashes)
+            .await
+            .unwrap_or_default()
+    }
+
+    async fn all_holdings(&self) -> Vec<TorrentInfo> {
         crate::nexus::torrent::list_torrents()
             .await
             .unwrap_or_default()
@@ -417,7 +432,10 @@ impl Substrate for Recorded {
         Ok(())
     }
 
-    async fn holdings(&self) -> Vec<TorrentInfo> {
+    async fn holdings(
+        &self,
+        _detailed_info_hashes: &std::collections::HashSet<String>,
+    ) -> Vec<TorrentInfo> {
         let mut readings = self.readings.lock().unwrap();
         if let Some(next) = readings.pop_front() {
             if let Some(last) = next.last() {
@@ -432,6 +450,10 @@ impl Substrate for Recorded {
             .map(String::as_str)
             .map(held_torrent)
             .collect()
+    }
+
+    async fn all_holdings(&self) -> Vec<TorrentInfo> {
+        self.holdings(&std::collections::HashSet::new()).await
     }
 
     async fn reconnect_active(&self) -> anyhow::Result<()> {

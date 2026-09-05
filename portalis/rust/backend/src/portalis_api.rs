@@ -946,7 +946,7 @@ pub async fn storage_breakdown() -> Result<Vec<AppStorageEntry>, String> {
     let raw = crate::nexus::torrent::storage_breakdown()
         .await
         .map_err(|error| error.to_string())?;
-    let holdings = crate::nexus::substrate::current().holdings().await;
+    let holdings = crate::nexus::substrate::current().all_holdings().await;
 
     // Where each carried torrent's files actually sit, so a directory can be
     // traced back to it. `starts_with` rather than equality: a multi-file
