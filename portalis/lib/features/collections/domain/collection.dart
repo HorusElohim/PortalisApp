@@ -168,6 +168,7 @@ MediaItem mediaItemFor(AppEntry entry) {
     progress: total == 0 ? 0 : (done / total).clamp(0.0, 1.0),
     sizeBytes: total,
     downloadedBytes: done,
+    progressBuckets: entry.progressBuckets,
     // "Something of this is here", not "all of it is": a file that has begun
     // arriving reports how far along it is, rather than claiming nothing.
     fetched: entry.available || done > 0,

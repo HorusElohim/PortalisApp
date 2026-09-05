@@ -4,6 +4,35 @@ import '../../../design/design.dart';
 import '../../../design/theme.dart';
 import '../domain/item.dart';
 
+/// Decodes the backend's packed 64-bucket visual progress shape into sparse
+/// perimeter ranges. Invalid or unavailable data returns an empty list so the
+/// caller can fall back to its aggregate percentage.
+List<PerimeterSegment> progressSegmentsForBuckets(List<int> packed) {
+  const bucketCount = 64;
+  if (packed.length != 16) return const [];
+
+  final segments = <PerimeterSegment>[];
+  int? state;
+  var start = 0;
+  for (var bucket = 0; bucket <= bucketCount; bucket++) {
+    final next = bucket == bucketCount
+        ? 0
+        : (packed[bucket ~/ 4] >> ((bucket % 4) * 2)) & 3;
+    if (next == state) continue;
+    if ((state == 1 || state == 2) && bucket > start) {
+      segments.add(PerimeterSegment(
+        start: start / bucketCount,
+        extent: (bucket - start) / bucketCount,
+        active: state == 2,
+        workerCount: state == 2 ? 1 : 0,
+      ));
+    }
+    state = next;
+    start = bucket;
+  }
+  return segments;
+}
+
 /// Paints only piece state supplied by the backend. When older/unavailable
 /// telemetry has no ranges, the existing aggregate perimeter remains as the
 /// honest fallback.
@@ -69,17 +98,22 @@ class _MediaPieceFrameState extends State<MediaPieceFrame>
   @override
   Widget build(BuildContext context) {
     final size = widget.media.sizeBytes;
+    final bucketSegments = progressSegmentsForBuckets(
+      widget.media.progressBuckets,
+    );
     final segments = size <= 0
         ? const <PerimeterSegment>[]
-        : [
-            for (final run in widget.media.pieceRuns)
-              PerimeterSegment(
-                start: run.offsetBytes / size,
-                extent: run.lengthBytes / size,
-                active: run.isDownloading,
-                workerCount: run.peers.length,
-              ),
-          ];
+        : bucketSegments.isNotEmpty
+            ? bucketSegments
+            : [
+                for (final run in widget.media.pieceRuns)
+                  PerimeterSegment(
+                    start: run.offsetBytes / size,
+                    extent: run.lengthBytes / size,
+                    active: run.isDownloading,
+                    workerCount: run.peers.length,
+                  ),
+              ];
     return AnimatedBuilder(
       animation: _pulse,
       builder: (context, child) => PerimeterProgress(

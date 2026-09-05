@@ -68,6 +68,21 @@ void main() {
   tearDown(resetTestState);
 
   group('collection', () {
+    test('keeps the backend progress shape on each media item', () {
+      final buckets = Uint8List(16)..[0] = 0x55;
+      final item = mediaItemFor(AppEntry(
+        id: 1,
+        label: 'clip.mp4',
+        bytes: BigInt.from(100),
+        selected: true,
+        available: false,
+        downloadedBytes: BigInt.from(25),
+        progressBuckets: buckets,
+      ));
+
+      expect(item.progressBuckets, buckets);
+    });
+
     test('subtitle reports the summary item count without a detail', () {
       // The exact "0 items" defect: a list row carries the snapshot's
       // authoritative entry count but has never subscribed to a detail, so
