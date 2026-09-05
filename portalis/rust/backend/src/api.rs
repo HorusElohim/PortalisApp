@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1411209832;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1334372965;
 
 // Section: executor
 
@@ -244,40 +244,6 @@ fn wire__crate__portalis_api__delete_collection_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok =
                         crate::portalis_api::delete_collection(api_collection, api_delete_files)?;
-                    std::result::Result::Ok(output_ok)
-                })())
-            }
-        },
-    )
-}
-fn wire__crate__portalis_api__describe_invitation_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "describe_invitation",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_link = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| {
-                transform_result_sse::<_, ()>((move || {
-                    let output_ok =
-                        Ok::<_, ()>(crate::portalis_api::describe_invitation(api_link))?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -1660,24 +1626,6 @@ impl SseDecode for crate::portalis_api::AppEntry {
     }
 }
 
-impl SseDecode for crate::portalis_api::AppInvitation {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_name = <String>::sse_decode(deserializer);
-        let mut var_owner = <String>::sse_decode(deserializer);
-        let mut var_entries = <u32>::sse_decode(deserializer);
-        let mut var_issuedAtSecs = <u32>::sse_decode(deserializer);
-        let mut var_reachableHere = <bool>::sse_decode(deserializer);
-        return crate::portalis_api::AppInvitation {
-            name: var_name,
-            owner: var_owner,
-            entries: var_entries,
-            issued_at_secs: var_issuedAtSecs,
-            reachable_here: var_reachableHere,
-        };
-    }
-}
-
 impl SseDecode for crate::portalis_api::AppMember {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2208,19 +2156,6 @@ impl SseDecode for Option<crate::portalis_api::AppDetail> {
     }
 }
 
-impl SseDecode for Option<crate::portalis_api::AppInvitation> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        if (<bool>::sse_decode(deserializer)) {
-            return Some(<crate::portalis_api::AppInvitation>::sse_decode(
-                deserializer,
-            ));
-        } else {
-            return None;
-        }
-    }
-}
-
 impl SseDecode for Option<crate::portalis_api::AppPending> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2333,48 +2268,47 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         6 => wire__crate__portalis_api__delete_collection_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__portalis_api__describe_invitation_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__nexus__device__device_identity_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__portalis_api__diagnostics_log_impl(port, ptr, rust_vec_len, data_len),
-        11 => {
+        8 => wire__crate__nexus__device__device_identity_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__portalis_api__diagnostics_log_impl(port, ptr, rust_vec_len, data_len),
+        10 => {
             wire__crate__portalis_api__diagnostics_log_path_impl(port, ptr, rust_vec_len, data_len)
         }
-        12 => wire__crate__portalis_api__download_selection_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__nexus__settings__engine_settings_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__nexus__settings__engine_settings_default_impl(
+        11 => wire__crate__portalis_api__download_selection_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__nexus__settings__engine_settings_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__nexus__settings__engine_settings_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        16 => wire__crate__portalis_api__import_torrent_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__portalis_api__log_diagnostic_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__portalis_api__peer_history_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__portalis_api__peers_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__portalis_api__people_peers_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__portalis_api__publish_draft_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__portalis_api__rename_collection_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__portalis_api__rename_device_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__portalis_api__set_active_impl(port, ptr, rust_vec_len, data_len),
-        25 => {
+        15 => wire__crate__portalis_api__import_torrent_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__portalis_api__log_diagnostic_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__portalis_api__peer_history_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__portalis_api__peers_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__portalis_api__people_peers_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__portalis_api__publish_draft_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__portalis_api__rename_collection_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__portalis_api__rename_device_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__portalis_api__set_active_impl(port, ptr, rust_vec_len, data_len),
+        24 => {
             wire__crate__portalis_api__set_collection_paused_impl(port, ptr, rust_vec_len, data_len)
         }
-        26 => wire__crate__nexus__settings__set_engine_settings_impl(
+        25 => wire__crate__nexus__settings__set_engine_settings_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        28 => wire__crate__nexus__device__set_nickname_impl(port, ptr, rust_vec_len, data_len),
-        29 => wire__crate__portalis_api__share_uri_impl(port, ptr, rust_vec_len, data_len),
-        30 => wire__crate__portalis_api__start_impl(port, ptr, rust_vec_len, data_len),
-        31 => wire__crate__portalis_api__stop_impl(port, ptr, rust_vec_len, data_len),
-        32 => wire__crate__portalis_api__storage_breakdown_impl(port, ptr, rust_vec_len, data_len),
-        33 => wire__crate__portalis_api__user_summary_impl(port, ptr, rust_vec_len, data_len),
-        34 => wire__crate__portalis_api__watch_detail_impl(port, ptr, rust_vec_len, data_len),
-        35 => wire__crate__portalis_api__watch_history_impl(port, ptr, rust_vec_len, data_len),
-        36 => wire__crate__portalis_api__watch_states_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__portalis_api__watch_transfer_completions_impl(
+        27 => wire__crate__nexus__device__set_nickname_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__portalis_api__share_uri_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__portalis_api__start_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__portalis_api__stop_impl(port, ptr, rust_vec_len, data_len),
+        31 => wire__crate__portalis_api__storage_breakdown_impl(port, ptr, rust_vec_len, data_len),
+        32 => wire__crate__portalis_api__user_summary_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__crate__portalis_api__watch_detail_impl(port, ptr, rust_vec_len, data_len),
+        34 => wire__crate__portalis_api__watch_history_impl(port, ptr, rust_vec_len, data_len),
+        35 => wire__crate__portalis_api__watch_states_impl(port, ptr, rust_vec_len, data_len),
+        36 => wire__crate__portalis_api__watch_transfer_completions_impl(
             port,
             ptr,
             rust_vec_len,
@@ -2392,9 +2326,9 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        8 => wire__crate__bridge__device_identity_impl(ptr, rust_vec_len, data_len),
-        15 => wire__crate__bridge__get_version_impl(ptr, rust_vec_len, data_len),
-        27 => wire__crate__bridge__set_nickname_impl(ptr, rust_vec_len, data_len),
+        7 => wire__crate__bridge__device_identity_impl(ptr, rust_vec_len, data_len),
+        14 => wire__crate__bridge__get_version_impl(ptr, rust_vec_len, data_len),
+        26 => wire__crate__bridge__set_nickname_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2754,30 +2688,6 @@ impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppEntry>
     for crate::portalis_api::AppEntry
 {
     fn into_into_dart(self) -> crate::portalis_api::AppEntry {
-        self
-    }
-}
-// Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppInvitation {
-    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.name.into_into_dart().into_dart(),
-            self.owner.into_into_dart().into_dart(),
-            self.entries.into_into_dart().into_dart(),
-            self.issued_at_secs.into_into_dart().into_dart(),
-            self.reachable_here.into_into_dart().into_dart(),
-        ]
-        .into_dart()
-    }
-}
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::portalis_api::AppInvitation
-{
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::portalis_api::AppInvitation>
-    for crate::portalis_api::AppInvitation
-{
-    fn into_into_dart(self) -> crate::portalis_api::AppInvitation {
         self
     }
 }
@@ -3414,17 +3324,6 @@ impl SseEncode for crate::portalis_api::AppEntry {
     }
 }
 
-impl SseEncode for crate::portalis_api::AppInvitation {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.name, serializer);
-        <String>::sse_encode(self.owner, serializer);
-        <u32>::sse_encode(self.entries, serializer);
-        <u32>::sse_encode(self.issued_at_secs, serializer);
-        <bool>::sse_encode(self.reachable_here, serializer);
-    }
-}
-
 impl SseEncode for crate::portalis_api::AppMember {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3783,16 +3682,6 @@ impl SseEncode for Option<crate::portalis_api::AppDetail> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::portalis_api::AppDetail>::sse_encode(value, serializer);
-        }
-    }
-}
-
-impl SseEncode for Option<crate::portalis_api::AppInvitation> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <bool>::sse_encode(self.is_some(), serializer);
-        if let Some(value) = self {
-            <crate::portalis_api::AppInvitation>::sse_encode(value, serializer);
         }
     }
 }

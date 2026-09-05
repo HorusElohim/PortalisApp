@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Scanned Portalis invitations now go directly through the normal torrent import
+  view after Rust unwraps the invitation into its magnet. The separate invitation
+  confirmation view and unused preview bridge DTO were removed; imported torrent
+  titles remain non-editable because the info hash owns their contents.
+- Removed the redundant success toast after adding a `.torrent`; the opened
+  collection is the authoritative feedback surface.
+- Fixed Android gallery export by making the top-level Kotlin `PortalisGallery`
+  object public under the exact `com.portalis.PortalisGallery` name invoked by
+  Rust JNI. Added a regression test for the class/method contract.
+
 - `tool/run.sh android` now reuses the APK produced by its build step via
   Flutter's supported `--use-application-binary` option, avoiding a second
   Gradle `assembleRelease` invocation. Explicit device IDs are also passed as

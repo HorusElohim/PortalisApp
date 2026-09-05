@@ -255,7 +255,7 @@ private object PortalisNative {
  * verified local copy of — this is an export into the system gallery, not a
  * substitute reader for torrent piece I/O.
  */
-private object PortalisGallery {
+object PortalisGallery {
     @JvmStatic
     fun exportToMediaStore(context: Context, path: String, displayName: String, video: Boolean): String? {
         val resolver = context.contentResolver

@@ -100,6 +100,16 @@ void main() {
       expect(sources, [magnet]);
     });
 
+    test('Android gallery bridge keeps the Rust JNI class name public', () {
+      final activity = File(
+        'android/app/src/main/kotlin/com/portalis/MainActivity.kt',
+      ).readAsStringSync();
+
+      expect(activity, contains('\nobject PortalisGallery {'));
+      expect(activity, isNot(contains('\nprivate object PortalisGallery {')));
+      expect(activity, contains('fun exportToMediaStore('));
+    });
+
     test('a collection link starts downloading its resolved selection',
         () async {
       final sources = <String>[];
