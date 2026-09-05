@@ -21,6 +21,9 @@ blake3 = "1.8.2"
 getrandom = "0.3.3"
 futures-util = "0.3.33"
 ed25519-dalek = "2.2.0"
+# Deflate for the QR invitation envelope: a scannable code is bounded by what a
+# camera can resolve, so the payload is compressed when that actually shrinks it.
+flate2 = "1.0"
 x25519-dalek = { version = "3.0.0", features = ["static_secrets", "getrandom"] }
 chacha20poly1305 = "0.11.0"
 hkdf = "0.13.0"

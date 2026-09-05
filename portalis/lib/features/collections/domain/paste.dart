@@ -13,7 +13,9 @@ enum PasteKind {
   static PasteKind of(String raw) {
     final value = raw.trim();
     if (value.isEmpty) return PasteKind.empty;
-    if (looksLikeMagnet(value)) return PasteKind.magnet;
+    if (looksLikeMagnet(value) || looksLikeInvitation(value)) {
+      return PasteKind.magnet;
+    }
     return PasteKind.search;
   }
 }
@@ -24,3 +26,14 @@ bool looksLikeMagnet(String value) {
   return trimmed.startsWith('magnet:?') ||
       RegExp(r'^[0-9a-fA-F]{40}$').hasMatch(trimmed);
 }
+
+/// The `portalis://c/` invitation produced by this app's share button.
+///
+/// Only the shape is checked here. What the envelope actually contains — and
+/// whether it is well-formed at all — is the backend's to decide, which is
+/// also the only place that answer is derived from the real bytes.
+bool looksLikeInvitation(String value) =>
+    value.trim().startsWith(invitationPrefix);
+
+/// Kept in step with `INVITATION_PREFIX` in the Rust protocol crate.
+const invitationPrefix = 'portalis://c/';

@@ -133,10 +133,20 @@ Future<List<AppPeerHistory>> peerHistory({required int collection}) =>
 Future<List<AppPeoplePeer>> peoplePeers() =>
     RustLib.instance.api.cratePortalisApiPeoplePeers();
 
-/// The collection's shareable magnet URI, when the local substrate has a real
-/// persisted info hash for it. The URI is fetched on demand rather than added
-/// to every snapshot because a QR is only useful on the screen that asked for
-/// it.
+/// Describes a scanned invitation without importing it.
+///
+/// Separate from `send` so the interface can show what a code contains — and
+/// refuse an unusable one — before committing to a durable collection row.
+/// Returns `None` for anything that is not a Portalis invitation, including a
+/// plain magnet, which the import path still accepts directly.
+Future<AppInvitation?> describeInvitation({required String link}) =>
+    RustLib.instance.api.cratePortalisApiDescribeInvitation(link: link);
+
+/// The collection's shareable invitation link, when the local substrate has a
+/// real persisted info hash for it. Fetched on demand rather than added to
+/// every snapshot because a QR is only useful on the screen that asked for it,
+/// and because its peer hints are only true of the network this device is on
+/// at the moment it is asked.
 Future<String?> shareUri({required int collection}) =>
     RustLib.instance.api.cratePortalisApiShareUri(collection: collection);
 
@@ -747,6 +757,63 @@ class AppEntry {
           available == other.available &&
           downloadedBytes == other.downloadedBytes &&
           path == other.path;
+}
+
+/// What a scanned invitation says about a collection, before any network.
+///
+/// A magnet answers only "what content", so an import screen had nothing to
+/// show until the swarm replied. This is the sending device's own description,
+/// carried in the code itself, so the receiver can name the collection, lay out
+/// placeholders for its entries, and warn about a code that cannot work here —
+/// all before the first packet.
+///
+/// Every field is untrusted input from a scanned image. It is safe to display
+/// and to size a placeholder grid with; it is not authorization, and the
+/// content itself remains verified by info hash exactly as before.
+class AppInvitation {
+  /// The collection's name on the sharing device.
+  final String name;
+
+  /// The sharing device's name.
+  final String owner;
+
+  /// How many entries the collection holds.
+  final int entries;
+
+  /// Seconds since the Unix epoch at which the code was produced.
+  final int issuedAtSecs;
+
+  /// Whether any advertised endpoint sits on a network this device is also
+  /// on. False means the code was almost certainly produced on another
+  /// network — the single most common reason an in-person share stalls.
+  final bool reachableHere;
+
+  const AppInvitation({
+    required this.name,
+    required this.owner,
+    required this.entries,
+    required this.issuedAtSecs,
+    required this.reachableHere,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^
+      owner.hashCode ^
+      entries.hashCode ^
+      issuedAtSecs.hashCode ^
+      reachableHere.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppInvitation &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          owner == other.owner &&
+          entries == other.entries &&
+          issuedAtSecs == other.issuedAtSecs &&
+          reachableHere == other.reachableHere;
 }
 
 /// One member named by the collection's signed current revision.

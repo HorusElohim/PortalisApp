@@ -11,24 +11,34 @@ typedef CollectionSelectionDownloader = Future<AppAccepted> Function(
 
 typedef CollectionDetailWatcher = Stream<AppDetail?> Function(int collection);
 
-/// Wraps a collection's existing import URI in the app-owned URL scheme.
+/// Wraps a collection's import URI for sharing.
 ///
-/// iOS Camera can route a registered custom scheme to Portalis, while it has no
-/// system action for a raw `magnet:` URI. The magnet remains the payload the
-/// Nexus import path already validates and understands.
-String collectionShareLink(String magnet) => Uri(
-      scheme: 'portalis',
-      host: 'import',
-      queryParameters: {'magnet': magnet},
-    ).toString();
+/// A Portalis invitation is already an app-routable `portalis://` link, so it
+/// is shown as-is. A bare magnet — which older collections and pasted links
+/// still produce — keeps its existing wrapper, because iOS Camera can route a
+/// registered custom scheme to Portalis while it has no system action for a
+/// raw `magnet:` URI.
+String collectionShareLink(String uri) => looksLikeInvitation(uri)
+    ? uri
+    : Uri(
+        scheme: 'portalis',
+        host: 'import',
+        queryParameters: {'magnet': uri},
+      ).toString();
 
-/// Returns the validated magnet payload from a Portalis collection link.
+/// Returns the validated import payload from a scanned or opened Portalis link.
 ///
 /// Deep links are untrusted input, even after someone deliberately scans a QR.
-/// Restrict the host and reuse the same magnet predicate as the pasted-import
-/// flow before any bridge command reaches the backend.
+/// An invitation is handed to the backend intact — it is the backend that owns
+/// unwrapping it, and re-deriving a magnet here would put a second, divergent
+/// parser for the same bytes in Dart. Anything else must be the wrapped magnet
+/// form, restricted by host and checked with the same predicate as the pasted
+/// import flow before any bridge command reaches the backend.
 String? collectionMagnetFromLink(Uri uri) {
-  if (uri.scheme != 'portalis' || uri.host != 'import') return null;
+  if (uri.scheme != 'portalis') return null;
+  final link = uri.toString();
+  if (looksLikeInvitation(link)) return link;
+  if (uri.host != 'import') return null;
   final magnet = uri.queryParameters['magnet'];
   return magnet != null && looksLikeMagnet(magnet) ? magnet : null;
 }

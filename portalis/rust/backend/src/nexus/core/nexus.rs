@@ -1298,6 +1298,10 @@ impl Nexus {
     /// well be the only case there is — and a command that promises not to
     /// wait for a network cannot resolve one inline anyway.
     fn import_torrent(&self, source: &str) -> Result<Handle, CommandError> {
+        // A scanned invitation is unwrapped to its magnet once, here, so every
+        // layer below this point keeps seeing the source it already handles.
+        let source = normalize_import_source(source);
+        let source = source.as_ref();
         crate::nexus::log::clog!(
             "nexus",
             "import_torrent accepted source_kind={} source_len={}",
@@ -1735,37 +1739,56 @@ impl Nexus {
             .ok_or_else(|| missing_collection(handle))
     }
 
-    /// The import URI for a collection the local substrate is actually
-    /// carrying. A collection handle is process-local, so it cannot be shown
-    /// to another device; the persisted BitTorrent info hash is the stable
-    /// identifier that the existing import flow understands.
+    /// The invitation link for a collection the local substrate is actually
+    /// carrying.
+    ///
+    /// A collection handle is process-local, so it cannot be shown to another
+    /// device; the persisted BitTorrent info hash is the stable identifier the
+    /// import flow understands. The link wraps that hash together with the few
+    /// facts a receiver's import screen needs before the swarm answers — name,
+    /// owner, entry count — and the moment it was produced, so a code that has
+    /// gone stale can be recognised as stale rather than merely failing.
+    ///
+    /// Rebuilt on every call rather than stored: peer addresses are only true
+    /// of the network this device is on right now, and a device that changed
+    /// network since the last share would otherwise advertise addresses it no
+    /// longer holds.
     pub fn share_uri(&self, collection: Handle) -> Result<Option<String>, CommandError> {
         let key = self.collection_key(collection)?;
-        let Some(handle) = self
-            .store
-            .collection(&key)
-            .map_err(persistence)?
-            .and_then(|stored| stored.substrate_handle)
-        else {
+        let Some(stored) = self.store.collection(&key).map_err(persistence)? else {
+            return Ok(None);
+        };
+        let Some(handle) = stored.substrate_handle else {
             return Ok(None);
         };
         // Do not turn a damaged local store row into a QR code that claims to
         // name a torrent. A valid v1 info hash is exactly forty hex digits.
-        if handle.len() != 40 || !handle.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        let Some(info_hash) = decode_info_hash(&handle) else {
             return Ok(None);
-        }
+        };
         let Some(peer_hints) = crate::nexus::torrent::share_peer_hints(&handle) else {
             return Ok(None);
         };
+        let state = self.state();
+        let entries = state
+            .collections
+            .iter()
+            .find(|candidate| candidate.id == collection)
+            .map_or(0, |candidate| candidate.entries);
+        let invitation = portalis_nexus_protocol::Invitation {
+            info_hash,
+            name: stored.name,
+            owner: state.device.name,
+            entries,
+            issued_at_secs: unix_time_secs(),
+            peers: peer_hints.as_slice().to_vec(),
+        };
         crate::nexus::log::clog!(
             "nexus",
-            "share QR for {collection:?}: info_hash={handle}, direct_peer_hints={:?}",
+            "share invitation for {collection:?}: info_hash={handle}, entries={entries}, direct_peer_hints={:?}",
             peer_hints.as_slice()
         );
-        Ok(Some(crate::nexus::torrent::magnet_for_share(
-            &handle,
-            &peer_hints,
-        )))
+        Ok(Some(invitation.encode()))
     }
 
     fn collection_detail(&self, collection: Handle) -> Option<Detail> {
@@ -2461,6 +2484,50 @@ fn unix_time_ns() -> u64 {
         .unwrap_or_default()
 }
 
+fn unix_time_secs() -> u32 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| u32::try_from(duration.as_secs()).ok())
+        .unwrap_or_default()
+}
+
+/// The 20 raw bytes behind a stored hex info hash, or `None` if it is not one.
+///
+/// A v1 info hash is exactly forty hex digits. Anything else is a damaged
+/// store row, and turning it into a shareable code would produce an invitation
+/// that names nothing.
+fn decode_info_hash(handle: &str) -> Option<[u8; 20]> {
+    if handle.len() != 40 {
+        return None;
+    }
+    let mut out = [0u8; 20];
+    let (pairs, _) = handle.as_bytes().as_chunks::<2>();
+    for (slot, pair) in out.iter_mut().zip(pairs) {
+        *slot = u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok()?;
+    }
+    Some(out)
+}
+
+/// Rewrites a scanned invitation into the magnet the import pipeline speaks.
+///
+/// The invitation is a richer envelope around facts the substrate already
+/// understands, so it is unwrapped once here at the boundary rather than
+/// threaded through resolution, acquisition, and persistence — every layer
+/// below continues to see exactly the magnet it always did. Any other source
+/// passes through untouched.
+fn normalize_import_source(source: &str) -> std::borrow::Cow<'_, str> {
+    let Ok(invitation) = portalis_nexus_protocol::Invitation::decode(source) else {
+        return std::borrow::Cow::Borrowed(source);
+    };
+    let hints = crate::nexus::substrate::PeerHints::new(invitation.peers.iter().copied())
+        .unwrap_or_default();
+    std::borrow::Cow::Owned(crate::nexus::torrent::magnet_for_share(
+        &invitation.info_hash_hex(),
+        &hints,
+    ))
+}
+
 fn prepare_sources(files: &[LocalFile]) -> Result<Vec<StoredSourceFile>, CommandError> {
     let mut sources = files
         .iter()
@@ -2952,6 +3019,70 @@ mod tests {
             "a durable handle without a live loaded torrent must not produce a QR"
         );
         nexus.close().await;
+    }
+
+    /// The two halves of the QR contract, checked against each other: what
+    /// `share_uri` writes into a code is exactly what the import path reads
+    /// back out of it. Tested at the boundary functions because producing a
+    /// real link needs a live librqbit session, which a unit test has no
+    /// business standing up.
+    #[test]
+    fn a_scanned_invitation_is_unwrapped_into_the_magnet_the_import_path_speaks() {
+        let handle = "01".repeat(20);
+        let peers = crate::nexus::substrate::PeerHints::new([
+            "192.168.0.100:6881".parse().unwrap(),
+            "[2a04:cec0:3e6:692b:18bd:59e5:c055:f083]:6881"
+                .parse()
+                .unwrap(),
+        ])
+        .expect("valid hints");
+        let link = portalis_nexus_protocol::Invitation {
+            info_hash: decode_info_hash(&handle).expect("valid hex"),
+            name: "Attic Boxes".to_owned(),
+            owner: "Ada's iPhone".to_owned(),
+            entries: 15,
+            issued_at_secs: 1_788_601_577,
+            peers: peers.as_slice().to_vec(),
+        }
+        .encode();
+
+        // The receiver recovers the same content identity and the same
+        // endpoints the sender advertised — not a subset, not a reordering.
+        let magnet = normalize_import_source(&link);
+        assert_eq!(
+            magnet.as_ref(),
+            crate::nexus::torrent::magnet_for_share(&handle, &peers),
+        );
+        assert!(crate::nexus::torrent::is_magnet(&magnet));
+        assert_eq!(
+            crate::nexus::torrent::peer_hints_from_source(&magnet)
+                .expect("parses")
+                .as_slice(),
+            peers.as_slice(),
+        );
+    }
+
+    /// A plain magnet is still a first-class import source: the invitation is
+    /// an addition to the QR vocabulary, not a replacement for what already
+    /// works when someone pastes a link.
+    #[test]
+    fn a_source_that_is_not_an_invitation_passes_through_untouched() {
+        for source in [
+            "magnet:?xt=urn:btih:0101010101010101010101010101010101010101",
+            "/tmp/collection.torrent",
+            "",
+        ] {
+            assert_eq!(normalize_import_source(source).as_ref(), source, "{source}");
+        }
+    }
+
+    /// A damaged store row must not become a code that names nothing.
+    #[test]
+    fn only_a_real_info_hash_decodes() {
+        assert_eq!(decode_info_hash(&"ab".repeat(20)), Some([0xab; 20]));
+        for bad in ["", "abc", &"zz".repeat(20), &"ab".repeat(19)] {
+            assert_eq!(decode_info_hash(bad), None, "{bad}");
+        }
     }
 
     /// A draft is private to this device. Nothing is hashed, nothing is

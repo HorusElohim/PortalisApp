@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Replaced the shared magnet QR with a versioned Portalis invitation
+  (ADR-0009, now accepted). A magnet names content and endpoints and nothing
+  else, so a receiver learned what it had scanned only once the swarm replied,
+  and a code still on screen from another network was indistinguishable from a
+  fresh one. The `portalis://c/` envelope carries the info hash and peer hints
+  as before, plus the collection's name, the sharing device's name, its entry
+  count, and the moment it was produced — so the import screen can name the
+  collection and lay out placeholders before the first packet, and can warn
+  when the advertised addresses sit on a network this device is not on, which
+  is the ordinary way an in-person share stalls with nothing to explain it.
+  The body is fixed-width and length-prefixed, deflate-compressed only when
+  that actually shrinks it, then unpadded base64url; every field is bounded so
+  a malformed or hostile code is refused before anything is allocated for it.
+  It is deliberately **not** encrypted: a QR held up to a camera is readable by
+  everyone who can see it, so encrypting it would imply a confidentiality this
+  format does not have. Reachability is decided by comparing advertised
+  addresses against this device's own rather than by naming the Wi-Fi network,
+  which needs no location permission. The link is unwrapped to a magnet once at
+  the import boundary, so resolution, acquisition, and persistence are
+  unchanged, and a pasted magnet remains a first-class import source.
+
 - Removed the dead Nexus server deployment and protobuf envelope layer. The
   `docker/` Dockerfile and compose file built `-p portalis-nexus-server`, a
   crate that no longer exists anywhere in the repository, so that image could

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../app/collection_link.dart';
+import '../../collections/domain/paste.dart';
 
 /// Service for scanning QR codes to extract peer hints from magnet links.
 ///
@@ -44,6 +45,7 @@ class QrPeerHintService {
           final barcodeValue = barcodeCapture.barcodes.first.rawValue;
           if (barcodeValue == null) return null;
           if (barcodeValue.startsWith('magnet:')) return barcodeValue;
+          if (looksLikeInvitation(barcodeValue)) return barcodeValue;
           final uri = Uri.tryParse(barcodeValue);
           return uri == null ? null : collectionMagnetFromLink(uri);
         })

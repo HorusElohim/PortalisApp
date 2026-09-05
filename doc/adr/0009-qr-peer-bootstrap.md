@@ -1,7 +1,8 @@
 # ADR-0009 — QR-first peer bootstrap for offline sharing
 
-**Status:** proposed  
+**Status:** accepted  
 **Date:** 2026-08-19  
+**Accepted:** 2026-09-05  
 **Related:** [ADR-0003.5](0003.5-single-bittorrent-substrate-discovery-strategies.md), [ADR-0007](0007-symmetric-peer-topology.md)
 
 ## Context
@@ -56,6 +57,69 @@ transport, discovery, and access control separate.
 - Do not claim that QR encryption protects an in-person scan from its viewer.
 - If a link is copied or forwarded, treat it as a bearer capability and design
   expiry, revocation, or key rotation before calling it safe for that use.
+
+## Acceptance verification
+
+Each Consequence bullet, next to the test that proves it. All tests live in
+`portalis/rust/backend/crates/protocol/src/format/invitation.rs` unless noted.
+
+- **Offline sharing has a simple first step with no mandatory Nexus or
+  internet** — `an_invitation_survives_a_round_trip_unchanged`,
+  `every_field_is_carried_not_merely_the_identity`.
+- **QR payloads stay compact by using binary encoding rather than verbose
+  JSON** — `the_link_is_app_routable_and_scannably_short` (bounds a realistic
+  invitation under 200 characters),
+  `compression_is_used_only_when_it_actually_shrinks_the_payload`.
+- **A QR scan bootstraps the same BitTorrent transfer semantics used online** —
+  `a_scanned_invitation_is_unwrapped_into_the_magnet_the_import_path_speaks`
+  and `a_source_that_is_not_an_invitation_passes_through_untouched`, both in
+  `src/nexus/core/nexus.rs`: the envelope is unwrapped once at the import
+  boundary, so resolution, acquisition, and persistence are unchanged.
+- **QR presentation, encoding, decoding, validation, and peer-hint injection
+  need focused tests** — `a_future_version_is_refused_rather_than_guessed_at`,
+  `a_truncated_invitation_is_refused_rather_than_half_believed`,
+  `trailing_bytes_are_refused`, `text_outside_the_base64url_alphabet_is_refused`,
+  `a_link_of_another_scheme_is_not_mistaken_for_an_invitation`,
+  `base64url_round_trips_every_tail_length`,
+  `a_name_longer_than_the_limit_is_truncated_on_a_character_boundary`,
+  `more_peers_than_the_limit_are_dropped_rather_than_producing_an_unreadable_code`,
+  `only_a_real_info_hash_decodes` (in `src/nexus/core/nexus.rs`), and
+  `portalis/test/collection_link_test.dart`.
+
+The envelope is versioned from its first release
+(`a_future_version_is_refused_rather_than_guessed_at`), and the scheme prefix
+is pinned on both sides of the language boundary by
+`the_prefix_matches_the_one_the_scanner_looks_for` against Dart's
+`invitationPrefix`, because the scanner must recognise a code before the
+backend has parsed it.
+
+### Decided during implementation
+
+The ADR left the binary encoding open. This implementation uses a hand-written
+fixed-width/length-prefixed body, deflate-compressed *only when that actually
+shrinks it*, then unpadded base64url — not CBOR. A 20-byte hash and packed
+socket addresses are close to incompressible, so unconditional compression
+regularly produced a larger payload than it consumed; the header records which
+form was used so the reader never guesses.
+
+Two fields were added beyond the ADR's list, both to answer questions a
+receiver previously could not ask before the network replied:
+
+- `entries`, so the import screen can lay out placeholders immediately.
+- `issued_at_secs`, because peer addresses are only true of the network the
+  sharing device was on when the code was produced.
+
+The ADR's optional "capability needed to open the encrypted content" is **not**
+carried. It remains out of the envelope, consistent with the security note
+below that a QR held up to a camera is readable by everyone who can see it.
+
+Reachability is answered by comparing the invitation's advertised addresses to
+this device's own (`shares_network_with`, `/24` for IPv4 and `/64` for IPv6)
+rather than by naming the Wi-Fi network: the address comparison needs no
+location permission, and the two answers derive from the same interface
+enumeration that produces the hints, so they cannot disagree. It is a
+usability check, not a security boundary — a false positive costs a missing
+warning, never access.
 
 ## Consequences
 
