@@ -1577,12 +1577,10 @@ impl SseDecode for crate::portalis_api::AppDetail {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_id = <u32>::sse_decode(deserializer);
         let mut var_entries = <Vec<crate::portalis_api::AppEntry>>::sse_decode(deserializer);
-        let mut var_pieces = <Vec<u8>>::sse_decode(deserializer);
         let mut var_peers = <Vec<crate::portalis_api::AppPeer>>::sse_decode(deserializer);
         return crate::portalis_api::AppDetail {
             id: var_id,
             entries: var_entries,
-            pieces: var_pieces,
             peers: var_peers,
         };
     }
@@ -2628,7 +2626,6 @@ impl flutter_rust_bridge::IntoDart for crate::portalis_api::AppDetail {
         [
             self.id.into_into_dart().into_dart(),
             self.entries.into_into_dart().into_dart(),
-            self.pieces.into_into_dart().into_dart(),
             self.peers.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -3296,7 +3293,6 @@ impl SseEncode for crate::portalis_api::AppDetail {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <u32>::sse_encode(self.id, serializer);
         <Vec<crate::portalis_api::AppEntry>>::sse_encode(self.entries, serializer);
-        <Vec<u8>>::sse_encode(self.pieces, serializer);
         <Vec<crate::portalis_api::AppPeer>>::sse_encode(self.peers, serializer);
     }
 }

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:portalis/app/collection_link.dart';
@@ -146,7 +145,6 @@ void main() {
             downloadedBytes: BigInt.zero,
           ),
         ],
-        pieces: Uint8List(0),
         peers: const [],
       ));
       await starting;

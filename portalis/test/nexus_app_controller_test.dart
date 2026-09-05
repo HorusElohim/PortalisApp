@@ -56,7 +56,6 @@ void main() {
           downloadedBytes: BigInt.zero,
         ),
       ],
-      pieces: Uint8List(0),
       peers: const [],
     );
 
@@ -105,7 +104,6 @@ void main() {
             downloadedBytes: BigInt.zero,
           ),
         ],
-        pieces: Uint8List(0),
         peers: const [],
       ),
     );
@@ -158,7 +156,6 @@ void main() {
             downloadedBytes: BigInt.zero,
           ),
         ],
-        pieces: Uint8List(0),
         peers: const [],
       ),
     );
@@ -201,7 +198,6 @@ void main() {
             downloadedBytes: BigInt.zero,
           ),
         ],
-        pieces: Uint8List(0),
         peers: const [],
       ),
     );

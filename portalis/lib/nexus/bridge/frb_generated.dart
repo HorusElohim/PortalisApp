@@ -1279,13 +1279,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AppDetail dco_decode_app_detail(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return AppDetail(
       id: dco_decode_u_32(arr[0]),
       entries: dco_decode_list_app_entry(arr[1]),
-      pieces: dco_decode_list_prim_u_8_strict(arr[2]),
-      peers: dco_decode_list_app_peer(arr[3]),
+      peers: dco_decode_list_app_peer(arr[2]),
     );
   }
 
@@ -2019,10 +2018,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_u_32(deserializer);
     var var_entries = sse_decode_list_app_entry(deserializer);
-    var var_pieces = sse_decode_list_prim_u_8_strict(deserializer);
     var var_peers = sse_decode_list_app_peer(deserializer);
-    return AppDetail(
-        id: var_id, entries: var_entries, pieces: var_pieces, peers: var_peers);
+    return AppDetail(id: var_id, entries: var_entries, peers: var_peers);
   }
 
   @protected
@@ -2869,7 +2866,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_32(self.id, serializer);
     sse_encode_list_app_entry(self.entries, serializer);
-    sse_encode_list_prim_u_8_strict(self.pieces, serializer);
     sse_encode_list_app_peer(self.peers, serializer);
   }
 

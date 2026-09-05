@@ -58,7 +58,7 @@ impl Emission {
         let detail = self
             .detail
             .as_ref()
-            .map_or(0, |detail| detail.entries.len() * 64 + detail.pieces.len());
+            .map_or(0, |detail| detail.entries.len() * 64);
         structure + detail
     }
 }
@@ -241,11 +241,10 @@ mod tests {
         })
     }
 
-    fn detail(pieces: u8) -> Detail {
+    fn detail() -> Detail {
         Detail {
             id: COLLECTION,
             entries: Vec::new(),
-            pieces: vec![pieces; 4],
             peers: Vec::new(),
         }
     }
@@ -329,21 +328,21 @@ mod tests {
         let state = state(vec![collection(None)]);
 
         // Nothing subscribed: the expensive tier is not built for anybody.
-        let emission = projector.tick(&state, Some(&detail(1)), Duration::ZERO);
+        let emission = projector.tick(&state, Some(&detail()), Duration::ZERO);
         assert!(emission.detail.is_none());
 
         projector.watch_detail(Some(COLLECTION));
-        let emission = projector.tick(&state, Some(&detail(1)), Duration::from_secs(1));
-        assert_eq!(emission.detail, Some(detail(1)));
+        let emission = projector.tick(&state, Some(&detail()), Duration::from_secs(1));
+        assert_eq!(emission.detail, Some(detail()));
 
         // Unchanged detail is not re-sent.
-        let emission = projector.tick(&state, Some(&detail(1)), Duration::from_secs(2));
+        let emission = projector.tick(&state, Some(&detail()), Duration::from_secs(2));
         assert!(emission.detail.is_none());
 
         // A different collection's detail is not this subscription's business.
         let elsewhere = Detail {
             id: Handle(9),
-            ..detail(2)
+            ..detail()
         };
         let emission = projector.tick(&state, Some(&elsewhere), Duration::from_secs(3));
         assert!(emission.detail.is_none());
@@ -351,7 +350,7 @@ mod tests {
         // Unsubscribing stops it.
         projector.watch_detail(None);
         assert_eq!(projector.subscribed(), None);
-        let emission = projector.tick(&state, Some(&detail(3)), Duration::from_secs(4));
+        let emission = projector.tick(&state, Some(&detail()), Duration::from_secs(4));
         assert!(emission.detail.is_none());
     }
 
@@ -363,22 +362,22 @@ mod tests {
         let state = state(vec![collection(None)]);
 
         projector.watch_detail(Some(COLLECTION));
-        projector.tick(&state, Some(&detail(1)), Duration::ZERO);
+        projector.tick(&state, Some(&detail()), Duration::ZERO);
 
         projector.watch_detail(Some(Handle(9)));
         projector.watch_detail(Some(COLLECTION));
-        let emission = projector.tick(&state, Some(&detail(1)), Duration::from_secs(1));
+        let emission = projector.tick(&state, Some(&detail()), Duration::from_secs(1));
 
         assert_eq!(
             emission.detail,
-            Some(detail(1)),
+            Some(detail()),
             "the same detail is sent again for a newly opened view"
         );
         // Re-subscribing to what is already subscribed changes nothing.
         projector.watch_detail(Some(COLLECTION));
         assert!(
             projector
-                .tick(&state, Some(&detail(1)), Duration::from_secs(2))
+                .tick(&state, Some(&detail()), Duration::from_secs(2))
                 .is_empty()
         );
     }
@@ -389,7 +388,7 @@ mod tests {
         projector.watch_detail(Some(COLLECTION));
         let state = state(vec![collection(None)]);
 
-        let emission = projector.tick(&state, Some(&detail(1)), Duration::ZERO);
+        let emission = projector.tick(&state, Some(&detail()), Duration::ZERO);
 
         assert!(emission.size() > 0);
         assert!(!emission.is_empty());

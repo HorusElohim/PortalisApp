@@ -218,7 +218,6 @@ pub struct AppTransferCompleted {
 pub struct AppDetail {
     pub id: u32,
     pub entries: Vec<AppEntry>,
-    pub pieces: Vec<u8>,
     /// Swarm connections, which are not contacts. See `Detail::peers`.
     pub peers: Vec<AppPeer>,
 }
@@ -1378,7 +1377,6 @@ fn detail_projection(detail: &Detail) -> AppDetail {
                 path: entry.path.clone(),
             })
             .collect(),
-        pieces: detail.pieces.clone(),
         peers: detail
             .peers
             .iter()
