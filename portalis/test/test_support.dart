@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -92,7 +91,6 @@ Collection buildCollection({
         : AppDetail(
             id: id,
             entries: entries,
-            pieces: Uint8List(0),
             peers: torrentPeers,
           ),
     contacts: contacts,

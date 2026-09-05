@@ -640,7 +640,6 @@ class AppContact {
 class AppDetail {
   final int id;
   final List<AppEntry> entries;
-  final Uint8List pieces;
 
   /// Swarm connections, which are not contacts. See `Detail::peers`.
   final List<AppPeer> peers;
@@ -648,13 +647,11 @@ class AppDetail {
   const AppDetail({
     required this.id,
     required this.entries,
-    required this.pieces,
     required this.peers,
   });
 
   @override
-  int get hashCode =>
-      id.hashCode ^ entries.hashCode ^ pieces.hashCode ^ peers.hashCode;
+  int get hashCode => id.hashCode ^ entries.hashCode ^ peers.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -663,7 +660,6 @@ class AppDetail {
           runtimeType == other.runtimeType &&
           id == other.id &&
           entries == other.entries &&
-          pieces == other.pieces &&
           peers == other.peers;
 }
 

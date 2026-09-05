@@ -45,22 +45,6 @@ export '../bridge/portalis_api.dart'
         AppTransferCompleted,
         AppUserSummary;
 
-/// The piece map a detail carries, decoded.
-///
-/// An extension rather than a class, because the bytes come from the engine
-/// and only their reading is the app's business. Codegen owns the fields; this
-/// owns what they mean.
-extension DetailPieces on AppDetail {
-  /// Whether the bar at [index] is verified.
-  bool pieceAt(int index) {
-    final byte = index ~/ 8;
-    if (byte < 0 || byte >= pieces.length) return false;
-    return pieces[byte] & (1 << (index % 8)) != 0;
-  }
-
-  /// How many bars the piece map carries.
-  int get pieceCount => pieces.length * 8;
-}
 
 /// One recorded reading of a transfer.
 ///

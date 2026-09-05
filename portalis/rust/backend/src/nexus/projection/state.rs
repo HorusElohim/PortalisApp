@@ -395,8 +395,6 @@ pub struct EntryState {
 pub struct Detail {
     pub id: Handle,
     pub entries: Vec<EntryState>,
-    /// One bit per piece, packed.
-    pub pieces: Vec<u8>,
     /// Who this collection is currently moving with.
     ///
     /// Connections, deliberately, and not people. A swarm peer carries no

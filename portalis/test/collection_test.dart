@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'test_support.dart';
 import 'package:portalis/app/collection_link.dart';
 import 'package:portalis/nexus/data/collection_view.dart';
@@ -575,7 +574,6 @@ void main() {
               path: '/downloads/extras.mkv',
             ),
           ],
-          pieces: Uint8List(0),
           peers: const [],
         ),
         contacts: const [],
@@ -611,7 +609,6 @@ void main() {
               downloadedBytes: BigInt.zero,
             ),
           ],
-          pieces: Uint8List(0),
           peers: const [],
         ),
         contacts: const [],

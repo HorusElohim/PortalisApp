@@ -295,7 +295,6 @@ impl DetailSources {
                     }
                 })
                 .collect(),
-            pieces: held.as_ref().map(pieces_of).unwrap_or_default(),
             peers: self.holdings.peers(&key),
         })
     }
@@ -2449,43 +2448,6 @@ fn progress_permille(sample: &crate::nexus::store::records::StoredSample) -> u16
     u16::try_from(permille).unwrap_or(1000).min(1000)
 }
 
-/// One bit per piece, packed, from the runs the substrate reports.
-///
-/// The substrate speaks in byte ranges per file; a person sees one bar for the
-/// whole collection. Verified runs become set bits and everything else stays
-/// clear, so a missing range needs no representation of its own.
-fn pieces_of(info: &crate::nexus::torrent::TorrentInfo) -> Vec<u8> {
-    const PIECES: usize = 512;
-    if info.total_bytes == 0 {
-        return Vec::new();
-    }
-    let mut bits = vec![0_u8; PIECES.div_ceil(8)];
-    let mut base = 0_u64;
-    for file in &info.files {
-        for run in &file.piece_runs {
-            if run.verified {
-                let from = span(base + run.offset_bytes, info.total_bytes, PIECES);
-                let to = span(
-                    base + run.offset_bytes + run.length_bytes,
-                    info.total_bytes,
-                    PIECES,
-                );
-                for piece in from..to.min(PIECES) {
-                    bits[piece / 8] |= 1 << (piece % 8);
-                }
-            }
-        }
-        base += file.length_bytes;
-    }
-    bits
-}
-
-/// Which of `pieces` bars a byte offset falls in.
-fn span(offset_bytes: u64, total_bytes: u64, pieces: usize) -> usize {
-    let pieces = pieces as u64;
-    usize::try_from(offset_bytes.saturating_mul(pieces) / total_bytes).unwrap_or(usize::MAX)
-}
-
 fn unix_time_ns() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -3752,56 +3714,6 @@ mod tests {
             1000,
             "clamped rather than wrapped"
         );
-    }
-
-    /// The substrate speaks in byte ranges per file and a person sees one bar
-    /// for the whole collection, so the runs are folded onto a fixed number of
-    /// bars rather than sent as they arrive.
-    #[test]
-    fn verified_runs_become_set_bits_and_everything_else_stays_clear() {
-        let mut info = crate::nexus::torrent::TorrentInfo {
-            id: 1,
-            info_hash: "a1".to_owned(),
-            name: "Iceland".to_owned(),
-            state: "live".into(),
-            progress_bytes: 50,
-            source_check_bytes: None,
-            fetched_bytes: 50,
-            total_bytes: 100,
-            uploaded_bytes: 0,
-            finished: false,
-            error: None,
-            files: vec![crate::nexus::torrent::TorrentFile {
-                name: "one.jpg".to_owned(),
-                absolute_path: "/tmp/one.jpg".to_owned(),
-                length_bytes: 100,
-                downloaded_bytes: 50,
-                piece_runs: vec![crate::nexus::torrent::PieceRun {
-                    offset_bytes: 0,
-                    length_bytes: 50,
-                    verified: true,
-                    peers: Vec::new(),
-                }],
-            }],
-            live_peers: 0,
-            live_peer_addrs: Vec::new(),
-            share_ready: false,
-        };
-
-        let bits = pieces_of(&info);
-        assert_eq!(bits.len(), 64, "512 bars, packed");
-        let set = bits.iter().map(|byte| byte.count_ones()).sum::<u32>();
-        assert_eq!(set, 256, "the verified half, and only it");
-
-        // A collection whose size is not known yet has no bars to draw.
-        info.total_bytes = 0;
-        assert!(pieces_of(&info).is_empty());
-
-        // An unverified run is not a filled bar: having asked for bytes is not
-        // the same as holding them.
-        info.total_bytes = 100;
-        info.files[0].piece_runs[0].verified = false;
-        assert!(pieces_of(&info).iter().all(|byte| *byte == 0));
     }
 
     /// The history reaches the interface as fixed-width rows, so the far side
@@ -5135,7 +5047,6 @@ mod tests {
         let detail = Detail {
             id: Handle(1),
             entries: Vec::new(),
-            pieces: vec![0xff; 8],
             peers: Vec::new(),
         };
 
