@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Removed the dead Nexus server deployment and protobuf envelope layer. The
+  `docker/` Dockerfile and compose file built `-p portalis-nexus-server`, a
+  crate that no longer exists anywhere in the repository, so that image could
+  not be built at all. The generated protobuf `v1` types and their frame
+  codec, payload vocabulary, request enum, and server-hello validation were
+  the client half of that same removed server: no code under
+  `portalis/rust/backend/src/` or `portalis/lib/` referenced a single one of
+  their exports. Deleted `proto/`, `build.rs`, `frame.rs`, `payload.rs`,
+  `session.rs`, `validate.rs`, the `prost`/`prost-build`/`protoc-bin-vendored`
+  dependencies, `buf.yaml`, and the `buf lint` gate together with its CI
+  action and both setup wizards' Buf installers. `crates/protocol` keeps the
+  content-format and sealing contract the app actually uses — manifests,
+  revisions, device logs, AEAD, sealing, signing, ids, and limits — which had
+  no dependency on the protobuf layer. This also retires the deferred Node 20
+  deprecation warning from `bufbuild/buf-setup-action`.
+
 - Fixed the share button offering a QR before the engine could produce one.
   After a restart, rehydrated owned torrents are re-added paused and unpaused
   asynchronously by the reconciler, but `status_for` reported `Seeding` — and

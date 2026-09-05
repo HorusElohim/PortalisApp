@@ -10,11 +10,6 @@ if ! command -v cargo >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v buf >/dev/null 2>&1; then
-  echo "[ERROR] buf not found on PATH" >&2
-  exit 1
-fi
-
 # Install cargo-audit and cargo-deny if not present (cached by rust-cache).
 if ! command -v cargo-audit >/dev/null 2>&1; then
   cargo install cargo-audit --locked
@@ -26,7 +21,6 @@ fi
 pushd "$BACKEND_DIR" >/dev/null
 trap 'popd >/dev/null' EXIT
 
-buf lint
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo audit

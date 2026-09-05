@@ -1,27 +1,21 @@
-//! The authoritative Portalis Nexus protocol contract.
+//! The authoritative Portalis content-format and sealing contract.
 //!
-//! This crate owns the generated protobuf types, the peer request vocabulary,
-//! the wire limits, and the validation every peer applies before dispatch. It
-//! has no sockets, database drivers, or platform adapters.
-
-#[allow(clippy::doc_markdown, clippy::must_use_candidate)]
-pub mod v1 {
-    include!(concat!(env!("OUT_DIR"), "/portalis.protocol.v1.rs"));
-}
-
-/// The application protocol negotiated by Nexus connections over QUIC.
-pub const NEXUS_ALPN: &[u8] = b"portalis/nexus/1";
+//! This crate owns the manifest/revision/device-log formats, the sealing and
+//! signing primitives, the identifier derivations, and the wire limits they
+//! are bounded by. It has no sockets, database drivers, or platform adapters.
+//!
+//! It deliberately does *not* carry a server-facing envelope protocol. The
+//! protobuf `v1` envelope types, their frame codec, payload vocabulary, and
+//! server-hello validation were the client half of a Nexus server that no
+//! longer exists in this repository, and had no consumer in the app; they
+//! were removed rather than kept compiling as an unreachable contract.
 
 pub mod format;
 
-mod frame;
 mod ids;
 mod limits;
-mod payload;
 mod sealing;
-mod session;
 mod signing;
-mod validate;
 
 pub use format::aead::{AeadError, CONTENT_KEY_BYTES, ContentKey};
 pub use format::devicelog::{
@@ -43,10 +37,6 @@ pub use format::sealed::{
     ManifestContext, SEALED_MANIFEST_VERSION, SealedManifestError, open as open_manifest,
     seal as seal_manifest,
 };
-pub use frame::{
-    FrameError, LENGTH_PREFIX_BYTES, decode_frame, encode_frame, frame_length, length_prefix,
-    validate_frame_size,
-};
 pub use ids::{
     UUID_V7_ENTROPY_BYTES, derive_device_id, format_id, new_challenge, new_message_id, user_id_from,
 };
@@ -59,15 +49,12 @@ pub use limits::{
     MESSAGE_ID_BYTES, MIN_USERNAME_CHARS, NANOS_PER_MILLI, SHARE_ID_BYTES, SIGNATURE_BYTES,
     SNAPSHOT_ID_BYTES, SWARM_LEASE_SECONDS, SWARM_REFRESH_SECONDS, USER_ID_BYTES,
 };
-pub use payload::{payload_changes_state, payload_name};
 pub use sealing::{
     EnvelopeContext, SealError, SealedEnvelope, is_contributory_x25519_public_key,
     open as open_envelope, seal as seal_envelope,
 };
-pub use session::{MAX_OBJECT_BYTES, Request, SessionError};
 pub use signing::{
     AUTHENTICATION_CONTEXT, LINK_DEVICE_CONTEXT, REGISTRATION_CONTEXT, SessionBinding,
     SignatureError, authentication_payload, link_device_payload, registration_payload,
     verify_signature,
 };
-pub use validate::{ServerHelloValidationError, ValidationError, validate_server_hello};

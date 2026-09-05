@@ -75,13 +75,6 @@ brew update
 info "Installing core packages"
 brew install git curl unzip zip xz pkg-config cmake ninja
 
-if ! command_exists buf; then
-    info "Installing Buf for Portalis Nexus protobuf checks"
-    brew install bufbuild/buf/buf || warn "Buf install failed"
-else
-    ok "Buf already installed"
-fi
-
 if confirm_yes "Install Visual Studio Code via Homebrew Cask?" y; then
     if ! command_exists code; then
         info "Installing VS Code"
