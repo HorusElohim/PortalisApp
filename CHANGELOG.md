@@ -7,9 +7,10 @@
   and orphaned Flutter demo/progress/barrel files. The typed Rust-owned paths
   remain unchanged.
 
-- Android builds now explicitly pass `--target-platform android-arm64` from the
-  shared local build wrapper, matching the Rust JNI build and CI. This prevents
-  Flutter from requesting ABIs for which no native library is produced.
+- Android builds now use a dedicated `.gradle/portalis-arm64` project cache and
+  explicitly target `android-arm64` by default. This avoids inheriting a stale
+  lock from unrelated Flutter/Gradle builds while retaining Gradle's
+  incremental cache; explicit flags still override both defaults.
 
 - Fixed scanned invitations being refused before they could be unwrapped.
   Command validation runs ahead of `import_torrent` and accepted only a magnet
