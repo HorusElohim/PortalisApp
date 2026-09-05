@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Mirrored redacted Rust diagnostics into Android Logcat, making SAF hashing
+  and publication failures visible during release-mode `flutter run` sessions.
 - Added redacted Android SAF source-read diagnostics with offsets and byte
   counts, making provider seekability and permission failures distinguishable
   without logging private URIs or media data.
