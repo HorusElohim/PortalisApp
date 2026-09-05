@@ -107,35 +107,6 @@ case "$PKG_MANAGER" in
         ;;
 esac
 
-if ! command_exists buf; then
-    case "$ARCH" in
-        x86_64|amd64)
-            BUF_ARCH="x86_64"
-            ;;
-        aarch64|arm64)
-            BUF_ARCH="aarch64"
-            ;;
-        *)
-            BUF_ARCH=""
-            warn "Buf has no automatic installer for architecture: $ARCH"
-            ;;
-    esac
-
-    if [[ -n "$BUF_ARCH" ]]; then
-        info "Installing Buf for Portalis Nexus protobuf checks"
-        tmpdir="$(mktemp -d)"
-        if curl -fsSL "https://github.com/bufbuild/buf/releases/latest/download/buf-Linux-$BUF_ARCH" -o "$tmpdir/buf"; then
-            $SUDO install -m 0755 "$tmpdir/buf" /usr/local/bin/buf
-            ok "Buf installed"
-        else
-            warn "Buf download failed"
-        fi
-        rm -rf "$tmpdir"
-    fi
-else
-    ok "Buf already installed"
-fi
-
 case "$PKG_MANAGER" in
     apt)
         install_packages openjdk-17-jdk

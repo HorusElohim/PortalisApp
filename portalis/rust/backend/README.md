@@ -54,7 +54,6 @@ a decision changes the architecture.
 Run backend checks from this directory:
 
 ```sh
-buf lint
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-targets --all-features

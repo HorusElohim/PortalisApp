@@ -59,7 +59,7 @@ portalis/                     Flutter application
 ├── lib/                      UI, feature state, and generated bridge adapters
 ├── rust/backend/             Nexus backend and protocol workspace
 │   ├── src/nexus/            Application core and platform adapters
-│   ├── crates/protocol/      Shared wire-format and validation contract
+│   ├── crates/protocol/      Shared content-format and sealing contract
 │   └── scripts/              Backend coverage tooling
 ├── android/ and ios/         Mobile platform integration
 └── tool/                     Flutter-Rust bridge generation/build helpers
@@ -73,7 +73,6 @@ doc/                          Build, setup, and product-supporting guides
 
 - Flutter SDK
 - Rust toolchain via `rustup`
-- [Buf](https://buf.build/) for protocol linting
 - `cargo-llvm-cov` for backend coverage
 - Android Studio with the Android SDK and NDK for Android builds
 - Xcode for iOS and macOS builds
@@ -97,7 +96,6 @@ For day-to-day backend work:
 
 ```sh
 cd portalis/rust/backend
-buf lint
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-targets --all-features

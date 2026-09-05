@@ -1,5 +1,0 @@
-# Build artefacts are enormous and rebuilt inside the image anyway. Without
-# this the context is tens of gigabytes and the build spends longer sending it
-# than compiling.
-**/target/
-**/.git/
