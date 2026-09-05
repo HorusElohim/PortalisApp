@@ -1253,7 +1253,15 @@ fn app_collection_contract(
         can_select: collection.nature == Nature::Torrent
             && collection.status == Status::MetadataReady,
         can_share: collection.status != Status::Draft
-            && (collection.entries > 0 || collection.revision > 0),
+            && (collection.entries > 0 || collection.revision > 0)
+            // A status-only check answered "shareable" the instant a
+            // restart's rehydration set the durable status, before the
+            // engine had actually unpaused/loaded the torrent — producing a
+            // visible button whose tap answered "Not ready to share". This
+            // is the live engine's own fact, refreshed every transfer-poll
+            // tick, so the button is only ever present when a share attempt
+            // will actually succeed.
+            && collection.share_ready,
         can_pause: matches!(
             collection.status,
             Status::Available
@@ -1465,6 +1473,7 @@ mod tests {
             }),
             pending: None,
             publish_progress: None,
+            share_ready: false,
         };
         let idle = CollectionState {
             id: Handle(2),
@@ -1483,6 +1492,7 @@ mod tests {
             transfer: None,
             pending: None,
             publish_progress: None,
+            share_ready: false,
         };
         let projection = PortalisState {
             device: DeviceState {
@@ -1538,6 +1548,7 @@ mod tests {
             transfer: None,
             pending: None,
             publish_progress: None,
+            share_ready: true,
         };
 
         let app = collection_projection(&collection);
@@ -1574,6 +1585,7 @@ mod tests {
             transfer: None,
             pending: None,
             publish_progress: None,
+            share_ready: false,
         };
 
         let app = collection_projection(&resolving);

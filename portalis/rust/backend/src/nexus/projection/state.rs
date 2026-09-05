@@ -325,6 +325,14 @@ pub struct CollectionState {
     /// a new torrent from local sources.
     pub publish_progress: Option<crate::nexus::torrent::PublishProgressSnapshot>,
     pub pending: Option<Pending>,
+    /// Whether the live engine can genuinely share this collection through a
+    /// QR right now — mirrors [`crate::nexus::torrent::TorrentInfo::share_ready`],
+    /// `false` until a live reading has ever reported one. A "Seeding" status
+    /// alone only says the person's own decision and source ownership; it
+    /// says nothing about whether a restart's rehydration has actually
+    /// caught up the engine yet, which is exactly the window a stale
+    /// capability answered wrong in before this field existed.
+    pub share_ready: bool,
 }
 
 /// Something that needs a person's attention and is not an error.

@@ -565,6 +565,10 @@ fn project_stored_collection(
         transfer: None,
         publish_progress: None,
         pending: None,
+        // Not yet observed live: hydration/creation happens before the
+        // transfer poller's next tick, and a stale "shareable" answer from a
+        // previous process is exactly the bug this field exists to prevent.
+        share_ready: false,
     }
 }
 
@@ -2871,6 +2875,7 @@ mod tests {
             transfer: None,
             pending: None,
             publish_progress: None,
+            share_ready: false,
         }
     }
 
@@ -3510,6 +3515,7 @@ mod tests {
             }],
             live_peers: 0,
             live_peer_addrs: Vec::new(),
+            share_ready: false,
         };
 
         let bits = pieces_of(&info);
@@ -5405,6 +5411,7 @@ mod tests {
                     uploaded_bytes: 0,
                     client: None,
                 }],
+                share_ready: false,
             }
         }
         let moving = reading("a1b2", 10, false);
@@ -5568,6 +5575,7 @@ mod tests {
                     uploaded_bytes: 0,
                     client: None,
                 }],
+                share_ready: false,
             }
         }
         let substrate = Arc::new(crate::nexus::substrate::Recorded::reading(vec![
@@ -5690,6 +5698,7 @@ mod tests {
                 } else {
                     Vec::new()
                 },
+                share_ready: false,
             }
         }
         // The peer is present on the first reading, then gone on the

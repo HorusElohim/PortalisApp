@@ -48,6 +48,21 @@ pub struct TorrentInfo {
     /// a contact. What they do carry is a byte count in each direction, which
     /// is a fact about this connection rather than a claim about a person.
     pub live_peer_addrs: Vec<PeerLink>,
+    /// Whether this exact torrent can genuinely be shared through a QR right
+    /// now: the session has a bound listener, this info hash is loaded and
+    /// live in it, and at least one directly reachable peer address exists.
+    ///
+    /// A durable "Seeding" status only says a person's own decision and
+    /// source ownership; it says nothing about whether the live engine has
+    /// caught up after a restart or a rehydration is still in flight. Without
+    /// this fact, the share capability was derived from status alone and
+    /// could offer a QR before the reconciler had actually unpaused/loaded
+    /// the torrent, or after "share_uri" already told a person it was not
+    /// ready — the two disagreed because they read different facts. Computed
+    /// once, here, alongside every other live reading, so it is refreshed on
+    /// the same poll cadence as progress and peers rather than answered fresh
+    /// (and possibly differently) at share time.
+    pub share_ready: bool,
 }
 
 /// One connected swarm peer, as the engine counts it.
@@ -483,6 +498,7 @@ mod validation_tests {
             ],
             live_peers: 0,
             live_peer_addrs: Vec::new(),
+            share_ready: false,
         };
         let entries = vec![
             StoredImportEntry {
@@ -1056,6 +1072,34 @@ pub mod native {
             peers.as_slice()
         );
         peers
+    }
+
+    /// How many locally-advertisable peer addresses this device currently
+    /// has, cached briefly.
+    ///
+    /// [`local_peer_hints`] enumerates every non-internal network interface,
+    /// which is cheap once but is unnecessary work to repeat for every owned
+    /// torrent on every 500ms transfer-poll tick (see `to_info`, called once
+    /// per held torrent per tick). A short TTL means a genuine network change
+    /// (Wi-Fi toggled, VPN connected) is reflected within one cache
+    /// lifetime, not held stale indefinitely, while an idle LAN with nothing
+    /// changing does not re-walk every interface on every poll.
+    const LOCAL_PEER_COUNT_TTL: std::time::Duration = std::time::Duration::from_secs(2);
+    static LOCAL_PEER_COUNT_CACHE: std::sync::Mutex<Option<(std::time::Instant, usize)>> =
+        std::sync::Mutex::new(None);
+
+    pub(super) fn cached_local_peer_count() -> usize {
+        let mut cache = LOCAL_PEER_COUNT_CACHE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some((at, count)) = *cache
+            && at.elapsed() < LOCAL_PEER_COUNT_TTL
+        {
+            return count;
+        }
+        let count = local_peer_hints().as_slice().len();
+        *cache = Some((std::time::Instant::now(), count));
+        count
     }
 
     pub(super) fn share_ready(info_hash: &str, direct_peer_count: usize) -> bool {
@@ -2504,6 +2548,21 @@ pub mod native {
             files,
             live_peers,
             live_peer_addrs,
+            // The same three facts `share_uri` used to re-derive from
+            // scratch at share time — session listener bound, this exact
+            // torrent live, at least one direct peer — computed here instead
+            // so the live reading and the share capability never disagree.
+            // `direct_peer_count` is this device's own locally-advertisable
+            // addresses (what a QR would embed), not connected swarm peers:
+            // a receiver with plenty of live_peers but no reachable local
+            // address of its own still cannot be usefully shared onward.
+            share_ready: super::has_live_share_prerequisites(
+                api.session().announce_port().is_some(),
+                Some(handle.info_hash().as_string()).as_deref(),
+                handle.info_hash().as_string().as_str(),
+                stats.live.is_some(),
+                cached_local_peer_count(),
+            ),
         }
     }
 

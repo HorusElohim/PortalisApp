@@ -569,5 +569,6 @@ fn held_torrent(info_hash: &str) -> TorrentInfo {
         live_peers: 0,
         live_peer_addrs: Vec::new(),
         files: Vec::new(),
+        share_ready: false,
     }
 }

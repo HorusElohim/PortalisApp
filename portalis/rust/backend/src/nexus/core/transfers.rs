@@ -628,6 +628,7 @@ fn publish(
             && collection.on_disk_bytes == on_disk_bytes
             && collection.total_bytes == info.total_bytes
             && collection.uploaded_bytes == info.uploaded_bytes
+            && collection.share_ready == info.share_ready
         {
             return false;
         }
@@ -641,6 +642,11 @@ fn publish(
         // stale one showed 100% next to less than the whole.
         collection.total_bytes = info.total_bytes;
         collection.uploaded_bytes = info.uploaded_bytes;
+        // The engine's own live reading, refreshed on every poll — never
+        // derived from status here or re-answered independently at share
+        // time, so the button visible on screen and the answer `share_uri`
+        // gives are always the same fact.
+        collection.share_ready = info.share_ready;
         true
     });
 }
@@ -897,6 +903,7 @@ mod tests {
                 uploaded_bytes: 0,
                 client: None,
             }],
+            share_ready: false,
         }
     }
 
