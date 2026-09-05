@@ -2611,9 +2611,14 @@ fn validate(command: &Command) -> Result<(), CommandError> {
         Command::ImportTorrent { source } if source.trim().is_empty() => {
             "choose a magnet URI or .torrent file"
         }
+        // A Portalis invitation is a third accepted shape. It is unwrapped to
+        // a magnet inside `import_torrent`, but validation runs first, so
+        // omitting it here refused every scanned QR before the unwrapping
+        // could happen.
         Command::ImportTorrent { source }
             if !crate::nexus::torrent::is_magnet(source)
-                && !crate::nexus::torrent::is_torrent_path(source) =>
+                && !crate::nexus::torrent::is_torrent_path(source)
+                && portalis_nexus_protocol::Invitation::decode(source).is_err() =>
         {
             "choose a magnet URI or a .torrent file"
         }
@@ -3084,6 +3089,130 @@ mod tests {
         ] {
             assert_eq!(normalize_import_source(source).as_ref(), source, "{source}");
         }
+    }
+
+    /// The whole point of carrying a name in the envelope: a scanned
+    /// collection reads correctly the moment its row appears, instead of
+    /// sitting as "Portalis collection import" until the swarm answers —
+    /// which, for a sender on another network, is never.
+    #[tokio::test]
+    async fn a_scanned_invitation_names_the_collection_before_the_swarm_answers() {
+        let scratch = Scratch::new("invitation-names-collection");
+        let nexus = open(&scratch);
+        let link = portalis_nexus_protocol::Invitation {
+            info_hash: [0x5a; 20],
+            name: "Attic Boxes".to_owned(),
+            owner: "Ada's iPhone".to_owned(),
+            entries: 15,
+            issued_at_secs: 1_788_601_577,
+            peers: vec!["192.168.0.100:6881".parse().unwrap()],
+        }
+        .encode();
+
+        let accepted = nexus
+            .command(&Command::ImportTorrent { source: link })
+            .expect("accepts the scanned invitation");
+        let collection = accepted.collection.expect("names the import");
+
+        let named = nexus
+            .state()
+            .collections
+            .iter()
+            .find(|candidate| candidate.id == collection)
+            .map(|candidate| candidate.name.clone())
+            .expect("the imported collection is projected");
+        assert_eq!(named, "Attic Boxes");
+
+        // Durable, not merely projected: reopening must not fall back to the
+        // placeholder taken from the source string.
+        let key = nexus.collection_key(collection).expect("finds its key");
+        assert_eq!(
+            nexus
+                .store
+                .collection(&key)
+                .expect("reads")
+                .expect("exists")
+                .name,
+            "Attic Boxes"
+        );
+        nexus.close().await;
+    }
+
+    /// An envelope naming nothing must not produce a blank row. The
+    /// source-derived placeholder is still better than an empty string.
+    #[tokio::test]
+    async fn an_invitation_with_a_blank_name_falls_back_to_the_placeholder() {
+        let scratch = Scratch::new("invitation-blank-name");
+        let nexus = open(&scratch);
+        let link = portalis_nexus_protocol::Invitation {
+            info_hash: [0x5b; 20],
+            name: "   ".to_owned(),
+            owner: "Ada's iPhone".to_owned(),
+            entries: 3,
+            issued_at_secs: 1_788_601_577,
+            peers: Vec::new(),
+        }
+        .encode();
+
+        let accepted = nexus
+            .command(&Command::ImportTorrent { source: link })
+            .expect("accepts the scanned invitation");
+        let collection = accepted.collection.expect("names the import");
+        let key = nexus.collection_key(collection).expect("finds its key");
+        let name = nexus
+            .store
+            .collection(&key)
+            .expect("reads")
+            .expect("exists")
+            .name;
+        assert!(!name.trim().is_empty(), "a row must never be nameless");
+        nexus.close().await;
+    }
+
+    /// Validation runs before `import_torrent`, so an accepted shape missing
+    /// from the guard is refused before it can ever be unwrapped — which is
+    /// exactly how scanned invitations failed on a real device while every
+    /// encode/decode test passed.
+    #[tokio::test]
+    async fn validation_accepts_every_shape_the_import_path_understands() {
+        let scratch = Scratch::new("import-validation-shapes");
+        let nexus = open(&scratch);
+        let invitation = portalis_nexus_protocol::Invitation {
+            info_hash: [0x5c; 20],
+            name: "Attic Boxes".to_owned(),
+            owner: "Ada's iPhone".to_owned(),
+            entries: 2,
+            issued_at_secs: 1_788_601_577,
+            peers: vec!["192.168.0.100:6881".parse().unwrap()],
+        }
+        .encode();
+
+        for source in [
+            format!("magnet:?xt=urn:btih:{}", "5d".repeat(20)),
+            invitation,
+        ] {
+            assert!(
+                nexus
+                    .command(&Command::ImportTorrent {
+                        source: source.clone()
+                    })
+                    .is_ok(),
+                "the import path understands this, so validation must accept it: {source}"
+            );
+        }
+
+        // And still refuses what it never accepted.
+        for source in ["https://example.test/collection", "just some words"] {
+            assert!(
+                nexus
+                    .command(&Command::ImportTorrent {
+                        source: source.to_owned()
+                    })
+                    .is_err(),
+                "{source}"
+            );
+        }
+        nexus.close().await;
     }
 
     /// A damaged store row must not become a code that names nothing.

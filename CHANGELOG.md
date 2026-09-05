@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+- Fixed scanned invitations being refused before they could be unwrapped.
+  Command validation runs ahead of `import_torrent` and accepted only a magnet
+  URI or a `.torrent` path, so every scanned QR was rejected with "choose a
+  magnet URI or a .torrent file" — the envelope never reached the code that
+  knows how to unwrap it. Validation now accepts the same three shapes the
+  import path itself understands.
+
+- Fixed scanned invitations never reaching the app on Android. The manifest
+  filtered `portalis://` deep links on the `import` host used by the older
+  magnet wrapper, while an invitation is `portalis://c/…`; Android routes by
+  scheme *and* host, so the OS found no handler and never delivered the link.
+  Both hosts are now registered, and a test derives them from the share link
+  itself so a third one cannot be added without registering it. iOS was
+  unaffected — it registers the whole scheme with no host restriction.
+
+- A scanned collection now reads correctly the moment it appears. The
+  invitation already carried the sender's name for it, but the import path
+  discarded it and fell back to the placeholder derived from the source
+  string, so a scanned collection sat as "Portalis collection import" until
+  the swarm answered — which, for a sender on another network, is never. An
+  envelope naming nothing still falls back to the placeholder rather than
+  producing a nameless row.
+
+- Scanning a QR now asks before it creates anything. The sheet names the
+  collection, its owner and its item count, and says plainly when a code was
+  made on a different network — the ordinary reason an in-person share stalls
+  with nothing to explain it — or when it is old enough to have gone stale.
+  The announced item count is shown only here, where it is visibly the
+  sender's claim; it is deliberately never merged into the collection's own
+  entry count, which stays a verified fact derived from resolved metadata.
+
+- Added an end-to-end QR test: struct → bytes → base64url → rendered QR pixels
+  → camera decode → back. Every previous test stopped at the string, leaving
+  the one step nobody controls unexercised. It uses a real renderer and a real
+  detector, covers the realistic and fully-loaded 24-peer cases, and asserts
+  the payload stays within characters a URI parser will not rewrite.
+
 - Replaced the shared magnet QR with a versioned Portalis invitation
   (ADR-0009, now accepted). A magnet names content and endpoints and nothing
   else, so a receiver learned what it had scanned only once the swarm replied,
