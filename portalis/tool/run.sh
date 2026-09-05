@@ -162,8 +162,32 @@ case "$PLATFORM" in
   chrome|web)
     RUN_ARGS+=("-d" "chrome")
     ;;
-  macos|android|linux|windows)
-    RUN_ARGS+=("-d" "$PLATFORM")
+  android)
+    # The build step above already produced the APK. Reusing it prevents
+    # `flutter run` from invoking Gradle a second time for the same release.
+    use_prebuilt=1
+    if [[ ${#FLUTTER_ARGS[@]} -gt 0 ]]; then
+      for argument in "${FLUTTER_ARGS[@]}"; do
+        case "$argument" in
+          --flavor|--flavor=*|--split-per-abi|--analyze-size)
+            use_prebuilt=0
+            ;;
+        esac
+      done
+    fi
+    if [[ "$use_prebuilt" -eq 1 ]]; then
+      apk="$ROOT_DIR/build/app/outputs/flutter-apk/app-${MODE#--}.apk"
+      if [[ "$DRY_RUN" -eq 0 && ! -f "$apk" ]]; then
+        echo "Expected prebuilt Android APK was not found: $apk" >&2
+        exit 1
+      fi
+      RUN_ARGS+=("--use-application-binary" "$apk")
+    fi
+    ;;
+  macos|linux|windows)
+    if [[ -z "$DEVICE" ]]; then
+      RUN_ARGS+=("-d" "$PLATFORM")
+    fi
     ;;
   *)
     echo "Unsupported platform: $PLATFORM" >&2
