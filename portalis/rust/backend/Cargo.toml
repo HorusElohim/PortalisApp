@@ -100,9 +100,9 @@ tokio = { version = "1", features = ["test-util"] }
 # don't exist on wasm32 — Web is a viewer, not a swarm participant, so it's
 # excluded there rather than gated behind a feature no wasm code path uses.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-librqbit = { git = "https://github.com/HorusElohim/rqbit", branch = "portalis", default-features = false, features = ["rust-tls"] }
-bencode = { package = "librqbit-bencode", git = "https://github.com/HorusElohim/rqbit", branch = "portalis", default-features = false }
-buffers = { package = "librqbit-buffers", git = "https://github.com/HorusElohim/rqbit", branch = "portalis" }
+librqbit = { git = "https://github.com/HorusElohim/rqbit", branch = "main", default-features = false, features = ["rust-tls"] }
+bencode = { package = "librqbit-bencode", git = "https://github.com/HorusElohim/rqbit", branch = "main", default-features = false }
+buffers = { package = "librqbit-buffers", git = "https://github.com/HorusElohim/rqbit", branch = "main" }
 bytes = "1"
 dirs = "6"
 serde_json = "1.0"
