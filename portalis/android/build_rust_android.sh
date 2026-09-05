@@ -52,14 +52,14 @@ if command -v cargo-ndk >/dev/null 2>&1; then
   rm -rf "$JNILIBS_DIR/arm64-v8a" "$JNILIBS_DIR/armeabi-v7a" "$JNILIBS_DIR/x86_64"
   pushd "$CRATE_DIR" >/dev/null
   if [[ "$BUILD_PROFILE" == "release" ]]; then
-    cargo ndk -o "$JNILIBS_DIR" -t arm64-v8a -t x86_64 -t armeabi-v7a build --release
+    cargo ndk -o "$JNILIBS_DIR" -t arm64-v8a build --release
   else
-    cargo ndk -o "$JNILIBS_DIR" -t arm64-v8a -t x86_64 -t armeabi-v7a build
+    cargo ndk -o "$JNILIBS_DIR" -t arm64-v8a build
   fi
   popd >/dev/null
 else
   echo "(error) cargo-ndk not found. Install with: cargo install cargo-ndk" >&2
-  echo "        Then run: rustup target add aarch64-linux-android x86_64-linux-android armv7-linux-androideabi" >&2
+  echo "        Then run: rustup target add aarch64-linux-android" >&2
   exit 1
 fi
 
