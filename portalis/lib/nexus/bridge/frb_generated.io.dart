@@ -86,6 +86,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppEntry dco_decode_app_entry(dynamic raw);
 
   @protected
+  AppInvitation dco_decode_app_invitation(dynamic raw);
+
+  @protected
   AppMember dco_decode_app_member(dynamic raw);
 
   @protected
@@ -126,6 +129,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AppDetail dco_decode_box_autoadd_app_detail(dynamic raw);
+
+  @protected
+  AppInvitation dco_decode_box_autoadd_app_invitation(dynamic raw);
 
   @protected
   AppPending dco_decode_box_autoadd_app_pending(dynamic raw);
@@ -207,6 +213,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AppDetail? dco_decode_opt_box_autoadd_app_detail(dynamic raw);
+
+  @protected
+  AppInvitation? dco_decode_opt_box_autoadd_app_invitation(dynamic raw);
 
   @protected
   AppPending? dco_decode_opt_box_autoadd_app_pending(dynamic raw);
@@ -312,6 +321,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AppEntry sse_decode_app_entry(SseDeserializer deserializer);
 
   @protected
+  AppInvitation sse_decode_app_invitation(SseDeserializer deserializer);
+
+  @protected
   AppMember sse_decode_app_member(SseDeserializer deserializer);
 
   @protected
@@ -354,6 +366,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AppDetail sse_decode_box_autoadd_app_detail(SseDeserializer deserializer);
+
+  @protected
+  AppInvitation sse_decode_box_autoadd_app_invitation(
+      SseDeserializer deserializer);
 
   @protected
   AppPending sse_decode_box_autoadd_app_pending(SseDeserializer deserializer);
@@ -444,6 +460,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AppDetail? sse_decode_opt_box_autoadd_app_detail(
+      SseDeserializer deserializer);
+
+  @protected
+  AppInvitation? sse_decode_opt_box_autoadd_app_invitation(
       SseDeserializer deserializer);
 
   @protected
@@ -551,6 +571,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_app_entry(AppEntry self, SseSerializer serializer);
 
   @protected
+  void sse_encode_app_invitation(AppInvitation self, SseSerializer serializer);
+
+  @protected
   void sse_encode_app_member(AppMember self, SseSerializer serializer);
 
   @protected
@@ -597,6 +620,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_app_detail(
       AppDetail self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_app_invitation(
+      AppInvitation self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_app_pending(
@@ -697,6 +724,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_app_detail(
       AppDetail? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_app_invitation(
+      AppInvitation? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_app_pending(

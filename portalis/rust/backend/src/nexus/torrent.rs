@@ -601,6 +601,28 @@ pub(crate) fn share_peer_hints(info_hash: &str) -> Option<crate::nexus::substrat
     native::share_ready(info_hash, peers.as_slice().len()).then_some(peers)
 }
 
+/// This device's own local addresses, for deciding whether a scanned code
+/// names a network this device can actually reach.
+///
+/// Derived from the same interface enumeration the QR's own hints come from,
+/// so the two answers can never disagree, and requires no location permission
+/// — unlike reading the current Wi-Fi network's name.
+#[cfg(not(target_arch = "wasm32"))]
+#[must_use]
+pub(crate) fn local_addresses() -> Vec<std::net::IpAddr> {
+    native::local_peer_hints()
+        .as_slice()
+        .iter()
+        .map(std::net::SocketAddr::ip)
+        .collect()
+}
+
+#[cfg(target_arch = "wasm32")]
+#[must_use]
+pub(crate) fn local_addresses() -> Vec<std::net::IpAddr> {
+    Vec::new()
+}
+
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn share_peer_hints(_info_hash: &str) -> Option<crate::nexus::substrate::PeerHints> {
     None

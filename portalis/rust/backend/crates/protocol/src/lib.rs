@@ -25,6 +25,10 @@ pub use format::devicelog::{
 pub use format::entry::{
     ENTRY_PAYLOAD_VERSION, EntryContext, EntryError, open as open_entry, seal as seal_entry,
 };
+pub use format::invitation::{
+    INVITATION_PREFIX, Invitation, InvitationError, MAX_ENCODED_BYTES as MAX_INVITATION_BYTES,
+    MAX_PEERS as MAX_INVITATION_PEERS, MAX_TEXT_BYTES as MAX_INVITATION_TEXT_BYTES,
+};
 pub use format::manifest::{
     ENTRY_VERSION, INFO_HASH_BYTES, MAX_ENTRIES, MAX_ENTRY_NAME_BYTES, Manifest, ManifestEntry,
     ManifestError, ManifestHash, THUMBNAIL_HASH_BYTES,

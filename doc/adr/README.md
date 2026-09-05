@@ -20,7 +20,7 @@ instead of a living SPEC.
 | [0006](0006-frontend-thin-seam.md) | Frontend shape: one thin seam layer | superseded | [0016](0016-rust-owned-app-contract.md) |
 | [0007](0007-symmetric-peer-topology.md) | Symmetric peer topology (the organizing principle) | proposed | — |
 | [0003.5](0003.5-single-bittorrent-substrate-discovery-strategies.md) | One BitTorrent substrate, pluggable peer discovery | proposed | — |
-| [0009](0009-qr-peer-bootstrap.md) | QR-first peer bootstrap for offline sharing | proposed | — |
+| [0009](0009-qr-peer-bootstrap.md) | QR-first peer bootstrap for offline sharing | accepted | — |
 | [0010](0010-frb-generated-glue-single-app-contract.md) | Generated FRB glue behind one app-facing contract | superseded | [0016](0016-rust-owned-app-contract.md) |
 | [0011](0011-local-device-activity-ledger.md) | Local device activity and app-run ledger | accepted | — |
 | [0012](0012-restricted-exact-source-descriptor-fetching.md) | Restrict exact-source descriptor fetching | proposed | — |

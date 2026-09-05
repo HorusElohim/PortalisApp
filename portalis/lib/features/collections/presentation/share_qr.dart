@@ -33,7 +33,7 @@ Future<void> showCollectionShareQrDialog(
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'This QR contains the collection\'s magnet link.',
+                  'Scan with Portalis on the receiving device.',
                   textAlign: TextAlign.center,
                   style: AppText.secondary(color: AppColors.textDim),
                 ),
