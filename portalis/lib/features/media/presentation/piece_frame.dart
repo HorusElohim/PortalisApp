@@ -33,8 +33,8 @@ List<PerimeterSegment> progressSegmentsForBuckets(List<int> packed) {
   return segments;
 }
 
-/// Paints only piece state supplied by the backend. When older/unavailable
-/// telemetry has no ranges, the existing aggregate perimeter remains as the
+/// Paints only progress state supplied by the backend. When older/unavailable
+/// telemetry has no buckets, the existing aggregate perimeter remains as the
 /// honest fallback.
 class MediaPieceFrame extends StatefulWidget {
   const MediaPieceFrame({
@@ -62,8 +62,9 @@ class _MediaPieceFrameState extends State<MediaPieceFrame>
     value: 1,
   );
 
-  bool get _hasWorkers =>
-      widget.media.pieceRuns.any((run) => run.isDownloading);
+  bool get _hasWorkers => progressSegmentsForBuckets(
+        widget.media.progressBuckets,
+      ).any((segment) => segment.active);
 
   @override
   void didChangeDependencies() {
@@ -101,19 +102,7 @@ class _MediaPieceFrameState extends State<MediaPieceFrame>
     final bucketSegments = progressSegmentsForBuckets(
       widget.media.progressBuckets,
     );
-    final segments = size <= 0
-        ? const <PerimeterSegment>[]
-        : bucketSegments.isNotEmpty
-            ? bucketSegments
-            : [
-                for (final run in widget.media.pieceRuns)
-                  PerimeterSegment(
-                    start: run.offsetBytes / size,
-                    extent: run.lengthBytes / size,
-                    active: run.isDownloading,
-                    workerCount: run.peers.length,
-                  ),
-              ];
+    final segments = size <= 0 ? const <PerimeterSegment>[] : bucketSegments;
     return AnimatedBuilder(
       animation: _pulse,
       builder: (context, child) => PerimeterProgress(

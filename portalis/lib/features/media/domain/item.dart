@@ -9,7 +9,6 @@ class MediaItem {
     this.sizeBytes = 0,
     this.downloadedBytes = 0,
     this.progressBuckets = const [],
-    this.pieceRuns = const [],
     this.fetched = true,
     this.addedBy,
     this.entryId,
@@ -23,7 +22,6 @@ class MediaItem {
   final int sizeBytes;
   final int downloadedBytes;
   final List<int> progressBuckets;
-  final List<MediaPieceRun> pieceRuns;
   final bool fetched;
   final String? addedBy;
 
@@ -56,28 +54,9 @@ class MediaItem {
         sizeBytes: sizeBytes,
         downloadedBytes: downloadedBytes,
         progressBuckets: progressBuckets,
-        pieceRuns: pieceRuns,
         fetched: fetched,
         addedBy: addedBy,
         entryId: entryId,
         selected: value,
       );
-}
-
-/// One exact file-relative intersection with torrent piece state. Missing
-/// byte ranges are intentionally absent.
-class MediaPieceRun {
-  const MediaPieceRun({
-    required this.offsetBytes,
-    required this.lengthBytes,
-    required this.verified,
-    this.peers = const [],
-  });
-
-  final int offsetBytes;
-  final int lengthBytes;
-  final bool verified;
-  final List<String> peers;
-
-  bool get isDownloading => !verified && peers.isNotEmpty;
 }

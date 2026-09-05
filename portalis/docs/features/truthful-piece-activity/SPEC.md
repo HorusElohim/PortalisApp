@@ -5,17 +5,17 @@ Status: **implemented for Portalis 1.0.9 / backend 0.1.7**
 ## Intent
 
 Make a multi-file torrent look like the work the swarm is actually doing.
-Portalis may visualize verified byte ranges and peer assignments reported by
-the engine. It must never spread progress across media, animate synthetic
+Portalis may visualize coarse verified and active byte regions reported by the
+engine. It must never spread progress across media, animate synthetic
 workers, or infer that a partial file is playable from a percentage.
 
 ## User experience
 
 Each incomplete media tile keeps its existing verified percentage and gains a
-piece-activity perimeter:
+64-bucket activity perimeter:
 
 - verified ranges use the collection's progress colour;
-- a piece currently assigned to a connected peer pulses at its real relative
+- a coarse region currently assigned to a connected peer pulses at its relative
   position in the file;
 - missing ranges remain the ordinary border;
 - connected peers with no current piece assignment remain collection-level
@@ -42,21 +42,21 @@ in-flight assignments: piece index + peer address
 ```
 
 The Rust backend intersects torrent-global pieces with each file's byte range
-and projects compact, file-relative runs:
+and projects a packed, file-relative 64-bucket shape:
 
 ```text
-MediaPieceRun
-  offsetBytes
-  lengthBytes
-  state: verified | downloading
-  peers: [] | [ip:port, ...]
+ProgressBuckets
+  64 buckets
+  2 bits per bucket
+  0: missing
+  1: verified
+  2: downloading
 ```
 
-Missing bytes are implicit. Adjacent verified intersections are merged, so a
-normally sequential download crosses the bridge as one run rather than one DTO
-per piece. Downloading runs remain exact because they carry their real peer
-assignments. A piece that crosses a file boundary is intersected with both
-files; neither file receives bytes outside its own range.
+The 64 buckets occupy 16 bytes per file. Missing regions are implicit and the
+shape is deliberately visual rather than an exact piece-level contract. A
+piece that crosses a file boundary is intersected with both files; neither
+file receives bytes outside its own range.
 
 During startup verification the activity list is empty, matching the existing
 rule that scan progress is not download progress. Paused torrents retain
@@ -65,15 +65,16 @@ verified runs but have no in-flight assignments.
 ## Boundaries
 
 - librqbit owns piece truth and peer-to-piece assignment.
-- The Rust backend owns torrent-to-file byte-range projection and compaction.
-- Flutter maps the bridge DTO into immutable media-domain values.
+- The Rust backend owns torrent-to-file projection and bucket compaction.
+- Flutter maps the bridge DTO into immutable media-domain values and paints the
+  coarse shape only.
 - Presentation paints only those values. It does not simulate scheduling.
 - Peer addresses remain anonymous network observations. They are not matched
   to collaborators or treated as durable identity.
 
 ## Performance constraints
 
-- Verified adjacent pieces are merged before crossing FFI.
+- Exact piece maps and peer assignments do not cross FFI.
 - Missing ranges do not cross FFI.
 - Collection polling cadence does not increase.
 - Repaints are scoped to media whose activity fingerprint changed.
