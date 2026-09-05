@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added redacted Android SAF source-read diagnostics with offsets and byte
+  counts, making provider seekability and permission failures distinguishable
+  without logging private URIs or media data.
 - Hardened Android signer parsing to accept only an actual 64-hex SHA-256
   certificate digest, rejecting CI labels or placeholder text as fingerprints.
 - Hardened Android APK signer verification to capture the complete

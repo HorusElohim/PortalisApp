@@ -59,13 +59,18 @@ impl Source {
             }
             Ok(measured)
         })
+        .with_context(|| "Android source length read failed")
     }
 
     pub(crate) fn read_exact_at(&self, offset: u64, buffer: &mut [u8]) -> anyhow::Result<()> {
         use std::os::unix::fs::FileExt;
+        let byte_count = buffer.len();
         self.with_file(|file| {
             file.read_exact_at(buffer, offset)?;
             Ok(())
+        })
+        .with_context(|| {
+            format!("Android source read failed at offset={offset} bytes={byte_count}")
         })
     }
 
