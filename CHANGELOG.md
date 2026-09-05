@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Portalis now consumes `librqbit` from the maintained `HorusElohim/rqbit`
+  `portalis` branch. The fork is based on upstream `main`, carries the
+  Portalis telemetry/persistence extensions, and schedules normal media
+  downloads sequentially within the first unfinished file while preserving
+  higher-priority streaming requests.
+
 - Scanned Portalis invitations now go directly through the normal torrent import
   view after Rust unwraps the invitation into its magnet. The separate invitation
   confirmation view and unused preview bridge DTO were removed; imported torrent

@@ -19,7 +19,7 @@ allow = [
 
 [sources]
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = []
+allow-git = ["https://github.com/HorusElohim/rqbit"]
 unknown-registry = "deny"
 unknown-git = "deny"
 
