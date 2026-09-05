@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed Android publication/resume never leaving `RetryingMetadata`: DHT
+  persistence used to ask the `directories` crate to guess a config path via
+  `HOME`/XDG environment variables, which Android app processes never set,
+  making every `librqbit::Session` construction fail with "cannot determine
+  project directory for com.rqbit.dht" and retry forever regardless of the
+  media source. DHT persistence now writes into Portalis's own already
+  Android-safe state directory instead of guessing one.
 - Mirrored redacted Rust diagnostics into Android Logcat, making SAF hashing
   and publication failures visible during release-mode `flutter run` sessions.
 - Added redacted Android SAF source-read diagnostics with offsets and byte

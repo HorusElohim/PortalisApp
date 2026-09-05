@@ -1209,8 +1209,27 @@ pub mod native {
                     ),
                     fastresume: settings.fastresume,
                     dht: (!settings.disable_dht).then(|| librqbit::DhtSessionConfig {
-                        persistence: (!settings.disable_dht_persistence)
-                            .then(librqbit::dht::DhtPersistenceConfig::default),
+                        // `DhtPersistenceConfig::default()` leaves
+                        // `config_filename` unset, so librqbit-dht falls back
+                        // to `directories::ProjectDirs::from("com", "rqbit",
+                        // "dht")` to guess one. That lookup resolves through
+                        // `HOME`/XDG environment variables, which an Android
+                        // app process never sets (there is no real home
+                        // directory or passwd entry) — so it returns `None`
+                        // and every session construction fails with "cannot
+                        // determine project directory for com.rqbit.dht",
+                        // turning every publish/resume into an infinite
+                        // retry loop regardless of the media source. Naming
+                        // the file inside our own already-Android-safe state
+                        // directory sidesteps the guess entirely.
+                        persistence: (!settings.disable_dht_persistence).then(|| {
+                            librqbit::dht::DhtPersistenceConfig {
+                                config_filename: Some(
+                                    crate::nexus::paths::state_dir().join("dht.json"),
+                                ),
+                                ..Default::default()
+                            }
+                        }),
                         ..Default::default()
                     }),
                     concurrent_init_limit: settings.concurrent_init_limit.map(|n| n as usize),
