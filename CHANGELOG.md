@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.52+62 — 2026-09-06
+
+- Unified the app's navigation chrome: the mobile bottom bar and the desktop
+  top bar now share one floating glass "dock" (`NavDock`) with a live
+  throughput-tinted glow, and one animated selected-destination treatment
+  (`NavSelection`), instead of two unrelated flat containers with their own
+  selected-state colours. Crossing the responsive breakpoint now relocates
+  one control rather than swapping it for a visually different one.
+- The mobile dock floats above content (`extendBody`) instead of docking flush
+  with the screen edge; scrollable panes (Home, People, Settings, User) add
+  bottom clearance on phone width only, so the last row never sits under it.
+
 ## 1.0.51+61 — 2026-09-06
 
 - Replaced the unused exact piece bitmap bridge payload with compact per-file

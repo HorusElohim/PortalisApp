@@ -107,11 +107,13 @@ class _PeopleScreenState extends State<PeopleScreen> with PollingState {
             )
           : WindowBuilder(
               builder: (context, window) => ListView(
-                padding: const EdgeInsets.fromLTRB(
+                padding: EdgeInsets.fromLTRB(
                   kScreenGutter,
                   0,
                   kScreenGutter,
-                  28,
+                  // Desktop has no floating dock to clear; the phone tab
+                  // does, so its list needs the extra breathing room.
+                  window.isDesktop ? 28 : 104,
                 ),
                 children: [
                   if (entries.isNotEmpty) ...[

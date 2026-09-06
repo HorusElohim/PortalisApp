@@ -29,16 +29,17 @@ class _DesktopIdentityChipState extends State<DesktopIdentityChip> {
           final initials =
               name == null || name.isEmpty ? '-' : name[0].toUpperCase();
 
-          return Material(
-            color:
-                widget.selected ? AppColors.surfaceRaised : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppRadius.inner),
-            child: InkWell(
-              key: const Key('identityChip'),
+          return NavSelection(
+            selected: widget.selected,
+            radius: AppRadius.inner,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Material(
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(AppRadius.inner),
-              onTap: widget.onTap,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: InkWell(
+                key: const Key('identityChip'),
+                borderRadius: BorderRadius.circular(AppRadius.inner),
+                onTap: widget.onTap,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

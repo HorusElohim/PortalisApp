@@ -123,18 +123,21 @@ class _UserScreenState extends State<UserScreen> with PollingState {
           final snapshot = AppControllers.engine.state;
           return RefreshIndicator(
             onRefresh: _loadSummary,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: DeviceProfileSection(
-                device: snapshot?.device,
-                identityError: AppControllers.engine.lastError,
-                summary: _summary,
-                summaryError: _summaryError,
-                people: _peopleCount,
-                collections: snapshot?.collections.length ?? 0,
-                onRename: snapshot?.device == null ? null : _rename,
-                onOpenPeople: () =>
-                    AppNavigation.tab.value = AppNavigation.peopleTab,
+            child: WindowBuilder(
+              builder: (context, window) => SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.only(bottom: window.isDesktop ? 0 : 96),
+                child: DeviceProfileSection(
+                  device: snapshot?.device,
+                  identityError: AppControllers.engine.lastError,
+                  summary: _summary,
+                  summaryError: _summaryError,
+                  people: _peopleCount,
+                  collections: snapshot?.collections.length ?? 0,
+                  onRename: snapshot?.device == null ? null : _rename,
+                  onOpenPeople: () =>
+                      AppNavigation.tab.value = AppNavigation.peopleTab,
+                ),
               ),
             ),
           );
