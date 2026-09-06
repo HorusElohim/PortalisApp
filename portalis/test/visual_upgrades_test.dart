@@ -38,6 +38,21 @@ void main() {
     );
   });
 
+  testWidgets('shows one compact progress legend for bucket colours',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ProgressLegend(color: Colors.cyan),
+        ),
+      ),
+    );
+
+    expect(find.text('MISSING'), findsOneWidget);
+    expect(find.text('VERIFIED'), findsOneWidget);
+    expect(find.text('DOWNLOADING'), findsOneWidget);
+  });
+
   group('torrent row tile', () {
     testWidgets('shows a format-aware icon once metadata names video files',
         (tester) async {

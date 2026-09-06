@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../media/domain/item.dart';
 import '../../media/presentation/grid.dart';
+import '../../media/presentation/piece_frame.dart';
 import '../domain/collection.dart';
 import 'peer_color.dart';
 
@@ -27,16 +28,29 @@ class CollectionContents extends StatelessWidget {
   final Set<int>? stagedSelection;
 
   @override
-  Widget build(BuildContext context) => MediaGrid(
-        media: [
-          for (final item in collection.media)
-            if (stagedSelection != null && item.entryId != null)
-              item.withSelected(stagedSelection!.contains(item.entryId))
-            else
-              item,
+  Widget build(BuildContext context) {
+    final media = collection.media;
+    final staged = [
+      for (final item in media)
+        if (stagedSelection != null && item.entryId != null)
+          item.withSelected(stagedSelection!.contains(item.entryId))
+        else
+          item,
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (media.any((item) => item.progressBuckets.length == 16)) ...[
+          ProgressLegend(color: collection.hue),
+          const SizedBox(height: 8),
         ],
-        color: collection.hue,
-        onOpenMedia: onOpenMedia,
-        onToggleWanted: onToggleWanted,
-      );
+        MediaGrid(
+          media: staged,
+          color: collection.hue,
+          onOpenMedia: onOpenMedia,
+          onToggleWanted: onToggleWanted,
+        ),
+      ],
+    );
+  }
 }
