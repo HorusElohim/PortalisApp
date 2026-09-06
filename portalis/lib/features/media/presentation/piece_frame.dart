@@ -33,6 +33,48 @@ List<PerimeterSegment> progressSegmentsForBuckets(List<int> packed) {
   return segments;
 }
 
+/// Compact key for the three states painted by [MediaPieceFrame].
+class ProgressLegend extends StatelessWidget {
+  const ProgressLegend({super.key, required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+        spacing: 12,
+        runSpacing: 4,
+        children: [
+          _LegendItem(color: AppColors.borderStrong, label: 'MISSING'),
+          _LegendItem(color: color, label: 'VERIFIED'),
+          _LegendItem(color: AppColors.signalSoft, label: 'DOWNLOADING'),
+        ],
+      );
+}
+
+class _LegendItem extends StatelessWidget {
+  const _LegendItem({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(label, style: AppText.caption(color: AppColors.textDim)),
+        ],
+      );
+}
+
 /// Paints only progress state supplied by the backend. When older/unavailable
 /// telemetry has no buckets, the existing aggregate perimeter remains as the
 /// honest fallback.
