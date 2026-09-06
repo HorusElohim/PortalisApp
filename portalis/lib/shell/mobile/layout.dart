@@ -49,6 +49,8 @@ class MobileShellLayout extends StatelessWidget {
                   child: const SettingsScreen(embedded: true),
                 ),
               ],
+              // Note: individual panes provide their own bottom padding so
+              // scrollable content doesn't end up under the floating dock.
             ),
           ),
         ),

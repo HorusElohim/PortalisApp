@@ -49,8 +49,7 @@ enum _Nested {
 
   Widget build({required bool embedded, VoidCallback? onBack}) =>
       switch (this) {
-        _Nested.storage =>
-          StorageScreen(embedded: embedded, onBack: onBack),
+        _Nested.storage => StorageScreen(embedded: embedded, onBack: onBack),
         _Nested.diagnostics =>
           DiagnosticsScreen(embedded: embedded, onBack: onBack),
         _Nested.formats => FormatsScreen(embedded: embedded, onBack: onBack),
@@ -329,50 +328,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
       wideMaxWidth: PageBody.settingsWideMaxWidth,
       body: SingleChildScrollView(
         controller: _scrollController,
-        child: ListenableBuilder(
-          // The engine too: this screen now shows what it can reach, and a
-          // status that only repaints when a setting changes is a status
-          // that is wrong for as long as nobody touches one.
-          listenable: Listenable.merge([_settings, AppControllers.engine]),
-          builder: (context, _) {
-            final s = _settings.settings;
-            final error = _settings.lastError;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!_advanced)
-                  EfficiencyBenchmarkCard(
-                    running: _benchmarkRunning,
-                    result: _benchmarkResult,
-                  ),
-                if (error != null)
-                  InfoBanner(
-                    color: const Color(0xFFEB5757),
-                    icon: Icons.error_outline,
-                    text: error,
-                  ),
-                if (_restartPending)
-                  InfoBanner(
-                    color: AppColors.signalSoft,
-                    icon: Icons.restart_alt,
-                    text: 'Some changes apply the next time Portalis '
-                        'starts — the transfer engine reads them once, '
-                        'when it starts up.',
-                  ),
-                if (s == null)
-                  Padding(
-                    padding: EdgeInsets.all(kScreenGutter),
-                    child: Text(
-                      'Loading engine settings…',
-                      style: AppText.secondary(color: AppColors.textDim),
+        child: WindowBuilder(
+          builder: (context, window) => ListenableBuilder(
+            // The engine too: this screen now shows what it can reach, and a
+            // status that only repaints when a setting changes is a status
+            // that is wrong for as long as nobody touches one.
+            listenable: Listenable.merge([_settings, AppControllers.engine]),
+            builder: (context, _) {
+              final s = _settings.settings;
+              final error = _settings.lastError;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!_advanced)
+                    EfficiencyBenchmarkCard(
+                      running: _benchmarkRunning,
+                      result: _benchmarkResult,
                     ),
-                  )
-                else
-                  SettingsSectionsLayout(sections: _sections(s)),
-                const SizedBox(height: 24),
-              ],
-            );
-          },
+                  if (error != null)
+                    InfoBanner(
+                      color: const Color(0xFFEB5757),
+                      icon: Icons.error_outline,
+                      text: error,
+                    ),
+                  if (_restartPending)
+                    InfoBanner(
+                      color: AppColors.signalSoft,
+                      icon: Icons.restart_alt,
+                      text: 'Some changes apply the next time Portalis '
+                          'starts — the transfer engine reads them once, '
+                          'when it starts up.',
+                    ),
+                  if (s == null)
+                    Padding(
+                      padding: EdgeInsets.all(kScreenGutter),
+                      child: Text(
+                        'Loading engine settings…',
+                        style: AppText.secondary(color: AppColors.textDim),
+                      ),
+                    )
+                  else
+                    SettingsSectionsLayout(sections: _sections(s)),
+                  SizedBox(height: window.isDesktop ? 24 : 100),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

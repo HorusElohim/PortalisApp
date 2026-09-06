@@ -160,7 +160,7 @@ class HomeLibrary extends StatelessWidget {
       return SliverFillRemaining(hasScrollBody: false, child: _emptyState());
     }
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(kScreenGutter, 0, kScreenGutter, 28),
+      padding: const EdgeInsets.fromLTRB(kScreenGutter, 0, kScreenGutter, 104),
       sliver: SliverList.separated(
         itemCount: _shown.length,
         separatorBuilder: (_, __) => const SizedBox(height: 14),
